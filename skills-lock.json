@@ -1,0 +1,647 @@
+{
+  "version": 1,
+  "skills": {
+    "ab-testing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ab-testing/SKILL.md",
+      "computedHash": "c42af0107540e71dfe9605eca51b5100d96730d0bddf51085fc0c9429e40083c"
+    },
+    "actualize": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/actualize/SKILL.md",
+      "computedHash": "620bd618107e9513e31fb01750e75f338d52837f9745d2181cafc84f888b282e"
+    },
+    "ad-creative": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ad-creative/SKILL.md",
+      "computedHash": "822b7c608a6546680bb1389f619bcd00556974b7bc1a060b217cec94afc22ae0"
+    },
+    "add-task": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sdd/skills/add-task/SKILL.md",
+      "computedHash": "103bbdb108a0f2d324b951a0b1ea5506f476d35fa04d26d09b723a9a169bccb3"
+    },
+    "ads": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ads/SKILL.md",
+      "computedHash": "3f623f4dd628a2989bf9e181bb8100ddf8998cbacbbfa1dbcff69642fedd9da0"
+    },
+    "agent-evaluation": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/agent-evaluation/SKILL.md",
+      "computedHash": "6b5726e82325752e9d713b926837fb02b6c2d3a5407edbd8f2517e575fc9efb6"
+    },
+    "ai-seo": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ai-seo/SKILL.md",
+      "computedHash": "a6befed362ed7127d051db085bc8be9470abbe87f70a40ee9a05e201dd8c693f"
+    },
+    "analyse": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/analyse/SKILL.md",
+      "computedHash": "d4d9d5024c499687bde3bb183dd2827d15d2c822d28444ab6c079957037d9658"
+    },
+    "analyse-problem": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/analyse-problem/SKILL.md",
+      "computedHash": "ae97fe68961bdfb45f766680fafb29bec779e0af928b2973563576ea65a2183f"
+    },
+    "analytics": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/analytics/SKILL.md",
+      "computedHash": "11fcba681577e36b5ad88e391d932a9c94fb1e593e94010c750739eefa9c4057"
+    },
+    "analyze-issue": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/analyze-issue/SKILL.md",
+      "computedHash": "7ce6f319d1c293b419894eb37d7a4b3e412e77e51b0cff54fa925464d411812e"
+    },
+    "apply-anthropic-skill-best-practices": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/apply-anthropic-skill-best-practices/SKILL.md",
+      "computedHash": "3796be8ec455b982fce34df492fd63d51403338f0369e7cdfdff44f9d1eb7a66"
+    },
+    "aso": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/aso/SKILL.md",
+      "computedHash": "f84a1fb5cb1a8a7f7171bd60ae6850f24a82fa6af94bd5f12e5b3e9227480a34"
+    },
+    "attach-review-to-pr": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/attach-review-to-pr/SKILL.md",
+      "computedHash": "2ef91d89a9263a6245712ed5ed0a8e59e82e5b3aaccf28bf549271f18d0ae2ae"
+    },
+    "brainstorm": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sdd/skills/brainstorm/SKILL.md",
+      "computedHash": "aae87c7499be56b53bd145649917625979ba84492274b13872e7a8822857f1d3"
+    },
+    "build-mcp": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/mcp/skills/build-mcp/SKILL.md",
+      "computedHash": "0891800e8e614d2e8ffdfe0fd5c967d03edc5e9dd116fd5136e7e1f98045909f"
+    },
+    "cause-and-effect": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/cause-and-effect/SKILL.md",
+      "computedHash": "11317a0a501c8ee4eb14b1b3c53dae27c6c6bc9df6542d78500ed54878bfe76f"
+    },
+    "churn-prevention": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/churn-prevention/SKILL.md",
+      "computedHash": "527c4740617d9eeea66e14c3f7b7ecede41d6b0520c252f413fdfd0b763a6c64"
+    },
+    "co-marketing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/co-marketing/SKILL.md",
+      "computedHash": "1f447a4e851f9e6be533c41d198e0a1b58d557bcfe57499dace0c7f1349ba6cb"
+    },
+    "cold-email": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/cold-email/SKILL.md",
+      "computedHash": "be0b73511a6244b8b8aa9126225844cfe9e492f4c1ee6bffc57344ce5ee2a6e8"
+    },
+    "commit": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/commit/SKILL.md",
+      "computedHash": "1b47d61ac6c5a1e292eeccb5a96ae7fa2a4abd6e035192822013ab662925eae6"
+    },
+    "community-marketing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/community-marketing/SKILL.md",
+      "computedHash": "d089fdcff8cf5a8623cfaee0fdb005f9470c8c7e3da0a4fb11bc9e10dff5b502"
+    },
+    "competitor-profiling": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/competitor-profiling/SKILL.md",
+      "computedHash": "d691200df7b02d85327192dd2203f97eec5a01e7748e9b171a5c9d6a584dc181"
+    },
+    "competitors": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/competitors/SKILL.md",
+      "computedHash": "9e15de4d3b5e9a44f500124e2d2f57ba7fd3f4134912d9caf155ff6975215e99"
+    },
+    "content-strategy": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/content-strategy/SKILL.md",
+      "computedHash": "13824c129ab70874c57d766c2d844f8dac7a0b366845f108a73527c9d094c4f6"
+    },
+    "context-engineering": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/context-engineering/SKILL.md",
+      "computedHash": "86d85e781c65c79289dce1767a80b74bdea5fb1cf23b14c4b1d4db538d6f2175"
+    },
+    "copy-editing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copy-editing/SKILL.md",
+      "computedHash": "ba4e44a8470b3ae2add3e0ffa74c85d8b0357db4ca2cf8cfa7b4abc9d94fc602"
+    },
+    "copywriting": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copywriting/SKILL.md",
+      "computedHash": "d3191c3ad90610e0cacecf638d927418852264fabbd6e81c045094dad7d96f11"
+    },
+    "create-agent": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-agent/SKILL.md",
+      "computedHash": "b2b315d9084d5ce888542a65049e403688f509ae3c044745e79c066a24142606"
+    },
+    "create-command": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-command/SKILL.md",
+      "computedHash": "0e33136495b8341746e0a16acda1425285e7565abd85e590aa68d46632e5b18d"
+    },
+    "create-hook": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-hook/SKILL.md",
+      "computedHash": "87e714f40b60dc3dfbad6780c6a208315b94ad89cf5049de66a6420fe43b5a48"
+    },
+    "create-ideas": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sdd/skills/create-ideas/SKILL.md",
+      "computedHash": "7e7ffe4866f5998d70b2200655faeffb24130fe5ce4046d5cbc268246d4d30af"
+    },
+    "create-pr": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/create-pr/SKILL.md",
+      "computedHash": "3c43770128b808571de8faab45c62c15717c3ff802d3383714ab88ec3a8d4a1b"
+    },
+    "create-rule": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-rule/SKILL.md",
+      "computedHash": "9405b8dae5188e6b4149c309a088357c46920be32312a624654bbef15d42d2eb"
+    },
+    "create-skill": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-skill/SKILL.md",
+      "computedHash": "350e5ca909108e515c1510110554e5ba90fe9198b6454b5632f37efcdb043690"
+    },
+    "create-workflow-command": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/create-workflow-command/SKILL.md",
+      "computedHash": "39150a2b18fe124033281eb8a4796823d93c8c94e80e63278446112ca2ffed1c"
+    },
+    "critique": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/reflexion/skills/critique/SKILL.md",
+      "computedHash": "c7508be7ee8bf6d726f0fc4e691a555a632477a52d3669832e3d481cfa5fa6dd"
+    },
+    "cro": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/cro/SKILL.md",
+      "computedHash": "07f7a27c57e48f4b67230712f8efbc5bcc01611b35321b3c2c2e5279c9304bcd"
+    },
+    "customer-research": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/customer-research/SKILL.md",
+      "computedHash": "cc68018a343c1a75ef9aed44b7037928795f654bdde0b28372176f686c1982be"
+    },
+    "decay": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/decay/SKILL.md",
+      "computedHash": "4e8797591ca041f0566c2f121a1645b072511bf2cbe06001e9c296f4c5098fcf"
+    },
+    "directory-submissions": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/directory-submissions/SKILL.md",
+      "computedHash": "b737c3b9b9387bbeefd4fb5a003c1debaf273563f170665f6b9341c6818d121b"
+    },
+    "do-and-judge": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/do-and-judge/SKILL.md",
+      "computedHash": "80fa1e700b453601d46ea8c4be17bda9dce938774fc03c1cb3afae4399c53c0e"
+    },
+    "do-competitively": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/do-competitively/SKILL.md",
+      "computedHash": "651996f562bef779be46a918805a6f61a06d8b1e582e93e344a99cfaa25d2d81"
+    },
+    "do-in-parallel": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/do-in-parallel/SKILL.md",
+      "computedHash": "cfb9b22509464437fbdf9e255d93481f5c658616dfa815eabd3ee8da8c014888"
+    },
+    "do-in-steps": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/do-in-steps/SKILL.md",
+      "computedHash": "be5e54a4ef28f0be276ef8fd3be505e4821eed4a8fad8cdf7c780feecc9145de"
+    },
+    "emails": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/emails/SKILL.md",
+      "computedHash": "261d986c2a1f1f5f823f8c889e16db723edb8a9d0fa5ede8412f981594715c49"
+    },
+    "fix-tests": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/tdd/skills/fix-tests/SKILL.md",
+      "computedHash": "438c5dbe6544a9d35f1dec776b6cc0f2eaa9aef87a1c00cae76a2cfe2cea0c3b"
+    },
+    "free-tools": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/free-tools/SKILL.md",
+      "computedHash": "3fd8ab504b9b6d791b307baed7a87f49b455fc084ff367772c7418b8a57ce56d"
+    },
+    "git-notes": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/git-notes/SKILL.md",
+      "computedHash": "f7f6194d3484f773fd1cd30dddbefbfe8d1a1d15b8986d82940bb2e0efd07648"
+    },
+    "git-worktrees": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/git-worktrees/SKILL.md",
+      "computedHash": "5e873d36aff12018aa17d7c3824508d537ccac847b55e7dafc1b9041429aa236"
+    },
+    "image": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/image/SKILL.md",
+      "computedHash": "e4b5511566d08a79f6f5fd26319eaaac0e18e1e238848c5a3fb2e9839e306ebe"
+    },
+    "implement-task": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sdd/skills/implement-task/SKILL.md",
+      "computedHash": "6054cf3e2519decb3dc654e4f5a0b3d9139feb8cb550df0de290d11acd18502d"
+    },
+    "judge": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/judge/SKILL.md",
+      "computedHash": "c7668a2c2d8890132daacd6b871f01bd7631ec861877acf5c2d56d4094c9fea8"
+    },
+    "judge-with-debate": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/judge-with-debate/SKILL.md",
+      "computedHash": "60e11beb39ef52f69f3055b7bad3892bdc7ac7bee89fbc7f1e416c88c8312319"
+    },
+    "kaizen": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/kaizen/SKILL.md",
+      "computedHash": "ae364846e6517ea5a9c56a690c6ca8b4662964f881a93f35225418d25634e098"
+    },
+    "launch": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/launch/SKILL.md",
+      "computedHash": "3d8dabb81442f0e9f36359b103d95f254c56997d2cd3d2eeb80151419df7a07b"
+    },
+    "launch-sub-agent": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/launch-sub-agent/SKILL.md",
+      "computedHash": "74f8c5dcdad2aa1c544aa2bf2ce80c2a225f903e62b5a9dc53bc65bd88d6c9bf"
+    },
+    "lead-magnets": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/lead-magnets/SKILL.md",
+      "computedHash": "268c83c38cc49d3e437042f5d4e3c31b822deb6012b9d5d7a1370ae500058018"
+    },
+    "load-issues": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/git/skills/load-issues/SKILL.md",
+      "computedHash": "f555cb970947501938a628fde2b74cf69f0d124d8dadf80ea6e1f6e3b6e06039"
+    },
+    "marketing-ideas": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/marketing-ideas/SKILL.md",
+      "computedHash": "c2a310c97126a0c493bae2b4b0e9fa767598bb2d139a747217fa1d8d7615e85d"
+    },
+    "marketing-plan": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/marketing-plan/SKILL.md",
+      "computedHash": "c6a0c9473c11a6b3c7ffe72bcf76417ce7e1a90330147fa1aac8dc9610ee1e38"
+    },
+    "marketing-psychology": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/marketing-psychology/SKILL.md",
+      "computedHash": "50d735eb0f5c36f379ed2200f21aeacc9b9ad85667b5d33ec6111857352a1340"
+    },
+    "memorize": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/reflexion/skills/memorize/SKILL.md",
+      "computedHash": "6fd7d0eb1f41a842a4f8064c07a43bd3d6844d03430e18b8d62657985463451d"
+    },
+    "multi-agent-patterns": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/multi-agent-patterns/SKILL.md",
+      "computedHash": "6a224cf3bcbfe3feae946f6aa075a4a4c7ab2d73c0b86139b2aa952fbdf17c79"
+    },
+    "onboarding": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/onboarding/SKILL.md",
+      "computedHash": "634b9ba0a4446d9358d3cbc316feefc2e9d618cd88d5a77f0bc6ec895ed5eb5f"
+    },
+    "paywalls": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/paywalls/SKILL.md",
+      "computedHash": "1f0b8d15770d2e7737b818408dc5877b2eadc4cab072cdfb3529349ab059815f"
+    },
+    "plan-do-check-act": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/plan-do-check-act/SKILL.md",
+      "computedHash": "8d0f45800b4c87da26e1a2c4ec9fd7a3232fb4f5fb3346ef17dc7dc79b02cfc8"
+    },
+    "plan-task": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sdd/skills/plan-task/SKILL.md",
+      "computedHash": "1e04d4babe2731ad088dcc4ef8708feae96bb59df9357bdd1298d1d4702b5c2f"
+    },
+    "popups": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/popups/SKILL.md",
+      "computedHash": "95c5cb45dcbb05362168255d97ee68d53a5916d8de779bd08f5f70c9b0cabd36"
+    },
+    "pricing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/pricing/SKILL.md",
+      "computedHash": "8a58f814ed556274658a39c57cfafe51c7a53736fdd9400bd91faa41abe84ca5"
+    },
+    "product-marketing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/product-marketing/SKILL.md",
+      "computedHash": "2fe9e9093e385345d17e0e77d032d68015417c37ceffeb5fb34fc761c46c94a0"
+    },
+    "programmatic-seo": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/programmatic-seo/SKILL.md",
+      "computedHash": "0bbdcbacfbe46fd78d774041ee49afd313505bb435b775dc246f4b8e6981d797"
+    },
+    "prompt-engineering": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/prompt-engineering/SKILL.md",
+      "computedHash": "28717ed0eafe344d25d9d76e74109c0f1db3f5ced98d67406cee55d85d48d553"
+    },
+    "propose-hypotheses": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/propose-hypotheses/SKILL.md",
+      "computedHash": "dd8ff52cec578299ae165e20dbb37af5a28a7917bff96be28d13e7144b75c385"
+    },
+    "prospecting": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/prospecting/SKILL.md",
+      "computedHash": "63049127e427e260538e236301fcb7cfa87b2fa2938fe80d372f904f9d306223"
+    },
+    "query": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/query/SKILL.md",
+      "computedHash": "76c732f68fd252c414108435b051f8e1f2ee272e69f5956e0d61cf7bdfe5c7af"
+    },
+    "referrals": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/referrals/SKILL.md",
+      "computedHash": "1b9228f8c74abd2ad43f72baf34e7de1727dc56fba8ed8a54588bec181c39c97"
+    },
+    "reflect": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/reflexion/skills/reflect/SKILL.md",
+      "computedHash": "7523a929fd950d8b5342081996a97eb8cf1f264dd787afd8bd9e354de87924f5"
+    },
+    "remotion-best-practices": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion/SKILL.md",
+      "computedHash": "006f8413941b59eff54a7ce64851b8a2fb79e7a3a5f1a895e97a48f01482553d"
+    },
+    "reset": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/reset/SKILL.md",
+      "computedHash": "62bb643e93212a4c2f6bcae41df163c22c2df75268d3e9cc3a28c904ccb32735"
+    },
+    "review-local-changes": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/review/skills/review-local-changes/SKILL.md",
+      "computedHash": "3a076efd0d00579489d4c8d2104fe1236eeaa0aa0b7240d239cc39ddc67fd381"
+    },
+    "review-pr": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/review/skills/review-pr/SKILL.md",
+      "computedHash": "f0e96f9446c2d75ce487f73d2f1f662267ab229ae46ff904decdc8ff359989e8"
+    },
+    "revops": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/revops/SKILL.md",
+      "computedHash": "3ed71e1704d4c27f846ac7a207e66030c91fe6fa7f8ce83bcf7f30fda3badb6d"
+    },
+    "root-cause-tracing": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/root-cause-tracing/SKILL.md",
+      "computedHash": "84214415f9d366e047a8925f562e3b72ada0b06cedf8614d7ef91aef92e92d2a"
+    },
+    "sales-enablement": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/sales-enablement/SKILL.md",
+      "computedHash": "bb9db77dcdc6536194d5942bf42dcfb0e04853512a7c2dd70e0ead2709c53028"
+    },
+    "schema": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/schema/SKILL.md",
+      "computedHash": "2f4807070c77b5c52af3a7e56d2ca5ee12ae2fd8b749d76ab68d3de40f323e78"
+    },
+    "seo-audit": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/seo-audit/SKILL.md",
+      "computedHash": "f2dc52130189068981f21e1c0bdc4471ac7cd9b08d8a1320604411aa0f950385"
+    },
+    "setup-arxiv-mcp": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/mcp/skills/setup-arxiv-mcp/SKILL.md",
+      "computedHash": "9e798571afd4e5030510baedcc6eadce3f09ff1b63d2a78dae5e263988b514bd"
+    },
+    "setup-codemap-cli": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/mcp/skills/setup-codemap-cli/SKILL.md",
+      "computedHash": "9d7fe34d3512afeb4af7eff52854d2feaa6573a05854e7eabd0fe1cdce8e49bb"
+    },
+    "setup-context7-mcp": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/mcp/skills/setup-context7-mcp/SKILL.md",
+      "computedHash": "05ed783bf9134b50b029b374abfac58cd0136cfe5132a04ba86ef18c85b881d4"
+    },
+    "setup-serena-mcp": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/mcp/skills/setup-serena-mcp/SKILL.md",
+      "computedHash": "7e4a1bddbfb1785b6e2f024dce477481fc85b0471c09717c3b33387f3054b6eb"
+    },
+    "signup": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/signup/SKILL.md",
+      "computedHash": "9efbe9bc357581a924baa33a696b6d58a7126b7a4e4c472cebf18ed3d52cd2fd"
+    },
+    "site-architecture": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/site-architecture/SKILL.md",
+      "computedHash": "48a38c5e2b000d134c3db282364b1014bad362fa91d4618ad8c2eb7cee991208"
+    },
+    "sms": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/sms/SKILL.md",
+      "computedHash": "289111572055b6dd00a34e2111b6d895081b13cb3bf8c8fa3b05717d0e2e2b52"
+    },
+    "social": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/social/SKILL.md",
+      "computedHash": "45f19eb1da07de3505f4db57ea0a83906c73bc30bc6af1fdb4d576d5d2dee310"
+    },
+    "status": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/fpf/skills/status/SKILL.md",
+      "computedHash": "836aed59b3371fcd2fcf0166bf63f0c912993d02687381e1ee6e7aa6e8c7503d"
+    },
+    "subagent-driven-development": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/subagent-driven-development/SKILL.md",
+      "computedHash": "d5b7b82d2d0f8132c574a4bbdcd5856e9e99e7edfebc30b8b8e4f64158b88535"
+    },
+    "test-driven-development": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/tdd/skills/test-driven-development/SKILL.md",
+      "computedHash": "ed985d7e012c0caa184828052f4300aeb799f1dcfab87c0c916dfd8ee23bfd7c"
+    },
+    "test-prompt": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/test-prompt/SKILL.md",
+      "computedHash": "c62965fea8bb00a8003b11de1af4bdbebd784428a23c23cd14ad255744d8a3e4"
+    },
+    "test-skill": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/test-skill/SKILL.md",
+      "computedHash": "754e3996f05462cc9caeaad2a794359d8c9cb16e7b66dd14844c0f26420f997f"
+    },
+    "thought-based-reasoning": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/customaize-agent/skills/thought-based-reasoning/SKILL.md",
+      "computedHash": "23a4669c49aace2adf9f47aae9b4090813c787c93f0924667076fd198abc725e"
+    },
+    "tree-of-thoughts": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/sadd/skills/tree-of-thoughts/SKILL.md",
+      "computedHash": "66c25b0ef69738253bc401bde4d29db9dc74e042e69bd9f5e956badeaaa2b4c5"
+    },
+    "update-docs": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/docs/skills/update-docs/SKILL.md",
+      "computedHash": "96ca0027be872315c74f09d257c2dd51111c8c185b7e8e3e2650db12ebc821dd"
+    },
+    "video": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/video/SKILL.md",
+      "computedHash": "8286d39be8d86f9fc1c39b3c340cdebcf9a490f7606ffde566572baa163b1fe7"
+    },
+    "why": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/kaizen/skills/why/SKILL.md",
+      "computedHash": "1dc562881dbe6e4fe3de8c070282dc87ae910b4198a11d340dbbea8f6192b8a7"
+    },
+    "write-concisely": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/docs/skills/write-concisely/SKILL.md",
+      "computedHash": "785b6367f985aa9f11ddad41b63b1f58d99f0547e4136b8c188dae6ab913fa74"
+    },
+    "write-tests": {
+      "source": "NeoLabHQ/context-engineering-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/tdd/skills/write-tests/SKILL.md",
+      "computedHash": "4ba1642d05f0f1c27114a109d73284f6ea0c8d45d0df9612b774c647dd744dc3"
+    }
+  }
+}
