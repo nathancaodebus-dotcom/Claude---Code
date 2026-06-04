@@ -1,0 +1,744 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LUMØRA — Masque LED Luminothérapie Professionnel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --plum-deep:    #1A0F2E;
+      --plum-mid:     #2D2640;
+      --plum-light:   #3D3258;
+      --amber:        #F0A500;
+      --amber-glow:   rgba(240,165,0,0.18);
+      --amber-border: rgba(240,165,0,0.25);
+      --rose:         #FF6B8A;
+      --cream:        #F5EDD8;
+      --cream-dim:    rgba(245,237,216,0.7);
+      --cream-faint:  rgba(245,237,216,0.12);
+      --font-display: 'Cormorant Garamond', Georgia, serif;
+      --font-body:    'DM Sans', system-ui, sans-serif;
+      --ease-out-expo:  cubic-bezier(0.19,1,0.22,1);
+      --ease-out-quart: cubic-bezier(0.25,1,0.5,1);
+      --ease-in-out:    cubic-bezier(0.76,0,0.24,1);
+      --radius-sm: 8px; --radius-md: 16px; --radius-lg: 28px; --radius-full: 9999px;
+      --shadow-amber: 0 0 40px rgba(240,165,0,0.25), 0 0 80px rgba(240,165,0,0.10);
+      --shadow-card:  0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+      --shadow-deep:  0 24px 80px rgba(0,0,0,0.6);
+      --section-py: clamp(60px,10vw,120px);
+      --container: min(1160px,calc(100% - 40px));
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+    body{background:var(--plum-deep);color:var(--cream);font-family:var(--font-body);font-size:16px;line-height:1.6;overflow-x:hidden}
+    img{max-width:100%;display:block}
+    a{color:inherit;text-decoration:none}
+    button{cursor:pointer;border:none;background:none;font-family:var(--font-body)}
+    ul{list-style:none}
+
+    body::before{content:'';position:fixed;inset:0;z-index:1000;pointer-events:none;opacity:0.18;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size:200px 200px}
+
+    .mesh-bg{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+    .mesh-bg::before{content:'';position:absolute;width:70vw;height:70vw;top:-20vw;right:-15vw;
+      background:radial-gradient(circle,rgba(240,165,0,0.12) 0%,rgba(255,107,138,0.06) 40%,transparent 70%);
+      filter:blur(60px);animation:meshFloat 12s ease-in-out infinite alternate}
+    .mesh-bg::after{content:'';position:absolute;width:60vw;height:60vw;bottom:-10vw;left:-10vw;
+      background:radial-gradient(circle,rgba(255,107,138,0.10) 0%,rgba(120,60,200,0.08) 50%,transparent 70%);
+      filter:blur(80px);animation:meshFloat 15s ease-in-out infinite alternate-reverse}
+    @keyframes meshFloat{0%{transform:translate(0,0) scale(1)}100%{transform:translate(3%,5%) scale(1.08)}}
+
+    .h1{font-family:var(--font-display);font-size:clamp(2.6rem,6vw,5.2rem);font-weight:300;line-height:1.05;letter-spacing:-0.02em}
+    .h2{font-family:var(--font-display);font-size:clamp(2rem,4vw,3.6rem);font-weight:300;line-height:1.1;letter-spacing:-0.01em}
+    .overline{font-size:0.7rem;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--amber);font-family:var(--font-body)}
+    .container{width:var(--container);margin-inline:auto}
+    .section{position:relative;padding-block:var(--section-py)}
+
+    .fade-up{opacity:0;transform:translateY(40px);transition:opacity 0.9s var(--ease-out-expo),transform 0.9s var(--ease-out-expo)}
+    .fade-up.visible{opacity:1;transform:translateY(0)}
+    .fade-up:nth-child(2){transition-delay:0.1s}
+    .fade-up:nth-child(3){transition-delay:0.2s}
+    .fade-up:nth-child(4){transition-delay:0.3s}
+    .fade-up:nth-child(5){transition-delay:0.4s}
+
+    .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:16px 40px;
+      background:linear-gradient(135deg,var(--amber) 0%,#FF9800 100%);color:var(--plum-deep);
+      font-family:var(--font-body);font-weight:600;font-size:0.95rem;letter-spacing:0.04em;text-transform:uppercase;
+      border-radius:var(--radius-full);position:relative;overflow:hidden;
+      transition:transform 0.35s var(--ease-out-quart),box-shadow 0.35s var(--ease-out-quart);
+      box-shadow:0 4px 24px rgba(240,165,0,0.3)}
+    .btn-primary::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);
+      transition:left 0.6s var(--ease-out-expo)}
+    .btn-primary:hover::before{left:100%}
+    .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:var(--shadow-amber)}
+    .btn-primary:active{transform:translateY(0) scale(0.98)}
+
+    .btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:14px 32px;
+      border:1px solid var(--amber-border);color:var(--cream);font-family:var(--font-body);font-weight:500;
+      font-size:0.9rem;letter-spacing:0.06em;text-transform:uppercase;border-radius:var(--radius-full);
+      transition:border-color 0.3s var(--ease-out-quart),background 0.3s var(--ease-out-quart),transform 0.3s var(--ease-out-quart)}
+    .btn-outline:hover{border-color:var(--amber);background:var(--amber-glow);transform:translateY(-1px)}
+
+    .nav{position:fixed;top:0;left:0;right:0;z-index:900;padding:0 24px;
+      transition:background 0.4s var(--ease-in-out),backdrop-filter 0.4s var(--ease-in-out)}
+    .nav.scrolled{background:rgba(26,15,46,0.85);backdrop-filter:blur(20px) saturate(180%);
+      -webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--amber-border)}
+    .nav-inner{max-width:var(--container);margin-inline:auto;display:flex;align-items:center;justify-content:space-between;height:72px}
+    .nav-logo{font-family:var(--font-display);font-size:1.7rem;font-weight:600;letter-spacing:0.05em;color:var(--cream);display:flex;align-items:baseline;gap:2px}
+    .nav-logo span{color:var(--amber)}
+    .nav-tagline{font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--cream-dim);margin-left:12px;font-family:var(--font-body)}
+    .nav-links{display:flex;gap:36px;align-items:center}
+    .nav-links a{font-size:0.8rem;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--cream-dim);transition:color 0.25s var(--ease-out-quart)}
+    .nav-links a:hover{color:var(--amber)}
+    .nav-cta{padding:10px 24px;background:linear-gradient(135deg,var(--amber),#FF9800);color:var(--plum-deep);
+      font-weight:600;font-size:0.78rem;letter-spacing:0.08em;text-transform:uppercase;border-radius:var(--radius-full);
+      transition:transform 0.3s var(--ease-out-quart),box-shadow 0.3s var(--ease-out-quart);box-shadow:0 2px 16px rgba(240,165,0,0.25)}
+    .nav-cta:hover{transform:translateY(-1px);box-shadow:var(--shadow-amber)}
+    @media(max-width:768px){.nav-links{display:none}.nav-tagline{display:none}}
+
+    .mobile-cta{display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:800;width:calc(100% - 40px);max-width:400px;text-align:center}
+    .mobile-cta .btn-primary{width:100%;padding:18px;font-size:1rem;box-shadow:0 8px 32px rgba(240,165,0,0.4),0 0 0 1px rgba(240,165,0,0.2)}
+    @media(max-width:768px){.mobile-cta{display:block}}
+
+    .hero{min-height:100vh;display:flex;align-items:center;padding-top:72px;position:relative;overflow:hidden}
+    .hero-inner{position:relative;z-index:2;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;width:var(--container);margin-inline:auto;padding-block:80px}
+    @media(max-width:900px){.hero-inner{grid-template-columns:1fr;text-align:center;gap:48px}}
+    .hero-overline{display:inline-flex;align-items:center;gap:8px;margin-bottom:20px;opacity:0;animation:slideDown 0.8s var(--ease-out-expo) 0.2s forwards}
+    .hero-overline::before,.hero-overline::after{content:'';display:block;width:24px;height:1px;background:var(--amber)}
+    .hero-title{opacity:0;animation:slideDown 0.9s var(--ease-out-expo) 0.35s forwards}
+    .hero-title em{font-style:italic;color:var(--amber)}
+    .hero-subtitle{margin-top:24px;font-size:clamp(1rem,1.8vw,1.15rem);line-height:1.7;color:var(--cream-dim);max-width:480px;opacity:0;animation:slideDown 0.9s var(--ease-out-expo) 0.5s forwards}
+    @media(max-width:900px){.hero-subtitle{margin-inline:auto}}
+    .hero-social-proof{display:flex;align-items:center;gap:16px;margin-top:28px;opacity:0;animation:slideDown 0.9s var(--ease-out-expo) 0.65s forwards}
+    @media(max-width:900px){.hero-social-proof{justify-content:center}}
+    .stars{display:flex;gap:2px}
+    .star{color:var(--amber);font-size:1rem}
+    .proof-text{font-size:0.85rem;color:var(--cream-dim)}
+    .proof-text strong{color:var(--cream);font-weight:600}
+    .proof-divider{width:1px;height:24px;background:var(--amber-border)}
+    .hero-cta-group{display:flex;align-items:center;gap:16px;margin-top:36px;flex-wrap:wrap;opacity:0;animation:slideDown 0.9s var(--ease-out-expo) 0.8s forwards}
+    @media(max-width:900px){.hero-cta-group{justify-content:center}}
+    .hero-visual{position:relative;display:flex;align-items:center;justify-content:center;opacity:0;animation:fadeIn 1.2s var(--ease-out-expo) 0.4s forwards}
+    .product-showcase{position:relative;width:100%;max-width:520px;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+    .product-halo{position:absolute;inset:-20%;background:radial-gradient(circle at center,rgba(240,165,0,0.18) 0%,rgba(255,107,138,0.08) 40%,transparent 70%);filter:blur(30px);animation:pulse 4s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:0.6;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+    .product-ring{position:absolute;inset:5%;border-radius:50%;border:1px solid var(--amber-border);animation:spin 30s linear infinite}
+    .product-ring::before{content:'';position:absolute;width:8px;height:8px;background:var(--amber);border-radius:50%;top:-4px;left:50%;transform:translateX(-50%);box-shadow:0 0 12px var(--amber)}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    .product-card-3d{position:relative;z-index:2;width:80%;aspect-ratio:1;border-radius:var(--radius-lg);
+      background:linear-gradient(135deg,var(--plum-mid) 0%,var(--plum-light) 50%,rgba(240,165,0,0.08) 100%);
+      border:1px solid var(--amber-border);box-shadow:var(--shadow-card);display:flex;align-items:center;justify-content:center;
+      font-size:7rem;transition:transform 0.15s var(--ease-out-quart);will-change:transform;overflow:hidden}
+    .product-card-3d::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.05) 0%,transparent 50%);pointer-events:none}
+    .product-badge{position:absolute;top:12px;right:12px;padding:6px 14px;background:linear-gradient(135deg,var(--rose) 0%,#FF4D6A 100%);color:white;font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;border-radius:var(--radius-full)}
+    .product-led-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+    .led-dot{width:8px;height:8px;border-radius:50%;animation:ledGlow 2s ease-in-out infinite}
+    .led-dot:nth-child(1){background:#FF0000;animation-delay:0s}
+    .led-dot:nth-child(2){background:#FF8000;animation-delay:0.15s}
+    .led-dot:nth-child(3){background:#FFFF00;animation-delay:0.3s}
+    .led-dot:nth-child(4){background:#00FF00;animation-delay:0.45s}
+    .led-dot:nth-child(5){background:#0080FF;animation-delay:0.6s}
+    .led-dot:nth-child(6){background:#8000FF;animation-delay:0.75s}
+    .led-dot:nth-child(7){background:#FF80FF;animation-delay:0.9s}
+    @keyframes ledGlow{0%,100%{opacity:0.4;transform:scale(0.8)}50%{opacity:1;transform:scale(1.2);box-shadow:0 0 8px currentColor}}
+    @keyframes slideDown{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+    .deco-circle{position:absolute;border-radius:50%;border:1px solid;pointer-events:none;opacity:0.15}
+
+    .strip{border-top:1px solid var(--amber-border);border-bottom:1px solid var(--amber-border);background:rgba(240,165,0,0.04);padding:20px 0;overflow:hidden}
+    .strip-track{display:flex;gap:60px;animation:marquee 30s linear infinite;width:max-content}
+    .strip-item{display:flex;align-items:center;gap:10px;white-space:nowrap;font-size:0.78rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--cream-dim)}
+    @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+    .section-label{display:inline-block;padding:8px 20px;border:1px solid var(--amber-border);border-radius:var(--radius-full);font-size:0.7rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--amber);margin-bottom:24px}
+    .problem-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:40px;align-items:center;margin-top:56px}
+    @media(max-width:768px){.problem-grid{grid-template-columns:1fr}.problem-divider{display:none}}
+    .problem-card,.solution-card{padding:36px;border-radius:var(--radius-md);position:relative}
+    .problem-card{background:rgba(255,107,138,0.06);border:1px solid rgba(255,107,138,0.15)}
+    .solution-card{background:rgba(240,165,0,0.06);border:1px solid var(--amber-border)}
+    .card-icon{font-size:2.2rem;margin-bottom:20px}
+    .card-title{font-family:var(--font-display);font-size:1.4rem;font-weight:400;margin-bottom:16px}
+    .card-items{display:flex;flex-direction:column;gap:12px}
+    .card-item{display:flex;align-items:flex-start;gap:10px;font-size:0.9rem;color:var(--cream-dim);line-height:1.5}
+    .item-dot{width:6px;height:6px;border-radius:50%;margin-top:7px;flex-shrink:0}
+    .problem-card .item-dot{background:var(--rose)}
+    .solution-card .item-dot{background:var(--amber)}
+    .problem-divider{display:flex;flex-direction:column;align-items:center;gap:12px;font-family:var(--font-display);font-size:1.2rem;color:var(--amber)}
+    .divider-line{width:1px;height:60px;background:linear-gradient(to bottom,transparent,var(--amber),transparent)}
+
+    .product-section-inner{display:grid;grid-template-columns:1.1fr 1fr;gap:80px;align-items:start}
+    @media(max-width:900px){.product-section-inner{grid-template-columns:1fr;gap:48px}}
+    .gallery-main{border-radius:var(--radius-lg);overflow:hidden;background:linear-gradient(135deg,var(--plum-mid),var(--plum-light));border:1px solid var(--amber-border);aspect-ratio:1;position:relative;display:flex;align-items:center;justify-content:center;font-size:9rem;box-shadow:var(--shadow-deep)}
+    .gallery-main::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(240,165,0,0.08) 0%,transparent 60%)}
+    .gallery-thumbs{display:flex;gap:12px;margin-top:16px}
+    .gallery-thumb{flex:1;aspect-ratio:1;border-radius:var(--radius-sm);background:var(--plum-mid);border:1px solid var(--cream-faint);display:flex;align-items:center;justify-content:center;font-size:1.8rem;cursor:pointer;transition:border-color 0.25s var(--ease-out-quart),transform 0.25s var(--ease-out-quart)}
+    .gallery-thumb:hover,.gallery-thumb.active{border-color:var(--amber);transform:scale(1.04)}
+    .product-name{font-family:var(--font-display);font-size:clamp(2rem,3.5vw,3rem);font-weight:300;line-height:1.1;margin-bottom:8px}
+    .product-subtitle-small{color:var(--cream-dim);font-size:0.95rem;margin-bottom:24px}
+    .product-price-block{display:flex;align-items:baseline;gap:16px;margin-bottom:28px}
+    .price-current{font-family:var(--font-display);font-size:3rem;font-weight:600;color:var(--amber)}
+    .price-old{font-size:1.3rem;color:var(--cream-dim);text-decoration:line-through}
+    .price-save{padding:4px 12px;background:rgba(255,107,138,0.15);border:1px solid rgba(255,107,138,0.3);border-radius:var(--radius-full);font-size:0.75rem;font-weight:600;color:var(--rose);letter-spacing:0.06em}
+    .benefit-list{display:flex;flex-direction:column;gap:14px;margin-bottom:28px}
+    .benefit-item{display:flex;align-items:flex-start;gap:12px;font-size:0.9rem;color:var(--cream-dim)}
+    .benefit-check{width:20px;height:20px;border-radius:50%;background:var(--amber-glow);border:1px solid var(--amber-border);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;font-size:0.65rem;color:var(--amber)}
+    .benefit-item strong{color:var(--cream)}
+    .variant-selector{margin-bottom:28px}
+    .variant-label{font-size:0.75rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--cream-dim);margin-bottom:12px}
+    .variant-options{display:flex;gap:10px;flex-wrap:wrap}
+    .variant-btn{padding:8px 20px;border-radius:var(--radius-full);border:1px solid var(--cream-faint);font-size:0.85rem;color:var(--cream-dim);cursor:pointer;transition:all 0.25s var(--ease-out-quart);font-family:var(--font-body)}
+    .variant-btn:hover,.variant-btn.active{border-color:var(--amber);color:var(--amber);background:var(--amber-glow)}
+    .product-cta-group{display:flex;flex-direction:column;gap:12px;margin-bottom:28px}
+    .product-cta-group .btn-primary{width:100%;font-size:1rem;padding:18px}
+    .trust-row{display:flex;gap:20px;flex-wrap:wrap}
+    .trust-item{display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--cream-dim)}
+
+    .accordion{margin-top:32px;border-top:1px solid var(--cream-faint)}
+    .accordion-item{border-bottom:1px solid var(--cream-faint)}
+    .accordion-header{display:flex;justify-content:space-between;align-items:center;padding:18px 0;cursor:pointer;font-size:0.9rem;font-weight:500;transition:color 0.25s var(--ease-out-quart)}
+    .accordion-header:hover{color:var(--amber)}
+    .accordion-icon{width:20px;height:20px;border-radius:50%;border:1px solid var(--cream-faint);display:flex;align-items:center;justify-content:center;font-size:0.8rem;transition:all 0.3s var(--ease-out-quart);flex-shrink:0}
+    .accordion-item.open .accordion-icon{border-color:var(--amber);color:var(--amber);transform:rotate(45deg)}
+    .accordion-body{max-height:0;overflow:hidden;transition:max-height 0.4s var(--ease-in-out)}
+    .accordion-item.open .accordion-body{max-height:200px}
+    .accordion-content{padding:0 0 18px;font-size:0.875rem;color:var(--cream-dim);line-height:1.7}
+
+    .features-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-top:56px}
+    .feature-card{padding:32px 24px;border-radius:var(--radius-md);border:1px solid var(--cream-faint);background:var(--plum-mid);transition:border-color 0.3s var(--ease-out-quart),transform 0.3s var(--ease-out-quart);position:relative;overflow:hidden}
+    .feature-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);transform:scaleX(0);transition:transform 0.4s var(--ease-out-expo)}
+    .feature-card:hover{border-color:var(--amber-border);transform:translateY(-4px)}
+    .feature-card:hover::before{transform:scaleX(1)}
+    .feature-emoji{font-size:2rem;margin-bottom:16px}
+    .feature-title{font-family:var(--font-display);font-size:1.15rem;font-weight:400;margin-bottom:10px}
+    .feature-desc{font-size:0.85rem;color:var(--cream-dim);line-height:1.6}
+
+    .proof-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--amber-border);border:1px solid var(--amber-border);border-radius:var(--radius-md);overflow:hidden;margin-bottom:64px}
+    @media(max-width:600px){.proof-stats{grid-template-columns:1fr}}
+    .stat-cell{background:var(--plum-deep);padding:36px 24px;text-align:center}
+    .stat-number{font-family:var(--font-display);font-size:clamp(2rem,4vw,3.5rem);font-weight:300;color:var(--amber);line-height:1;margin-bottom:8px}
+    .stat-label{font-size:0.78rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--cream-dim)}
+    .reviews-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:24px}
+    .review-card{background:var(--plum-mid);border:1px solid var(--cream-faint);border-radius:var(--radius-md);padding:28px;position:relative;transition:border-color 0.3s var(--ease-out-quart),transform 0.3s var(--ease-out-quart)}
+    .review-card:hover{border-color:var(--amber-border);transform:translateY(-4px)}
+    .review-header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+    .review-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:600;color:var(--plum-deep);flex-shrink:0}
+    .review-name{font-size:0.9rem;font-weight:600}
+    .review-location{font-size:0.75rem;color:var(--cream-dim)}
+    .review-stars{display:flex;gap:2px;margin-bottom:12px}
+    .review-text{font-size:0.875rem;color:var(--cream-dim);line-height:1.6}
+    .verified-badge{display:inline-flex;align-items:center;gap:4px;margin-top:12px;font-size:0.68rem;color:var(--amber);letter-spacing:0.06em}
+    .review-quote{position:absolute;top:20px;right:20px;font-family:var(--font-display);font-size:3rem;color:var(--cream-faint);line-height:1}
+
+    .countdown-block{text-align:center;margin-bottom:48px}
+    .countdown-label{font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--rose);margin-bottom:16px}
+    .countdown-timer{display:inline-flex;gap:8px;align-items:center}
+    .time-block{display:flex;flex-direction:column;align-items:center;gap:4px}
+    .time-value{font-family:var(--font-display);font-size:clamp(2.5rem,5vw,4rem);font-weight:600;color:var(--amber);line-height:1;min-width:80px;text-align:center;background:var(--plum-mid);border:1px solid var(--amber-border);border-radius:var(--radius-sm);padding:12px 8px;position:relative;overflow:hidden}
+    .time-value::before{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(240,165,0,0.05) 0%,transparent 50%);pointer-events:none}
+    .time-label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--cream-dim)}
+    .time-sep{font-family:var(--font-display);font-size:2.5rem;color:var(--amber-border);margin-bottom:20px}
+    .stock-indicator{text-align:center;margin-bottom:48px}
+    .stock-bar-wrap{max-width:400px;margin-inline:auto}
+    .stock-text{display:flex;justify-content:space-between;font-size:0.8rem;color:var(--cream-dim);margin-bottom:10px}
+    .stock-text strong{color:var(--rose)}
+    .stock-bar{height:6px;background:rgba(255,255,255,0.08);border-radius:var(--radius-full);overflow:hidden}
+    .stock-fill{height:100%;width:23%;background:linear-gradient(90deg,var(--rose),#FF4D6A);border-radius:var(--radius-full);animation:stockPulse 2s ease-in-out infinite}
+    @keyframes stockPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px rgba(255,107,138,0.6)}}
+    .pricing-table{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:48px}
+    @media(max-width:768px){.pricing-table{grid-template-columns:1fr}}
+    .pricing-card{border-radius:var(--radius-md);padding:32px 24px;border:1px solid var(--cream-faint);background:var(--plum-mid);position:relative;text-align:center;transition:transform 0.3s var(--ease-out-quart),border-color 0.3s var(--ease-out-quart)}
+    .pricing-card:hover{transform:translateY(-6px);border-color:var(--amber-border)}
+    .pricing-card.featured{border-color:var(--amber);background:linear-gradient(135deg,var(--plum-mid) 0%,rgba(240,165,0,0.07) 100%);transform:scale(1.04)}
+    .pricing-card.featured:hover{transform:scale(1.04) translateY(-6px)}
+    .pricing-pill{position:absolute;top:-13px;left:50%;transform:translateX(-50%);padding:5px 16px;background:linear-gradient(135deg,var(--amber),#FF9800);color:var(--plum-deep);font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;border-radius:var(--radius-full);white-space:nowrap}
+    .pricing-icon{font-size:2rem;margin-bottom:12px}
+    .pricing-title{font-family:var(--font-display);font-size:1.2rem;margin-bottom:8px}
+    .pricing-desc{font-size:0.8rem;color:var(--cream-dim);margin-bottom:20px}
+    .pricing-price{font-family:var(--font-display);font-size:2.5rem;font-weight:600;color:var(--amber);line-height:1;margin-bottom:4px}
+    .pricing-unit{font-size:0.75rem;color:var(--cream-dim);margin-bottom:24px}
+    .pricing-perks{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;text-align:left}
+    .perk-item{display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--cream-dim)}
+    .perk-check{color:var(--amber);font-size:0.7rem}
+    .pricing-cta{width:100%;padding:14px;border-radius:var(--radius-full);font-size:0.85rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;transition:all 0.3s var(--ease-out-quart);font-family:var(--font-body);cursor:pointer}
+    .pricing-cta.primary{background:linear-gradient(135deg,var(--amber),#FF9800);color:var(--plum-deep);border:none;box-shadow:0 4px 20px rgba(240,165,0,0.3)}
+    .pricing-cta.primary:hover{transform:translateY(-2px);box-shadow:var(--shadow-amber)}
+    .pricing-cta.secondary{border:1px solid var(--cream-faint);color:var(--cream-dim)}
+    .pricing-cta.secondary:hover{border-color:var(--amber-border);color:var(--cream)}
+
+    .footer{border-top:1px solid var(--cream-faint);padding-block:60px 32px;position:relative}
+    .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1.5fr;gap:48px;margin-bottom:48px}
+    @media(max-width:900px){.footer-grid{grid-template-columns:1fr 1fr;gap:32px}}
+    @media(max-width:500px){.footer-grid{grid-template-columns:1fr}}
+    .footer-desc{font-size:0.85rem;color:var(--cream-dim);line-height:1.6;max-width:280px}
+    .footer-social{display:flex;gap:12px;margin-top:20px}
+    .social-link{width:36px;height:36px;border-radius:var(--radius-sm);border:1px solid var(--cream-faint);display:flex;align-items:center;justify-content:center;font-size:0.9rem;transition:all 0.25s var(--ease-out-quart)}
+    .social-link:hover{border-color:var(--amber);background:var(--amber-glow)}
+    .footer-col-title{font-size:0.7rem;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:16px}
+    .footer-links{display:flex;flex-direction:column;gap:10px}
+    .footer-links a{font-size:0.85rem;color:var(--cream-dim);transition:color 0.25s var(--ease-out-quart)}
+    .footer-links a:hover{color:var(--cream)}
+    .newsletter-form{display:flex;gap:8px;margin-top:12px}
+    .newsletter-input{flex:1;padding:10px 16px;background:var(--plum-mid);border:1px solid var(--cream-faint);border-radius:var(--radius-full);color:var(--cream);font-size:0.85rem;font-family:var(--font-body);transition:border-color 0.25s var(--ease-out-quart);outline:none}
+    .newsletter-input::placeholder{color:var(--cream-dim);opacity:0.5}
+    .newsletter-input:focus{border-color:var(--amber)}
+    .newsletter-btn{padding:10px 18px;background:var(--amber);color:var(--plum-deep);border-radius:var(--radius-full);font-weight:600;font-size:0.8rem;letter-spacing:0.06em;transition:all 0.25s var(--ease-out-quart);font-family:var(--font-body)}
+    .newsletter-btn:hover{background:#FFB800;transform:translateY(-1px)}
+    .footer-bottom{padding-top:28px;border-top:1px solid var(--cream-faint);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+    .footer-copy{font-size:0.78rem;color:var(--cream-dim)}
+    .payment-methods{display:flex;gap:8px;align-items:center}
+    .pay-badge{padding:4px 10px;background:var(--plum-mid);border:1px solid var(--cream-faint);border-radius:4px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;color:var(--cream-dim)}
+  </style>
+</head>
+<body>
+
+  <nav class="nav" id="mainNav">
+    <div class="nav-inner">
+      <div style="display:flex;align-items:baseline;gap:4px;">
+        <div class="nav-logo">LUM<span>Ø</span>RA</div>
+        <div class="nav-tagline">Luminothérapie Professionnelle</div>
+      </div>
+      <div class="nav-links">
+        <a href="#product">Le Masque</a>
+        <a href="#proof">Résultats</a>
+        <a href="#offer">Offres</a>
+        <a href="#offer" class="nav-cta">Commander →</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="mobile-cta">
+    <button class="btn-primary" onclick="document.getElementById('offer').scrollIntoView({behavior:'smooth'})">
+      Commander — {{ produit.prix }}€ <span style="opacity:0.7;text-decoration:line-through;font-weight:400;">{{ produit.prix_barre }}€</span>
+    </button>
+  </div>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="mesh-bg"></div>
+    <div class="deco-circle" style="width:500px;height:500px;border-color:var(--amber);top:-120px;right:-100px;"></div>
+    <div class="deco-circle" style="width:280px;height:280px;border-color:var(--rose);bottom:80px;left:-80px;"></div>
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="hero-overline">
+          <span class="overline">Luminothérapie LED 7 Spectres</span>
+        </div>
+        <h1 class="h1 hero-title">
+          Votre peau mérite<br>
+          <em>la lumière</em> qui<br>
+          la transforme.
+        </h1>
+        <p class="hero-subtitle">
+          Technologie LED cliniquement validée. 10 minutes par jour.
+          Résultats visibles dès 21 jours. Sans produits, sans douleur, sans compromis.
+        </p>
+        <div class="hero-social-proof">
+          <div class="stars">{% for i in "12345" %}<span class="star">★</span>{% endfor %}</div>
+          <div class="proof-text"><strong>{{ stats.note }}/5</strong> — 2 847 avis vérifiés</div>
+          <div class="proof-divider"></div>
+          <div class="proof-text"><strong>{{ stats.clientes|floatformat:"0" }}</strong> clientes satisfaites</div>
+        </div>
+        <div class="hero-cta-group">
+          <button class="btn-primary" onclick="document.getElementById('offer').scrollIntoView({behavior:'smooth'})">Commander maintenant →</button>
+          <button class="btn-outline" onclick="document.getElementById('product').scrollIntoView({behavior:'smooth'})">Voir le produit</button>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="product-showcase">
+          <div class="product-halo"></div>
+          <div class="product-ring"></div>
+          <div class="product-card-3d" id="tiltCard">
+            <div class="product-badge">NOUVEAU</div>
+            🎭
+            <div class="product-led-dots">
+              {% for i in "1234567" %}<div class="led-dot"></div>{% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STRIP RÉASSURANCE -->
+  <div class="strip">
+    <div class="strip-track" id="stripTrack">
+      <div class="strip-item">✦ Livraison offerte dès {{ produit.prix }}€</div>
+      <div class="strip-item">♥ Satisfait ou Remboursé 30 jours</div>
+      <div class="strip-item">🔒 Paiement 100% Sécurisé</div>
+      <div class="strip-item">⚡ Livraison 48–72h en France</div>
+      <div class="strip-item">★ SAV Français réactif</div>
+      <div class="strip-item">✓ Validé par des dermatologues</div>
+      <div class="strip-item">✦ Certifié CE &amp; FDA</div>
+    </div>
+  </div>
+
+  <!-- PROBLÈME / SOLUTION -->
+  <section class="section" style="overflow:hidden;">
+    <div class="mesh-bg"></div>
+    <div class="container">
+      <div style="text-align:center;" class="fade-up">
+        <div class="section-label">Le constat</div>
+        <h2 class="h2">Votre peau mérite mieux<br>que des promesses en pot.</h2>
+        <p style="max-width:520px;margin:20px auto 0;color:var(--cream-dim);font-size:0.95rem;line-height:1.7;">
+          Les soins topiques agissent en surface. La luminothérapie LED agit en profondeur — au niveau cellulaire, là où la transformation est durable.
+        </p>
+      </div>
+      <div class="problem-grid">
+        <div class="problem-card fade-up">
+          <div class="card-icon">😔</div>
+          <h3 class="card-title">Avant LUMØRA</h3>
+          <div class="card-items">
+            <div class="card-item"><div class="item-dot"></div>Peau terne, fatiguée, sans éclat</div>
+            <div class="card-item"><div class="item-dot"></div>Acné hormonale récurrente</div>
+            <div class="card-item"><div class="item-dot"></div>60–120€ la séance en institut</div>
+            <div class="card-item"><div class="item-dot"></div>Crèmes décevantes et coûteuses</div>
+            <div class="card-item"><div class="item-dot"></div>Rides fines qui s'installent</div>
+          </div>
+        </div>
+        <div class="problem-divider fade-up">
+          <div class="divider-line"></div><span>→</span><div class="divider-line"></div>
+        </div>
+        <div class="solution-card fade-up">
+          <div class="card-icon">✨</div>
+          <h3 class="card-title">Avec LUMØRA</h3>
+          <div class="card-items">
+            <div class="card-item"><div class="item-dot"></div>Teint unifié et lumineux en 21 jours</div>
+            <div class="card-item"><div class="item-dot"></div>Lumière bleue antibactérienne anti-acné</div>
+            <div class="card-item"><div class="item-dot"></div>Investissement unique à {{ produit.prix }}€</div>
+            <div class="card-item"><div class="item-dot"></div>7 longueurs d'onde pour chaque besoin</div>
+            <div class="card-item"><div class="item-dot"></div>Collagène stimulé, rides atténuées</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUIT DÉTAIL -->
+  <section class="section" id="product">
+    <div class="container">
+      <div class="product-section-inner">
+        <div class="fade-up">
+          <div class="gallery-main"><span id="galleryEmoji">🎭</span></div>
+          <div class="gallery-thumbs">
+            <div class="gallery-thumb active" data-emoji="🎭" onclick="switchGallery(this)">🎭</div>
+            <div class="gallery-thumb" data-emoji="💡" onclick="switchGallery(this)">💡</div>
+            <div class="gallery-thumb" data-emoji="✨" onclick="switchGallery(this)">✨</div>
+            <div class="gallery-thumb" data-emoji="🌸" onclick="switchGallery(this)">🌸</div>
+          </div>
+        </div>
+        <div class="product-info fade-up">
+          <div class="overline" style="margin-bottom:12px;">Masque LED Professionnel</div>
+          <h2 class="product-name">LUMØRA<br><em style="font-style:italic;font-weight:300;color:var(--amber);">Masque Lumière</em></h2>
+          <p class="product-subtitle-small">7 longueurs d'onde cliniquement validées — Utilisation professionnelle à domicile</p>
+          <div class="product-price-block">
+            <div class="price-current">{{ produit.prix }}€</div>
+            <div class="price-old">{{ produit.prix_barre }}€</div>
+            <div class="price-save">−{{ produit.reduction_pct }}%</div>
+          </div>
+          <div class="variant-selector">
+            <div class="variant-label">Mode de soin</div>
+            <div class="variant-options">
+              <button class="variant-btn active" onclick="selectVariant(this)">Anti-âge (Rouge)</button>
+              <button class="variant-btn" onclick="selectVariant(this)">Anti-acné (Bleu)</button>
+              <button class="variant-btn" onclick="selectVariant(this)">Éclat (Jaune)</button>
+              <button class="variant-btn" onclick="selectVariant(this)">Programme 7-jours</button>
+            </div>
+          </div>
+          <div class="benefit-list">
+            <div class="benefit-item"><div class="benefit-check">✓</div><div><strong>Collagène +68%</strong> — La lumière rouge 630nm stimule la production naturelle de collagène</div></div>
+            <div class="benefit-item"><div class="benefit-check">✓</div><div><strong>Anti-acné prouvé</strong> — La lumière bleue 415nm élimine 99,9% des bactéries P. acnes</div></div>
+            <div class="benefit-item"><div class="benefit-check">✓</div><div><strong>Résultats en 21 jours</strong> — Protocole de 10 min/jour, indolore, sans effets secondaires</div></div>
+            <div class="benefit-item"><div class="benefit-check">✓</div><div><strong>Certifié CE &amp; FDA</strong> — Testé cliniquement, approuvé pour usage personnel</div></div>
+            <div class="benefit-item"><div class="benefit-check">✓</div><div><strong>Économisez 1 800€/an</strong> — vs. séances en institut à 80€ la session</div></div>
+          </div>
+          <div class="product-cta-group">
+            <button class="btn-primary" onclick="document.getElementById('offer').scrollIntoView({behavior:'smooth'})">
+              Ajouter au panier — {{ produit.prix }}€
+            </button>
+          </div>
+          <div class="trust-row">
+            <div class="trust-item">🔒 Paiement sécurisé</div>
+            <div class="trust-item">★ 30 jours satisfait ou remboursé</div>
+            <div class="trust-item">⚡ Livraison 48–72h</div>
+          </div>
+          <div class="accordion">
+            <div class="accordion-item">
+              <div class="accordion-header" onclick="toggleAccordion(this)">Comment utiliser le masque LUMØRA ?<span class="accordion-icon">+</span></div>
+              <div class="accordion-body"><div class="accordion-content">Appliquez le masque sur peau propre et sèche. Sélectionnez le mode souhaité et utilisez 10 minutes par jour, de préférence le soir. Résultats optimaux dès 21 jours d'utilisation régulière.</div></div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header" onclick="toggleAccordion(this)">Est-ce sans danger pour les yeux ?<span class="accordion-icon">+</span></div>
+              <div class="accordion-body"><div class="accordion-content">Oui. Le masque est certifié CE et FDA pour usage personnel. Les LEDs sont à faible intensité et le masque inclut des zones de protection pour les yeux. Aucun effet thermique, aucune UV nocive.</div></div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header" onclick="toggleAccordion(this)">Quels résultats puis-je attendre ?<span class="accordion-icon">+</span></div>
+              <div class="accordion-body"><div class="accordion-content">Dès J+7 : teint plus homogène, pores moins visibles. J+14 : réduction des rougeurs et imperfections. J+21 : peau visiblement plus ferme, plus lumineuse. 94% de nos utilisatrices constatent une amélioration en moins de 30 jours.</div></div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header" onclick="toggleAccordion(this)">Politique de retour ?<span class="accordion-icon">+</span></div>
+              <div class="accordion-body"><div class="accordion-content">Retour gratuit sous 30 jours, aucune question posée. Si vous n'êtes pas satisfaite, nous remboursons intégralement sous 3-5 jours ouvrés.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spectres -->
+      <div style="margin-top:80px;text-align:center;" class="fade-up">
+        <div class="section-label">La technologie</div>
+        <h2 class="h2">7 lumières. Une seule révolution.</h2>
+      </div>
+      <div class="features-grid">
+        {% for s in spectres %}
+        <div class="feature-card fade-up">
+          <div class="feature-emoji">{{ s.emoji }}</div>
+          <div class="feature-title">{{ s.couleur }} {{ s.nm }}</div>
+          <div class="feature-desc">{{ s.desc }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- AVIS / PREUVE SOCIALE -->
+  <section class="section" id="proof" style="overflow:hidden;">
+    <div class="mesh-bg"></div>
+    <div class="container">
+      <div style="text-align:center;" class="fade-up">
+        <div class="section-label">Elles l'ont essayé</div>
+        <h2 class="h2">{{ stats.clientes|floatformat:"0" }} peaux transformées.</h2>
+      </div>
+      <div class="proof-stats fade-up" style="margin-top:48px;">
+        <div class="stat-cell"><div class="stat-number" id="counter1">0</div><div class="stat-label">Clientes satisfaites</div></div>
+        <div class="stat-cell"><div class="stat-number">{{ stats.note }}<span style="font-size:1.5rem;">/5</span></div><div class="stat-label">Note moyenne</div></div>
+        <div class="stat-cell"><div class="stat-number" id="counter2">0</div><div class="stat-label">% recommandent</div></div>
+      </div>
+      <div class="reviews-grid" style="margin-top:48px;">
+        {% for a in avis %}
+        <div class="review-card fade-up">
+          <div class="review-quote">"</div>
+          <div class="review-header">
+            <div class="review-avatar" style="background:linear-gradient(135deg,#FF6B8A,#FF4D6A);">{{ a.prenom|first }}</div>
+            <div>
+              <div class="review-name">{{ a.prenom }}</div>
+              <div class="review-location">{{ a.ville }}</div>
+            </div>
+          </div>
+          <div class="review-stars">{% for i in a.etoiles %}<span class="star">★</span>{% endfor %}</div>
+          <div class="review-text">"{{ a.texte }}"</div>
+          <div class="verified-badge">✓ Achat vérifié · {{ a.delai }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- OFFRE / URGENCE -->
+  <section class="section" id="offer" style="overflow:hidden;">
+    <div class="mesh-bg"></div>
+    <div class="container">
+      <div style="text-align:center;" class="fade-up">
+        <div class="section-label">Offre limitée</div>
+        <h2 class="h2">Choisissez votre formule.</h2>
+        <p style="margin:16px auto 0;max-width:440px;color:var(--cream-dim);font-size:0.95rem;">
+          Lancement LUMØRA : −{{ produit.reduction_pct }}% sur le masque solo, livraison offerte sur toutes les formules.
+        </p>
+      </div>
+      <div class="countdown-block fade-up" style="margin-top:48px;">
+        <div class="countdown-label">⚡ Offre expire dans</div>
+        <div class="countdown-timer">
+          <div class="time-block"><div class="time-value" id="hours">04</div><div class="time-label">Heures</div></div>
+          <div class="time-sep">:</div>
+          <div class="time-block"><div class="time-value" id="minutes">27</div><div class="time-label">Minutes</div></div>
+          <div class="time-sep">:</div>
+          <div class="time-block"><div class="time-value" id="seconds">00</div><div class="time-label">Secondes</div></div>
+        </div>
+      </div>
+      <div class="stock-indicator fade-up">
+        <div class="stock-bar-wrap">
+          <div class="stock-text"><span>Stock disponible</span><strong id="stockCount">⚠ Plus que {{ produit.stock }} unités</strong></div>
+          <div class="stock-bar"><div class="stock-fill" id="stockFill"></div></div>
+        </div>
+      </div>
+      <div class="pricing-table fade-up">
+        {% for offre in offres %}
+        <div class="pricing-card {% if offre.featured %}featured{% endif %}">
+          {% if offre.featured %}<div class="pricing-pill">⭐ Meilleure offre</div>{% endif %}
+          <div class="pricing-icon">{{ offre.icone }}</div>
+          <div class="pricing-title">{{ offre.titre }}</div>
+          <div class="pricing-desc">{{ offre.desc }}</div>
+          <div class="pricing-price">{{ offre.prix }}€</div>
+          <div class="pricing-unit"><s style="opacity:0.5;">{{ offre.prix_barre }}€</s> — vous économisez {{ offre.economie }}€</div>
+          <div class="pricing-perks">
+            {% for p in offre.perks %}
+            <div class="perk-item"><span class="perk-check">✓</span> {{ p }}</div>
+            {% endfor %}
+          </div>
+          <button class="pricing-cta {% if offre.featured %}primary{% else %}secondary{% endif %}">Commander →</button>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="text-align:center;margin-top:32px;" class="fade-up">
+        <div style="display:inline-flex;align-items:center;gap:12px;padding:20px 32px;border:1px solid var(--amber-border);border-radius:var(--radius-md);background:rgba(240,165,0,0.04);">
+          <span style="font-size:2rem;">🛡️</span>
+          <div style="text-align:left;">
+            <div style="font-weight:600;font-size:0.9rem;">Garantie Satisfaction 30 Jours</div>
+            <div style="font-size:0.8rem;color:var(--cream-dim);margin-top:2px;">Pas de résultat visible ? Remboursement intégral, sans condition, sans délai.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="nav-logo" style="font-family:var(--font-display);font-size:1.4rem;font-weight:600;letter-spacing:0.05em;margin-bottom:12px;">LUM<span style="color:var(--amber);">Ø</span>RA</div>
+          <p class="footer-desc">Lumière professionnelle, résultats cliniques, rituel accessible. LUMØRA démocratise la luminothérapie LED pour toutes les peaux.</p>
+          <div class="footer-social">
+            <a href="#" class="social-link">📸</a>
+            <a href="#" class="social-link">🎵</a>
+            <a href="#" class="social-link">▶️</a>
+            <a href="#" class="social-link">📌</a>
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-title">Navigation</div>
+          <div class="footer-links">
+            <a href="#product">Le Masque LED</a>
+            <a href="#proof">Avis Clients</a>
+            <a href="#offer">Nos Offres</a>
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-title">Aide &amp; Légal</div>
+          <div class="footer-links">
+            <a href="#">Livraison &amp; Retours</a>
+            <a href="#">FAQ</a>
+            <a href="#">Contact SAV</a>
+            <a href="#">Mentions légales</a>
+            <a href="#">CGV</a>
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-title">Newsletter</div>
+          <p style="font-size:0.82rem;color:var(--cream-dim);margin-bottom:12px;line-height:1.5;">Recevez nos conseils beauté et les offres exclusives en avant-première.</p>
+          <div class="newsletter-form">
+            <input type="email" class="newsletter-input" placeholder="votre@email.com" />
+            <button class="newsletter-btn">→</button>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div class="footer-copy">© 2025 LUMØRA. Tous droits réservés.</div>
+        <div class="payment-methods">
+          <div class="pay-badge">VISA</div>
+          <div class="pay-badge">MC</div>
+          <div class="pay-badge">PAYPAL</div>
+          <div class="pay-badge">AMEX</div>
+          <div class="pay-badge">🔒 SSL</div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const nav = document.getElementById('mainNav');
+    window.addEventListener('scroll', () => { nav.classList.toggle('scrolled', window.scrollY > 40); }, { passive: true });
+
+    const hero = document.querySelector('.hero');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY < window.innerHeight) hero.style.transform = `translateY(${window.scrollY * 0.18}px)`;
+    }, { passive: true });
+
+    const card = document.getElementById('tiltCard');
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      card.style.transform = `perspective(600px) rotateY(${x*22}deg) rotateX(${-y*22}deg) scale(1.04)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transition = 'transform 0.5s cubic-bezier(0.25,1,0.5,1)';
+      card.style.transform = 'perspective(600px) rotateY(0) rotateX(0) scale(1)';
+    });
+    card.addEventListener('mouseenter', () => { card.style.transition = 'none'; });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+    const track = document.getElementById('stripTrack');
+    track.innerHTML += track.innerHTML;
+
+    function toggleAccordion(header) {
+      const item = header.parentElement;
+      const isOpen = item.classList.contains('open');
+      document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('open'));
+      if (!isOpen) item.classList.add('open');
+    }
+
+    function switchGallery(thumb) {
+      document.querySelectorAll('.gallery-thumb').forEach(t => t.classList.remove('active'));
+      thumb.classList.add('active');
+      const emoji = document.getElementById('galleryEmoji');
+      emoji.style.opacity = '0'; emoji.style.transform = 'scale(0.8)';
+      setTimeout(() => { emoji.textContent = thumb.dataset.emoji; emoji.style.opacity = '1'; emoji.style.transform = 'scale(1)'; }, 200);
+    }
+    document.getElementById('galleryEmoji').style.transition = 'all 0.3s cubic-bezier(0.34,1.56,0.64,1)';
+
+    function selectVariant(btn) {
+      btn.closest('.variant-options').querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    (function() {
+      let total = 4 * 3600 + 27 * 60 + 47;
+      function update() {
+        if (total <= 0) total = 4 * 3600;
+        document.getElementById('hours').textContent   = String(Math.floor(total / 3600)).padStart(2,'0');
+        document.getElementById('minutes').textContent = String(Math.floor((total % 3600) / 60)).padStart(2,'0');
+        document.getElementById('seconds').textContent = String(total % 60).padStart(2,'0');
+        total--;
+      }
+      update(); setInterval(update, 1000);
+    })();
+
+    let stock = {{ produit.stock }};
+    setInterval(() => {
+      if (Math.random() < 0.3 && stock > 7) {
+        stock--;
+        document.getElementById('stockCount').textContent = `⚠ Plus que ${stock} unités`;
+      }
+    }, 8000);
+
+    function animateCounter(el, target) {
+      let n = 0; const step = target / 80;
+      const iv = setInterval(() => {
+        n = Math.min(n + step, target);
+        el.textContent = Math.floor(n).toLocaleString('fr-FR');
+        if (n >= target) { el.textContent = target.toLocaleString('fr-FR'); clearInterval(iv); }
+      }, 18);
+    }
+    const counterObs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          animateCounter(document.getElementById('counter1'), {{ stats.clientes }});
+          const c2 = document.getElementById('counter2'); let n = 0;
+          const iv2 = setInterval(() => { n = Math.min(n+2, {{ stats.recommandent }}); c2.textContent = n + '%'; if (n >= {{ stats.recommandent }}) clearInterval(iv2); }, 18);
+          counterObs.disconnect();
+        }
+      });
+    }, { threshold: 0.3 });
+    const statsEl = document.querySelector('.proof-stats');
+    if (statsEl) counterObs.observe(statsEl);
+  </script>
+</body>
+</html>
