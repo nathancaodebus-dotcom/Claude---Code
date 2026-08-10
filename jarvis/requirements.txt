@@ -1,4 +1,8 @@
 anthropic>=0.40.0
+# anthropic depends transitively on jiter and pydantic-core (both Rust/PyO3).
+# No prebuilt wheel exists for Termux/Android, so pip compiles them from
+# source there — run `pkg install rust binutils` in Termux BEFORE this
+# install or it fails with "Failed to build 'jiter'". See README §11.
 python-dotenv>=1.0.0
 
 # Interfaces (job-queue extra powers proactive reminder delivery)

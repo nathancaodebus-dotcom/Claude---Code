@@ -341,17 +341,28 @@ Setup:
    Store versions, which are outdated and break Termux:API.
 2. In Termux:
    ```bash
-   pkg install python termux-api git
+   pkg install python termux-api git rust binutils
    git clone <your fork/branch of this repo> jarvis
    cd jarvis/jarvis
    python -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
    ```
-   Some packages may fail to install on Termux (no prebuilt wheel for
-   Android, and no local compiler for that one). That's fine — the same
-   plugin architecture used everywhere else in this project means any tool
-   whose dependency didn't install just silently stays disabled; the rest
-   still works.
+   `rust` and `binutils` are there for `jiter` and `pydantic-core` — two
+   Rust-based packages that `anthropic` itself depends on. PyPI ships
+   prebuilt wheels for them on desktop Linux/macOS/Windows but not for
+   Termux's Android/Bionic environment, so pip falls back to compiling
+   them from source, which needs a Rust toolchain present *before* you run
+   `pip install`. Installing `rust`/`binutils` first avoids the
+   `Failed to build 'jiter'` / `Failed to build 'pydantic-core'` errors —
+   if you already hit one, just run `pkg install rust binutils` now and
+   re-run `pip install -r requirements.txt`; pip resumes from where it
+   left off.
+
+   Other, non-essential packages may still fail to install on Termux (no
+   prebuilt wheel for Android, and no local compiler for that one). That's
+   fine — the same plugin architecture used everywhere else in this
+   project means any tool whose dependency didn't install just silently
+   stays disabled; the rest still works.
 3. `cp .env.example .env`, fill in `ANTHROPIC_API_KEY`.
 4. `python -m interfaces.termux.jarvis_termux` — Android's speech
    recognition prompt appears, speak, and Jarvis answers out loud.
