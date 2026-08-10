@@ -4,9 +4,12 @@ A personal AI assistant you can talk to about anything, at any time — it
 reads your email, manages your calendar, controls your smart home, creates
 and edits PowerPoint/Word/Excel files on request, controls Spotify and casts
 video to your TV, and remembers things about you across conversations. One
-agent core, three interfaces (terminal, Telegram/Android, always-listening
+agent core, four interfaces (terminal, Telegram voice conversations on
+Android, a Termux tap-to-talk shortcut also on Android, always-listening
 voice on a Raspberry Pi) — anything you dictate out loud goes through the
-same tool-using loop as typed text.
+same tool-using loop as typed text. **Phone and Pi are both fully
+operational voice interfaces**, not one primary and one afterthought — see
+§6/§11 for the phone and §7 for the Pi.
 
 ## How it's built
 
@@ -185,25 +188,43 @@ app ids may have changed — override them via `CHROMECAST_APP_IDS` in `.env`
 (JSON, e.g. `{"netflix": "XXXXXXXX"}`); ask Jarvis to `list_chromecasts`
 first to confirm it can see your TV at all.
 
-## 6. Android access via Telegram
+## 6. Android access via Telegram — a real voice conversation, not just chat
 
 No app to build — Telegram already has a great Android client with voice
-messages and push notifications.
+messages and push notifications. Send Jarvis a voice message and it **speaks
+back** with a voice message of its own, not just text — this is the
+"talk to Jarvis from your phone" path, and it's fully operational once set up.
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram, `/newbot`,
    follow the prompts, copy the token into `TELEGRAM_BOT_TOKEN`.
 2. Message [@userinfobot](https://t.me/userinfobot) to get your numeric
    user id, put it in `TELEGRAM_ALLOWED_USER_ID` (this locks the bot to
    only you).
-3. Run it:
+3. For spoken replies (not just transcription of what you said), set up
+   text-to-speech: either `ELEVENLABS_API_KEY` (cloud, works anywhere this
+   bot runs, no local model needed), or a local Piper model as described
+   in §7 if this bot happens to run on the same machine as the voice loop.
+   Without either, voice messages still work — you just get a text reply
+   instead of a spoken one.
+4. Install [ffmpeg](https://ffmpeg.org/) (`apt install ffmpeg` / `brew
+   install ffmpeg`) — needed to encode replies into the Opus format
+   Telegram requires for voice notes. Without it, replies fall back to text.
+5. Run it:
    ```bash
    python -m interfaces.telegram_bot
    ```
-4. Open your bot in Telegram on your phone and start chatting — text or
-   voice messages both work (voice needs `requirements-voice.txt`
-   installed for local transcription). Reminders/timers you set are
-   pushed to you automatically when they come due, and anything Jarvis
-   generates as a file (e.g. a QR code) is sent back as a photo/document.
+6. Open your bot in Telegram on your phone. Text in gets text back; a voice
+   message in gets transcribed *and* answered with a spoken voice message
+   back (plus the text, for reference) — a real back-and-forth conversation,
+   asynchronous like any voice note, from anywhere with signal, not just at
+   home. Reminders/timers are pushed to you automatically when due (spoken
+   too, if TTS is configured), and anything Jarvis generates as a file
+   (e.g. a QR code) is sent back as a photo/document.
+
+This runs wherever you start the process — the Raspberry Pi, a home server,
+or even the same laptop as the CLI. Point it at the same `JARVIS_DB_PATH` as
+your Pi's voice loop and they share memory/facts/to-dos; point it at a
+different one and they're independent.
 
 ## 7. Always-listening voice on a Raspberry Pi
 
@@ -295,6 +316,63 @@ These all follow the same pattern as everything else — set the relevant
 - **Image analysis**: no setup — `analyze_image` sends a local image file
   to Claude's vision for critique/description (design mockups, screenshots,
   photos). No camera needed, since it works from a file, not a live feed.
+
+## 11. Talking to Jarvis straight from the phone, no Telegram — Termux
+
+§6 (Telegram) is the reliable, recommended way to reach Jarvis from
+Android. This is a second, more direct option for when you'd rather have a
+home-screen button that starts a spoken conversation, with nothing running
+on a server — Jarvis's core runs *on the phone itself*, via
+[Termux](https://termux.dev/) (a real terminal + Python environment for
+Android, no root needed).
+
+**How it avoids the heavy ML stack**: instead of faster-whisper/Piper/
+openWakeWord — which are unlikely to have prebuilt wheels for Termux's
+environment and would be painful to compile on a phone — this uses
+Android's *own* built-in speech recognition and text-to-speech through the
+Termux:API app (`termux-speech-to-text` / `termux-tts-speak`). Jarvis's
+own dependencies (`anthropic`, `httpx`, ...) are otherwise ordinary
+lightweight Python packages.
+
+Setup:
+
+1. Install **Termux** and **Termux:API** from
+   [F-Droid](https://f-droid.org/) — specifically F-Droid, not the Play
+   Store versions, which are outdated and break Termux:API.
+2. In Termux:
+   ```bash
+   pkg install python termux-api git
+   git clone <your fork/branch of this repo> jarvis
+   cd jarvis/jarvis
+   python -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+   Some packages may fail to install on Termux (no prebuilt wheel for
+   Android, and no local compiler for that one). That's fine — the same
+   plugin architecture used everywhere else in this project means any tool
+   whose dependency didn't install just silently stays disabled; the rest
+   still works.
+3. `cp .env.example .env`, fill in `ANTHROPIC_API_KEY`.
+4. `python -m interfaces.termux.jarvis_termux` — Android's speech
+   recognition prompt appears, speak, and Jarvis answers out loud.
+5. Optional, for a home-screen button: install the **Termux:Widget** app
+   (also F-Droid), then:
+   ```bash
+   mkdir -p ~/.shortcuts
+   cp interfaces/termux/jarvis.sh ~/.shortcuts/Jarvis.sh
+   chmod +x ~/.shortcuts/Jarvis.sh
+   ```
+   Add the Termux:Widget widget to your home screen and pick "Jarvis" —
+   one tap starts a conversation.
+
+**Honest limitation, stated plainly**: this is tap-to-talk, not hands-free
+wake-word like the Pi. Android doesn't allow a background script to listen
+continuously for a wake word without a dedicated foreground-service app,
+which this isn't — so starting requires one tap (or running the script).
+Once started, though, it keeps listening turn after turn on its own — you
+don't need to tap again between exchanges — until you go quiet or say
+"stop" (or "arrête"), so a single tap gets you a real back-and-forth
+conversation, just not one that starts itself.
 
 ## What's deferred (from the full integration wishlist)
 

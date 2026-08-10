@@ -69,3 +69,30 @@ def get_synthesizer(piper_model_path: str | None = None) -> Synthesizer:
     if not piper_model_path:
         raise RuntimeError("No Piper voice model path given and ELEVENLABS_API_KEY is not set.")
     return PiperSynthesizer(piper_model_path)
+
+
+def find_local_piper_model() -> str | None:
+    """Non-raising lookup for callers that want to use TTS opportunistically
+    (e.g. the Telegram bot) rather than requiring it (the Pi voice loop,
+    which raises via its own _piper_model_path if none is found)."""
+    candidates = list(Path.home().glob(f".local/share/piper/{config.voice_language}*.onnx"))
+    return str(candidates[0]) if candidates else None
+
+
+def get_synthesizer_if_available() -> Synthesizer | None:
+    """Like get_synthesizer, but returns None instead of raising/importing
+    when no TTS backend is usable — for interfaces where voice replies are a
+    nice-to-have, not a hard requirement."""
+    if config.elevenlabs_api_key:
+        try:
+            return get_synthesizer()
+        except ImportError:
+            return None  # elevenlabs package not installed
+
+    piper_path = find_local_piper_model()
+    if not piper_path:
+        return None
+    try:
+        return get_synthesizer(piper_path)
+    except ImportError:
+        return None  # piper-tts package not installed

@@ -3,6 +3,9 @@ python-dotenv>=1.0.0
 
 # Interfaces (job-queue extra powers proactive reminder delivery)
 python-telegram-bot[job-queue]>=21.0
+# Voice replies on Telegram also need the `ffmpeg` system binary (not a pip
+# package) to encode audio into the Opus format Telegram voice notes require —
+# install via your OS package manager (apt/brew/...).
 
 # Google integrations (Gmail + Calendar)
 google-api-python-client>=2.100.0
