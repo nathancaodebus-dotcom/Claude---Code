@@ -5,6 +5,7 @@ from __future__ import annotations
 import anthropic
 
 from core.config import config
+from core.consolidation import Consolidator, make_default_summarizer
 from core.memory import Memory
 from tools.base import ToolRegistry
 
@@ -20,6 +21,12 @@ proactively instead of asking the user to do things themselves when a tool can d
 is ambiguous in a way that changes the outcome (e.g. which light, which event to cancel), ask a \
 short clarifying question instead of guessing. If you don't have a tool for something, say so plainly.
 
+Learn continuously, don't just wait to be told to remember something: call remember_fact whenever you \
+notice a durable fact, preference, routine, or correction — not just when the user explicitly says \
+'remember this'. If the user corrects how you did something (wrong tone, wrong assumption, a rule for \
+next time), store that correction as a fact so you don't repeat the mistake. Check recall_facts if you're \
+about to do something the user might have already told you a preference about.
+
 When you create a document (presentation/Word doc/spreadsheet), remember the document_name you get \
 back — later requests like 'add a slide about X' or 'change the second bullet' refer back to that \
 same document without the user repeating its name, so track it from context.
@@ -28,7 +35,9 @@ Casting: launch_app_on_tv can open Netflix, Disney+, Spotify, or YouTube on the 
 supports jumping straight to a specific video (play_youtube_video) — for Netflix/Disney+ say clearly \
 that you've opened the app and the user will need to pick the title themselves, don't imply you chose it.
 
-{facts_block}"""
+{facts_block}
+
+{summary_block}"""
 
 MAX_TOOL_ITERATIONS = 8
 
@@ -38,11 +47,15 @@ class Agent:
         self._memory = memory
         self._tools = tools
         self._client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+        self._consolidator = Consolidator(
+            memory, make_default_summarizer(self._client, config.model)
+        )
 
-    def _system_prompt(self) -> str:
+    def _system_prompt(self, session_id: str) -> str:
         return SYSTEM_PROMPT_TEMPLATE.format(
             name=config.assistant_name,
             facts_block=self._memory.facts_as_prompt_block(),
+            summary_block=self._memory.summary_as_prompt_block(session_id),
         )
 
     def respond(self, session_id: str, user_message: str) -> str:
@@ -57,7 +70,7 @@ class Agent:
             response = self._client.messages.create(
                 model=config.model,
                 max_tokens=2048,
-                system=self._system_prompt(),
+                system=self._system_prompt(session_id),
                 tools=self._tools.anthropic_schemas(),
                 messages=messages,
             )
@@ -85,4 +98,5 @@ class Agent:
             messages.append({"role": "user", "content": tool_results})
 
         self._memory.append(session_id, "assistant", final_text)
+        self._consolidator.maybe_consolidate(session_id)
         return final_text

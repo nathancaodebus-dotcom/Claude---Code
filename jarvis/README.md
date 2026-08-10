@@ -60,6 +60,30 @@ voice loop) funnels through the same tool-using agent, anything dictated
 out loud works exactly like typed text — 'crée-moi un PowerPoint sur le
 projet X' triggers `create_presentation` whether you type it or say it.
 
+## How Jarvis learns
+
+Memory here works on two tracks, both automatic — neither requires the user
+to say "remember this":
+
+- **Facts, preferences, and corrections** (`core/memory.py`, the `facts`
+  table): the system prompt instructs the model to call `remember_fact`
+  whenever it notices something durable worth keeping — not just stated
+  facts, but preferences it infers and corrections the user makes ("no,
+  I meant the other calendar" becomes a stored rule, not a one-off fix).
+  These are global, visible to every interface and session.
+- **Conversation assimilation** (`core/consolidation.py`): `Memory.history()`
+  only ever sends the most recent ~40 messages to the model, so a long
+  running conversation would normally just lose everything older than that.
+  Instead, once a session passes 60 messages, the oldest overflow gets
+  folded into a running per-session summary via one extra Claude call —
+  merged with whatever was summarized before — so the gist of a long
+  relationship survives even after the raw messages scroll out of context.
+  This runs automatically at the end of every `Agent.respond()` call.
+
+Both are visible in `recall_facts` and, for a given session, in the
+"Summary of earlier conversation" block Jarvis sees in its own system
+prompt — nothing here is hidden state.
+
 ## 1. Setup
 
 ```bash

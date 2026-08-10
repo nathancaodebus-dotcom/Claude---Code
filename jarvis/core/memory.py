@@ -1,4 +1,7 @@
-"""Persistent memory: conversation history + long-term facts about the user.
+"""Persistent memory: conversation history, long-term facts about the user,
+and rolling per-session summaries of conversation that's aged out of the
+active context window (see core/consolidation.py) — so older exchanges get
+assimilated into a durable digest instead of just disappearing.
 
 Backed by SQLite so it survives restarts and works identically on a
 Raspberry Pi or a phone-adjacent server with zero extra setup.
@@ -28,6 +31,13 @@ CREATE TABLE IF NOT EXISTS facts (
     value TEXT NOT NULL,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    session_id TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    consolidated_through_id INTEGER NOT NULL DEFAULT 0,
+    updated_at REAL NOT NULL
+);
 """
 
 
@@ -35,6 +45,7 @@ CREATE TABLE IF NOT EXISTS facts (
 class Message:
     role: str
     content: str
+    id: int = 0
 
 
 class Memory:
@@ -56,15 +67,21 @@ class Memory:
 
     def history(self, session_id: str, limit: int = 40) -> list[Message]:
         rows = self._conn.execute(
-            "SELECT role, content FROM messages WHERE session_id = ? "
+            "SELECT id, role, content FROM messages WHERE session_id = ? "
             "ORDER BY id DESC LIMIT ?",
             (session_id, limit),
         ).fetchall()
-        return [Message(role=r, content=c) for r, c in reversed(rows)]
+        return [Message(id=i, role=r, content=c) for i, r, c in reversed(rows)]
 
     def clear(self, session_id: str) -> None:
         self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         self._conn.commit()
+
+    def message_count(self, session_id: str) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return row[0]
 
     def remember_fact(self, key: str, value: str) -> None:
         self._conn.execute(
@@ -87,3 +104,41 @@ class Memory:
 
     def facts_json(self) -> str:
         return json.dumps(self.all_facts(), ensure_ascii=False, indent=2)
+
+    # --- conversation consolidation (older history assimilated into a summary) ---
+
+    def messages_after(self, session_id: str, after_id: int) -> list[Message]:
+        rows = self._conn.execute(
+            "SELECT id, role, content FROM messages WHERE session_id = ? AND id > ? ORDER BY id",
+            (session_id, after_id),
+        ).fetchall()
+        return [Message(id=i, role=r, content=c) for i, r, c in rows]
+
+    def get_summary(self, session_id: str) -> str:
+        row = self._conn.execute(
+            "SELECT summary FROM conversation_summaries WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return row[0] if row else ""
+
+    def get_consolidated_through(self, session_id: str) -> int:
+        row = self._conn.execute(
+            "SELECT consolidated_through_id FROM conversation_summaries WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        return row[0] if row else 0
+
+    def set_summary(self, session_id: str, summary: str, consolidated_through_id: int) -> None:
+        self._conn.execute(
+            "INSERT INTO conversation_summaries (session_id, summary, consolidated_through_id, updated_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET "
+            "summary = excluded.summary, consolidated_through_id = excluded.consolidated_through_id, "
+            "updated_at = excluded.updated_at",
+            (session_id, summary, consolidated_through_id, time.time()),
+        )
+        self._conn.commit()
+
+    def summary_as_prompt_block(self, session_id: str) -> str:
+        summary = self.get_summary(session_id)
+        if not summary:
+            return ""
+        return f"Summary of earlier conversation in this session (older messages have scrolled out of context):\n{summary}"
