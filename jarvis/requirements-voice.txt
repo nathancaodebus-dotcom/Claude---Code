@@ -1,0 +1,7 @@
+# Extra dependencies for the always-listening Raspberry Pi voice interface.
+# Install alongside requirements.txt: pip install -r requirements.txt -r requirements-voice.txt
+openwakeword>=0.6.0
+faster-whisper>=1.0.0
+piper-tts>=1.2.0
+sounddevice>=0.4.6
+numpy>=1.26.0
