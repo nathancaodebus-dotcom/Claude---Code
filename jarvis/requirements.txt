@@ -18,6 +18,9 @@ beautifulsoup4>=4.12.0
 
 # Utility tools (QR codes, system status)
 qrcode[pil]>=7.4.0
+# psutil refuses to install on Android/Termux ("platform android is not
+# supported") — if you hit that there, comment this line out and reinstall;
+# tools/system_tool.py degrades gracefully without it (see its comments).
 psutil>=5.9.0
 
 # Office documents (PowerPoint / Word / Excel), create + edit by voice or text

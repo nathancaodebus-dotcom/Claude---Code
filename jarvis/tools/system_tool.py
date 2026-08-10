@@ -7,12 +7,23 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import psutil
-
 from core.store import Store
 from tools.base import Tool
 
+try:
+    import psutil
+except ImportError:
+    # psutil hard-refuses to install on Android/Termux ("platform android is
+    # not supported") — degrade the psutil-dependent tools below to a clear
+    # error instead of taking the whole module (and everything imported
+    # alongside it in registry_builder.py) down with it.
+    psutil = None
+
 _PI_THERMAL_PATH = Path("/sys/class/thermal/thermal_zone0/temp")
+_PSUTIL_MISSING_MSG = (
+    "psutil is not installed on this system (it refuses to install on Android/Termux) — "
+    "this feature isn't available here."
+)
 
 
 def _cpu_temperature_c() -> float | None:
@@ -30,6 +41,8 @@ class SystemStatusTool(Tool):
     input_schema = {"type": "object", "properties": {}}
 
     def run(self) -> str:
+        if psutil is None:
+            return _PSUTIL_MISSING_MSG
         cpu_percent = psutil.cpu_percent(interval=0.5)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
@@ -82,6 +95,8 @@ class ListProcessesTool(Tool):
     }
 
     def run(self, sort_by: str = "cpu", max_results: int = 10) -> str:
+        if psutil is None:
+            return _PSUTIL_MISSING_MSG
         processes = []
         for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
             try:
@@ -115,6 +130,8 @@ class SetProcessPriorityTool(Tool):
     }
 
     def run(self, pid: int, nice_level: int) -> str:
+        if psutil is None:
+            return _PSUTIL_MISSING_MSG
         try:
             proc = psutil.Process(pid)
             proc.nice(max(-20, min(19, nice_level)))
