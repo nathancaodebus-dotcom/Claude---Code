@@ -11,10 +11,13 @@ Raspberry Pi).
 ```
 jarvis/
   core/
-    agent.py      # the Claude tool-use loop every interface shares
-    memory.py     # SQLite: conversation history + long-term facts
-    config.py     # settings, loaded from .env
-  tools/           # one file per integration (Gmail, Calendar, Home Assistant...)
+    agent.py        # the Claude tool-use loop every interface shares
+    memory.py       # SQLite: conversation history + long-term facts
+    store.py        # SQLite: to-dos, notes, shopping list, reminders/timers
+    scheduler.py     # background poller that fires due reminders/timers
+    attachments.py   # lets a tool hand a generated file back to the interface
+    config.py       # settings, loaded from .env
+  tools/           # one file per capability group — see full list below
   interfaces/
     cli.py             # terminal chat, for local testing
     telegram_bot.py    # Telegram bot — this is your Android access point
@@ -22,9 +25,29 @@ jarvis/
   systemd/         # unit files to run interfaces as background services on the Pi
 ```
 
-Adding a new capability (say, Spotify control, or a to-do list) means
-writing one `Tool` subclass in `tools/` and registering it in
-`tools/registry_builder.py` — nothing else changes.
+Adding a new capability means writing one `Tool` subclass in `tools/` and
+registering it in `tools/registry_builder.py` — nothing else changes.
+
+## What Jarvis can do out of the box
+
+33 tools, registered in `tools/registry_builder.py`:
+
+| Category | Tools |
+|---|---|
+| Memory | remember/recall durable facts about you |
+| Email & calendar *(needs Google setup, §2)* | search/read Gmail, list/create calendar events |
+| Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
+| Productivity | to-dos, notes, shopping list, reminders & timers (with proactive Telegram delivery) |
+| Live info | weather, sunrise/sunset, Wikipedia summaries, currency conversion, stock prices, news headlines |
+| Open web | web search, fetch & read a webpage, shorten a URL, public IP lookup |
+| Utilities | calculator, unit conversion, password generator, QR code generator |
+| Self-monitoring | CPU/temperature/memory/disk/uptime of the machine it runs on |
+| Just for fun | coin flip, dice roll, magic 8-ball, random quote, joke |
+
+Everything except Gmail/Calendar/Home Assistant works with zero extra setup
+— just the Anthropic API key — since the live-info and web tools use free,
+keyless public APIs (Open-Meteo, Wikipedia, frankfurter.app, stooq,
+DuckDuckGo, Google News RSS).
 
 ## 1. Setup
 
@@ -87,7 +110,9 @@ messages and push notifications.
    ```
 4. Open your bot in Telegram on your phone and start chatting — text or
    voice messages both work (voice needs `requirements-voice.txt`
-   installed for local transcription).
+   installed for local transcription). Reminders/timers you set are
+   pushed to you automatically when they come due, and anything Jarvis
+   generates as a file (e.g. a QR code) is sent back as a photo/document.
 
 ## 5. Always-listening voice on a Raspberry Pi
 

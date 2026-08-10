@@ -15,9 +15,12 @@ import time
 import numpy as np
 import sounddevice as sd
 
+from core import attachments
 from core.agent import Agent
 from core.config import config
 from core.memory import Memory
+from core.scheduler import ReminderScheduler
+from core.store import Store
 from tools.registry_builder import build_registry
 
 SAMPLE_RATE = 16000
@@ -39,13 +42,15 @@ class VoiceLoop:
         from piper.voice import PiperVoice
 
         memory = Memory()
-        self._agent = Agent(memory, build_registry(memory))
+        store = Store()
+        self._agent = Agent(memory, build_registry(memory, store))
         self._wake_model = WakeWordModel(wakeword_models=[config.wake_word])
         self._stt = WhisperModel("small", device="cpu", compute_type="int8")
         # Expects a Piper voice model matching config.voice_language, e.g.
         # ~/.local/share/piper/fr_FR-siwis-medium.onnx — see README for setup.
         self._tts = PiperVoice.load(self._piper_model_path())
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
+        self._scheduler = ReminderScheduler(store, notify=self._speak)
 
     def _piper_model_path(self) -> str:
         from pathlib import Path
@@ -91,6 +96,7 @@ class VoiceLoop:
 
     def run(self) -> None:
         print(f"{config.assistant_name} voice loop running. Say '{config.wake_word}' to start.")
+        self._scheduler.start()
 
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -122,6 +128,10 @@ class VoiceLoop:
                 reply = self._agent.respond(SESSION_ID, text)
                 print(f"{config.assistant_name}> {reply}")
                 self._speak(reply)
+
+                saved_files = attachments.drain()
+                if saved_files:
+                    print(f"[files saved: {', '.join(saved_files)}]")
 
 
 def main() -> None:

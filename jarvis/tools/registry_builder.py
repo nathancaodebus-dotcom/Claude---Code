@@ -8,15 +8,86 @@ from __future__ import annotations
 
 from core.config import config
 from core.memory import Memory
+from core.store import Store
 from tools.base import ToolRegistry
+from tools.fun_tools import CoinFlipTool, JokeTool, MagicEightBallTool, RandomQuoteTool, RollDiceTool
+from tools.info_tools import (
+    CurrencyConversionTool,
+    NewsHeadlinesTool,
+    StockPriceTool,
+    SunTimesTool,
+    WeatherTool,
+    WikipediaSummaryTool,
+)
 from tools.memory_tool import RecallFactsTool, RememberFactTool
+from tools.productivity_tools import (
+    AddNoteTool,
+    AddShoppingItemTool,
+    AddTodoTool,
+    CancelReminderTool,
+    ClearShoppingListTool,
+    CompleteTodoTool,
+    ListNotesTool,
+    ListRemindersTool,
+    ListShoppingListTool,
+    ListTodosTool,
+    SetReminderTool,
+)
+from tools.system_tool import SystemStatusTool
+from tools.utility_tools import CalculatorTool, GeneratePasswordTool, GenerateQrCodeTool, UnitConversionTool
+from tools.web_tools import FetchWebpageTool, PublicIpTool, ShortenUrlTool, WebSearchTool
 
 
-def build_registry(memory: Memory) -> ToolRegistry:
+def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     registry = ToolRegistry()
+    store = store or Store()
 
+    # Memory
     registry.register(RememberFactTool(memory))
     registry.register(RecallFactsTool(memory))
+
+    # Productivity (todos, notes, shopping list, reminders/timers)
+    registry.register(AddTodoTool(store))
+    registry.register(ListTodosTool(store))
+    registry.register(CompleteTodoTool(store))
+    registry.register(AddNoteTool(store))
+    registry.register(ListNotesTool(store))
+    registry.register(AddShoppingItemTool(store))
+    registry.register(ListShoppingListTool(store))
+    registry.register(ClearShoppingListTool(store))
+    registry.register(SetReminderTool(store))
+    registry.register(ListRemindersTool(store))
+    registry.register(CancelReminderTool(store))
+
+    # Live info (no API key needed)
+    registry.register(WeatherTool())
+    registry.register(SunTimesTool())
+    registry.register(WikipediaSummaryTool())
+    registry.register(CurrencyConversionTool())
+    registry.register(StockPriceTool())
+    registry.register(NewsHeadlinesTool())
+
+    # Open web
+    registry.register(WebSearchTool())
+    registry.register(FetchWebpageTool())
+    registry.register(ShortenUrlTool())
+    registry.register(PublicIpTool())
+
+    # Fun
+    registry.register(CoinFlipTool())
+    registry.register(RollDiceTool())
+    registry.register(MagicEightBallTool())
+    registry.register(RandomQuoteTool())
+    registry.register(JokeTool())
+
+    # Utilities
+    registry.register(CalculatorTool())
+    registry.register(UnitConversionTool())
+    registry.register(GeneratePasswordTool())
+    registry.register(GenerateQrCodeTool())
+
+    # Self-monitoring
+    registry.register(SystemStatusTool())
 
     if config.google_credentials_path:
         try:
