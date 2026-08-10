@@ -27,5 +27,19 @@ openpyxl>=3.1.0
 # for the real capabilities vs. limitations of each)
 spotipy>=2.24.0
 PyChromecast>=14.0.0
+youtube-transcript-api>=0.6.2
+
+# Calendars/tasks/notes beyond Google (CalDAV covers Outlook/iCloud/Nextcloud)
+caldav>=1.3.0
+feedparser>=6.0.10
+
+# Documents: read existing PDF/Word files (creating them uses python-pptx/docx/openpyxl above)
+pypdf>=4.0.0
+
+# Network diagnostics
+speedtest-cli>=2.1.3
+
+# Ambient sound synthesis (white/pink/brown noise) — also used by the voice interface
+numpy>=1.26.0
 
 # Voice (Raspberry Pi), optional — install with: pip install -r requirements-voice.txt

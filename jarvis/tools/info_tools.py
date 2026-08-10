@@ -1,9 +1,10 @@
 """General knowledge / live-data tools that need no API key — all built on
 free public APIs (Open-Meteo, Wikipedia, sunrise-sunset.org, frankfurter.app,
-stooq, Google News RSS)."""
+stooq, Google News RSS, CoinGecko, dictionaryapi.dev)."""
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from datetime import date
 from urllib.parse import quote
 
 import httpx
@@ -150,6 +151,103 @@ class StockPriceTool(Tool):
         if record.get("Close") in (None, "N/D"):
             return f"No data found for ticker '{ticker}'."
         return f"{ticker.upper()}: {record['Close']} (as of {record['Date']} {record['Time']})"
+
+
+class CryptoPriceTool(Tool):
+    name = "get_crypto_price"
+    description = "Get the current price of a cryptocurrency (e.g. 'bitcoin', 'ethereum') in a given currency."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "coin": {"type": "string", "description": "CoinGecko coin id, e.g. 'bitcoin', 'ethereum', 'solana'."},
+            "vs_currency": {"type": "string", "description": "Default 'usd'."},
+        },
+        "required": ["coin"],
+    }
+
+    def run(self, coin: str, vs_currency: str = "usd") -> str:
+        response = httpx.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": coin.lower(), "vs_currencies": vs_currency.lower()},
+            timeout=10,
+        )
+        data = response.json()
+        if coin.lower() not in data:
+            return f"No price found for '{coin}'. Use the CoinGecko coin id, e.g. 'bitcoin' not 'BTC'."
+        price = data[coin.lower()][vs_currency.lower()]
+        return f"{coin} = {price} {vs_currency.upper()}"
+
+
+class DictionaryTool(Tool):
+    name = "define_word"
+    description = "Get the definition(s), part of speech, and phonetics of an English word."
+    input_schema = {
+        "type": "object",
+        "properties": {"word": {"type": "string"}},
+        "required": ["word"],
+    }
+
+    def run(self, word: str) -> str:
+        response = httpx.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}", timeout=10)
+        if response.status_code != 200:
+            return f"No definition found for '{word}'."
+
+        entries = response.json()
+        lines = []
+        for entry in entries:
+            for meaning in entry.get("meanings", []):
+                part_of_speech = meaning.get("partOfSpeech", "")
+                for definition in meaning.get("definitions", [])[:2]:
+                    lines.append(f"({part_of_speech}) {definition.get('definition', '')}")
+        return "\n".join(lines) if lines else f"No definition found for '{word}'."
+
+
+class HistoricalWeatherTool(Tool):
+    name = "get_historical_weather"
+    description = "Compare today's weather in a city to the same date in previous years."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "city": {"type": "string"},
+            "years_back": {"type": "integer", "description": "How many previous years to compare. Default 3."},
+        },
+        "required": ["city"],
+    }
+
+    def run(self, city: str, years_back: int = 3) -> str:
+        geo = httpx.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": city, "count": 1},
+            timeout=10,
+        ).json()
+        results = geo.get("results")
+        if not results:
+            return f"Could not find a location named '{city}'."
+        place = results[0]
+
+        today = date.today()
+        lines = []
+        for years in range(1, years_back + 1):
+            past_date = today.replace(year=today.year - years)
+            data = httpx.get(
+                "https://archive-api.open-meteo.com/v1/archive",
+                params={
+                    "latitude": place["latitude"],
+                    "longitude": place["longitude"],
+                    "start_date": past_date.isoformat(),
+                    "end_date": past_date.isoformat(),
+                    "daily": "temperature_2m_max,temperature_2m_min",
+                    "timezone": "auto",
+                },
+                timeout=10,
+            ).json()
+            daily = data.get("daily", {})
+            if daily.get("temperature_2m_max"):
+                lines.append(
+                    f"{past_date}: {daily['temperature_2m_min'][0]}°C to {daily['temperature_2m_max'][0]}°C"
+                )
+
+        return "\n".join(lines) if lines else f"No historical data available for {city}."
 
 
 class NewsHeadlinesTool(Tool):

@@ -18,6 +18,8 @@ SCOPES = " ".join(
         "user-read-playback-state",
         "user-read-currently-playing",
         "playlist-read-private",
+        "playlist-modify-private",
+        "playlist-modify-public",
         "user-library-read",
     ]
 )

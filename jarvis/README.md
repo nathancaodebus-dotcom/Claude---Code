@@ -32,28 +32,36 @@ registering it in `tools/registry_builder.py` — nothing else changes.
 
 ## What Jarvis can do out of the box
 
-Up to 64 tools, registered in `tools/registry_builder.py` depending on what's configured:
+Around 90-110 tools depending on configuration, registered in
+`tools/registry_builder.py`:
 
 | Category | Tools |
 |---|---|
-| Memory | remember/recall durable facts about you |
-| Email & calendar *(needs Google setup, §2)* | search/read Gmail, list/create calendar events |
+| Memory | remember/recall durable facts, preferences, and corrections about you |
+| Email & calendar *(needs Google setup, §2)* | search/read Gmail, **draft emails**, list/create Google Calendar events, search/add **contacts** |
+| Other calendars *(§9)* | list/create events on **any CalDAV calendar** — Outlook, iCloud, Nextcloud |
+| Task managers | built-in to-dos, or **Todoist** (§9) if that's where you already live |
+| Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown |
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
-| Productivity | to-dos, notes, shopping list, reminders & timers (with proactive Telegram delivery) |
-| **Documents** | create/edit **PowerPoint** (add/edit/delete slides), **Word** (append paragraphs/headings), **Excel** (add rows) — dictate 'create me a presentation about X', then 'add a slide about Y', and Jarvis edits the same file |
-| **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, list Spotify Connect devices |
+| Productivity | to-dos, notes, shopping list, reminders & timers, **project/milestone tracking** with automatic deadline reminders |
+| **Documents** | create/edit **PowerPoint** (slides), **Word** (paragraphs/headings), **Excel** (rows, formulas, charts) by voice or text; **read** existing PDF/Word files for summarizing |
+| **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, **create/fill playlists**, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV, pause/resume/stop/volume — see the important caveat in §5 |
-| Live info | weather, sunrise/sunset, Wikipedia summaries, currency conversion, stock prices, news headlines |
-| Open web | web search, fetch & read a webpage, shorten a URL, public IP lookup |
-| Utilities | calculator, unit conversion, password generator, QR code generator |
-| Self-monitoring | CPU/temperature/memory/disk/uptime of the machine it runs on |
-| Just for fun | coin flip, dice roll, magic 8-ball, random quote, joke |
+| Live info | weather, historical weather comparison, sunrise/sunset, Wikipedia, dictionary, currency, stocks, **crypto**, news, custom **RSS feeds**, **Reddit**, GitHub release/commit watching, upcoming movies *(§9)* |
+| Open web | web search, fetch & read a webpage, shorten a URL, public IP lookup, **service uptime checks** |
+| Utilities | calculator, unit conversion, password generator, QR code generator, **ambient noise generator** (white/pink/brown) |
+| System / files | CPU/temperature/memory/disk/uptime, **find large/duplicate files**, **local backups**, **network speed test**, failed-command log for diagnosing what broke |
+| Automation | **run short Python scripts on demand** — off by default, see §9 for the security tradeoff |
+| Safety | **send an emergency alert** (+ location) to pre-configured contacts via Telegram |
+| Just for fun | coin flip, dice roll, magic 8-ball, random quote, joke, song lyrics, YouTube video transcripts/summaries |
+| **Briefings** | `morning_briefing` (weather + calendar + to-dos + news) and `evening_debrief` (remaining to-dos + tomorrow + lights left on) |
 
-Everything except Gmail/Calendar/Home Assistant/Spotify/YouTube/Chromecast
-works with zero extra setup — just the Anthropic API key — since the
-live-info, web, and document tools use free, keyless public APIs or local
-libraries (Open-Meteo, Wikipedia, frankfurter.app, stooq, DuckDuckGo,
-Google News RSS, python-pptx/docx/openpyxl).
+Everything except Gmail/Calendar/Home Assistant/Spotify/YouTube/Chromecast/
+CalDAV/Todoist/TMDb works with zero extra setup — just the Anthropic API
+key — since most of this uses free, keyless public APIs or local libraries
+(Open-Meteo, Wikipedia, frankfurter.app, stooq, CoinGecko, dictionaryapi.dev,
+DuckDuckGo, Google News RSS, Reddit's public JSON API, GitHub's public API,
+lyrics.ovh, youtube-transcript-api, python-pptx/docx/openpyxl, pypdf).
 
 Because every interface (CLI, Telegram voice messages, the Raspberry Pi
 voice loop) funnels through the same tool-using agent, anything dictated
@@ -224,6 +232,63 @@ sudo systemctl enable --now jarvis-telegram jarvis-voice
 
 Edit the `User=`, `WorkingDirectory=` and venv path in the unit files first
 if your setup differs from `/home/pi/jarvis`.
+
+## 9. Optional extras (calendars, tasks, notes, movies, backups, safety, automation)
+
+These all follow the same pattern as everything else — set the relevant
+`.env` variables and the tool turns itself on, no code changes needed.
+
+- **CalDAV** (Outlook / iCloud / Nextcloud calendars): `CALDAV_URL`,
+  `CALDAV_USERNAME`, `CALDAV_PASSWORD`. For iCloud, use
+  `https://caldav.icloud.com` with an
+  [app-specific password](https://appleid.apple.com).
+- **Todoist**: `TODOIST_API_TOKEN` from Todoist Settings → Integrations →
+  Developer. Independent from Jarvis's own built-in to-do list — use
+  whichever (or both).
+- **Obsidian**: `OBSIDIAN_VAULT_PATH` pointing at your vault folder (or any
+  folder — it's just markdown files, Obsidian reads the filesystem).
+- **GitHub release/commit watcher**: works with no token (60 requests/hour);
+  set `GITHUB_WATCH_TOKEN` for 5000/hour.
+- **TMDb** (upcoming movies): free `TMDB_API_KEY` from
+  [themoviedb.org](https://www.themoviedb.org/settings/api).
+- **Local backups**: `BACKUP_SOURCE_PATH` / `BACKUP_DEST_PATH` for a default
+  pair, or pass paths explicitly each time. Plain recursive copy — point
+  `BACKUP_DEST_PATH` at an rclone/Syncthing mount for anything fancier.
+- **Emergency alert**: `EMERGENCY_CONTACT_CHAT_IDS` (comma-separated
+  Telegram chat ids from @userinfobot) — reuses `TELEGRAM_BOT_TOKEN`, works
+  even if the Telegram interface isn't the one currently running.
+- **Sandboxed script execution** (`SANDBOX_ENABLED=true`, off by default):
+  lets Jarvis write and run short Python scripts for one-off automation.
+  Read `tools/sandbox_tools.py`'s docstring before enabling — it's a
+  resource-limited subprocess, not a hard security boundary.
+
+## What's deferred (from the full integration wishlist)
+
+Some requested integrations aren't in yet, on purpose:
+
+- **Phone calls** (answering, filtering, transcribing): in Switzerland,
+  recording a conversation without every participant's consent is a
+  criminal offense (Art. 179ter CP). A dedicated Twilio-based Jarvis phone
+  line with an upfront recording disclosure (like any business "this call
+  may be recorded" line) would be legal and is the planned approach — real
+  phone-line interception is not.
+- **Computer vision** (OCR, object/barcode detection, visual description,
+  facial recognition): needs camera hardware to test against; facial
+  recognition specifically is being held for explicit confirmation given
+  its biometric/privacy weight.
+- **PC-level system control** (app launching, shutdown/lock, window
+  management, keystroke emulation, Stream Deck): these only make sense if
+  a Jarvis interface runs *on* the PC being controlled, not just the
+  Pi/phone — and several (input emulation, remote shutdown) need a
+  deliberate security decision before being wired up.
+- **Apple Music, Amazon price tracking, game console control**: no
+  legitimate public API exists for third-party control of these; building
+  them would mean scraping or reverse-engineering private endpoints, which
+  isn't something this project does.
+- **Discord/Slack bots, Twilio phone line, Plex/Kodi, OBS replay buffer,
+  AudD music recognition, eye-tracking, gesture control**: technically
+  buildable, just not exercised yet — ask for any of these specifically and
+  they can follow the same pattern as everything else here.
 
 ## Tests
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 
 from core.attachments import push as push_attachment
 from core.store import Store
@@ -80,6 +81,91 @@ class AddSpreadsheetRowTool(Tool):
         self._store.touch_document(document_name)
         push_attachment(doc.path)
         return f"Added row to '{document_name}'."
+
+
+class SetSpreadsheetFormulaTool(Tool):
+    name = "set_spreadsheet_formula"
+    description = (
+        "Set a cell to an Excel formula, e.g. cell='C2', formula='=A2*B2' or "
+        "formula='=SUM(B2:B10)'. The formula is stored as-is and Excel evaluates it on open."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "cell": {"type": "string", "description": "Cell reference, e.g. 'C2'."},
+            "formula": {"type": "string", "description": "Must start with '='."},
+        },
+        "required": ["document_name", "cell", "formula"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(self, document_name: str, cell: str, formula: str) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "xlsx":
+            return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
+
+        wb = load_workbook(doc.path)
+        wb.active[cell] = formula
+        wb.save(doc.path)
+
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Set {cell} = {formula} in '{document_name}'."
+
+
+class AddSpreadsheetChartTool(Tool):
+    name = "add_spreadsheet_chart"
+    description = "Add a bar, line, or pie chart to a spreadsheet, plotting a range of data against category labels."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "chart_type": {"type": "string", "enum": ["bar", "line", "pie"]},
+            "data_range": {"type": "string", "description": "Cell range for the values, e.g. 'B1:B10'."},
+            "category_range": {"type": "string", "description": "Cell range for category labels, e.g. 'A2:A10'."},
+            "title": {"type": "string"},
+            "anchor_cell": {"type": "string", "description": "Top-left cell to place the chart. Default 'E2'."},
+        },
+        "required": ["document_name", "chart_type", "data_range", "category_range"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(
+        self,
+        document_name: str,
+        chart_type: str,
+        data_range: str,
+        category_range: str,
+        title: str = "",
+        anchor_cell: str = "E2",
+    ) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "xlsx":
+            return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
+
+        wb = load_workbook(doc.path)
+        sheet = wb.active
+
+        chart_classes = {"bar": BarChart, "line": LineChart, "pie": PieChart}
+        chart = chart_classes[chart_type]()
+        if title:
+            chart.title = title
+
+        data = Reference(sheet, range_string=f"{sheet.title}!{data_range}")
+        categories = Reference(sheet, range_string=f"{sheet.title}!{category_range}")
+        chart.add_data(data, titles_from_data=False)
+        chart.set_categories(categories)
+        sheet.add_chart(chart, anchor_cell)
+
+        wb.save(doc.path)
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Added a {chart_type} chart to '{document_name}'."
 
 
 class ListSpreadsheetsTool(Tool):

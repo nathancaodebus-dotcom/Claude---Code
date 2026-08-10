@@ -50,6 +50,28 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    text TEXT NOT NULL,
+    due_at REAL,
+    done INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS failed_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_name TEXT NOT NULL,
+    error TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -81,6 +103,21 @@ class Document:
     kind: str
     name: str
     path: str
+
+
+@dataclass
+class Project:
+    id: int
+    name: str
+
+
+@dataclass
+class Milestone:
+    id: int
+    project_id: int
+    text: str
+    due_at: float | None
+    done: bool
 
 
 class Store:
@@ -228,3 +265,69 @@ class Store:
                 "SELECT id, kind, name, path FROM documents ORDER BY updated_at DESC"
             ).fetchall()
         return [Document(id=r[0], kind=r[1], name=r[2], path=r[3]) for r in rows]
+
+    # --- projects / milestones ---
+
+    def create_project(self, name: str) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO projects (name, created_at) VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET name = excluded.name",
+            (name, time.time()),
+        )
+        self._conn.commit()
+        row = self._conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        return row[0]
+
+    def get_project(self, name: str) -> Project | None:
+        row = self._conn.execute("SELECT id, name FROM projects WHERE name = ?", (name,)).fetchone()
+        return Project(id=row[0], name=row[1]) if row else None
+
+    def list_projects(self) -> list[Project]:
+        rows = self._conn.execute("SELECT id, name FROM projects ORDER BY name").fetchall()
+        return [Project(id=r[0], name=r[1]) for r in rows]
+
+    def add_milestone(self, project_id: int, text: str, due_at: float | None) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO milestones (project_id, text, due_at, done, created_at) VALUES (?, ?, ?, 0, ?)",
+            (project_id, text, due_at, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def list_milestones(self, project_id: int, include_done: bool = False) -> list[Milestone]:
+        query = "SELECT id, project_id, text, due_at, done FROM milestones WHERE project_id = ?"
+        if not include_done:
+            query += " AND done = 0"
+        query += " ORDER BY due_at IS NULL, due_at"
+        rows = self._conn.execute(query, (project_id,)).fetchall()
+        return [Milestone(id=r[0], project_id=r[1], text=r[2], due_at=r[3], done=bool(r[4])) for r in rows]
+
+    def upcoming_milestones(self, within_seconds: float) -> list[Milestone]:
+        cutoff = time.time() + within_seconds
+        rows = self._conn.execute(
+            "SELECT id, project_id, text, due_at, done FROM milestones "
+            "WHERE done = 0 AND due_at IS NOT NULL AND due_at <= ? ORDER BY due_at",
+            (cutoff,),
+        ).fetchall()
+        return [Milestone(id=r[0], project_id=r[1], text=r[2], due_at=r[3], done=bool(r[4])) for r in rows]
+
+    def complete_milestone(self, milestone_id: int) -> bool:
+        cur = self._conn.execute("UPDATE milestones SET done = 1 WHERE id = ?", (milestone_id,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    # --- failed command log ---
+
+    def log_failed_command(self, tool_name: str, error: str) -> None:
+        self._conn.execute(
+            "INSERT INTO failed_commands (tool_name, error, created_at) VALUES (?, ?, ?)",
+            (tool_name, error, time.time()),
+        )
+        self._conn.commit()
+
+    def recent_failed_commands(self, limit: int = 20) -> list[tuple[str, str, float]]:
+        rows = self._conn.execute(
+            "SELECT tool_name, error, created_at FROM failed_commands ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return rows

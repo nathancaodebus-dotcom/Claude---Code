@@ -8,7 +8,7 @@ adding one file here and registering it, nothing in core/agent.py changes.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 
 
 class Tool(ABC):
@@ -30,8 +30,9 @@ class Tool(ABC):
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, on_failure: Callable[[str, str], None] | None = None) -> None:
         self._tools: dict[str, Tool] = {}
+        self._on_failure = on_failure
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -48,8 +49,16 @@ class ToolRegistry:
     def dispatch(self, name: str, kwargs: dict[str, Any]) -> str:
         tool = self.get(name)
         if tool is None:
-            return f"Error: unknown tool '{name}'."
+            error = f"Error: unknown tool '{name}'."
+            self._log_failure(name, error)
+            return error
         try:
             return tool.run(**kwargs)
         except Exception as exc:  # noqa: BLE001 - tool errors must surface to the model, not crash the loop
-            return f"Error running tool '{name}': {exc}"
+            error = f"Error running tool '{name}': {exc}"
+            self._log_failure(name, error)
+            return error
+
+    def _log_failure(self, name: str, error: str) -> None:
+        if self._on_failure is not None:
+            self._on_failure(name, error)

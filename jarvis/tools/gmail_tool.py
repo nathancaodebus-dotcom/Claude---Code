@@ -1,7 +1,8 @@
-"""Read and search the user's Gmail inbox."""
+"""Read, search, and draft in the user's Gmail inbox."""
 from __future__ import annotations
 
 import base64
+from email.mime.text import MIMEText
 
 from googleapiclient.discovery import build
 
@@ -94,3 +95,36 @@ class GmailReadTool(Tool):
             f"Date: {headers.get('Date', '?')}\n\n"
             f"{body}"
         )
+
+
+class GmailCreateDraftTool(Tool):
+    name = "create_email_draft"
+    description = (
+        "Create a draft email in Gmail (does not send it) — use this when the user dictates "
+        "or asks for an email to be drafted. They can review and send it themselves."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string", "description": "Recipient email address."},
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+        },
+        "required": ["to", "subject", "body"],
+    }
+
+    def run(self, to: str, subject: str, body: str) -> str:
+        service = build("gmail", "v1", credentials=get_credentials())
+
+        message = MIMEText(body)
+        message["to"] = to
+        message["subject"] = subject
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        draft = (
+            service.users()
+            .drafts()
+            .create(userId="me", body={"message": {"raw": raw}})
+            .execute()
+        )
+        return f"Draft created (id={draft['id']}) to {to}: \"{subject}\". Not sent — review it in Gmail."

@@ -4,4 +4,4 @@ openwakeword>=0.6.0
 faster-whisper>=1.0.0
 piper-tts>=1.2.0
 sounddevice>=0.4.6
-numpy>=1.26.0
+# numpy is already in requirements.txt (also used by generate_ambient_sound)

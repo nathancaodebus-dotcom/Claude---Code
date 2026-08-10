@@ -156,3 +156,66 @@ class ListSpotifyDevicesTool(Tool):
         return "\n".join(
             f"- {d['name']} ({d['type']}){' [active]' if d['is_active'] else ''}" for d in devices
         )
+
+
+class CreateSpotifyPlaylistTool(Tool):
+    name = "create_spotify_playlist"
+    description = "Create a new Spotify playlist for the user, e.g. for a mood/activity ('Music for focused coding')."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "public": {"type": "boolean", "description": "Default false."},
+        },
+        "required": ["name"],
+    }
+
+    def run(self, name: str, description: str = "", public: bool = False) -> str:
+        client = get_spotify_client()
+        user_id = client.current_user()["id"]
+        playlist = client.user_playlist_create(user_id, name, public=public, description=description)
+        return f"Created playlist '{name}' (id={playlist['id']})."
+
+
+class AddTracksToSpotifyPlaylistTool(Tool):
+    name = "add_tracks_to_spotify_playlist"
+    description = (
+        "Add tracks to a Spotify playlist. Provide track search queries (each adds the first "
+        "match) or specific Spotify track uris."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "playlist_id": {"type": "string", "description": "From create_spotify_playlist or search_spotify."},
+            "queries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Search terms per track, e.g. ['Bohemian Rhapsody Queen'].",
+            },
+        },
+        "required": ["playlist_id", "queries"],
+    }
+
+    def run(self, playlist_id: str, queries: list[str]) -> str:
+        client = get_spotify_client()
+        uris = []
+        not_found = []
+        for query in queries:
+            if query.startswith("spotify:track:"):
+                uris.append(query)
+                continue
+            results = client.search(q=query, type="track", limit=1)
+            items = results["tracks"]["items"]
+            if items:
+                uris.append(items[0]["uri"])
+            else:
+                not_found.append(query)
+
+        if uris:
+            client.playlist_add_items(playlist_id, uris)
+
+        result = f"Added {len(uris)} track(s) to the playlist."
+        if not_found:
+            result += f" Could not find: {', '.join(not_found)}."
+        return result

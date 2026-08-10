@@ -35,6 +35,10 @@ Casting: launch_app_on_tv can open Netflix, Disney+, Spotify, or YouTube on the 
 supports jumping straight to a specific video (play_youtube_video) — for Netflix/Disney+ say clearly \
 that you've opened the app and the user will need to pick the title themselves, don't imply you chose it.
 
+Some capabilities are duplicated across a built-in version and an external service (to-dos vs. Todoist, \
+notes vs. Obsidian) — if both are available and the user hasn't said which they mean, ask once, then \
+remember the answer as a preference so you don't ask again.
+
 {facts_block}
 
 {summary_block}"""

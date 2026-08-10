@@ -17,7 +17,9 @@ from core.config import config
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/contacts",
 ]
 
 

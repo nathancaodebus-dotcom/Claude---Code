@@ -53,5 +53,30 @@ class Config:
     youtube_api_key: str | None = field(default_factory=lambda: _get("YOUTUBE_API_KEY"))
     chromecast_name: str | None = field(default_factory=lambda: _get("CHROMECAST_NAME"))
 
+    home_city: str | None = field(default_factory=lambda: _get("HOME_CITY"))
+
+    caldav_url: str | None = field(default_factory=lambda: _get("CALDAV_URL"))
+    caldav_username: str | None = field(default_factory=lambda: _get("CALDAV_USERNAME"))
+    caldav_password: str | None = field(default_factory=lambda: _get("CALDAV_PASSWORD"))
+
+    todoist_api_token: str | None = field(default_factory=lambda: _get("TODOIST_API_TOKEN"))
+
+    obsidian_vault_path: str | None = field(default_factory=lambda: _get("OBSIDIAN_VAULT_PATH"))
+
+    github_token: str | None = field(default_factory=lambda: _get("GITHUB_WATCH_TOKEN"))
+
+    tmdb_api_key: str | None = field(default_factory=lambda: _get("TMDB_API_KEY"))
+
+    backup_source_path: str | None = field(default_factory=lambda: _get("BACKUP_SOURCE_PATH"))
+    backup_dest_path: str | None = field(default_factory=lambda: _get("BACKUP_DEST_PATH"))
+
+    emergency_contact_chat_ids: str | None = field(
+        default_factory=lambda: _get("EMERGENCY_CONTACT_CHAT_IDS")
+    )
+
+    sandbox_enabled: bool = field(
+        default_factory=lambda: _get("SANDBOX_ENABLED", "false").lower() == "true"
+    )
+
 
 config = Config()
