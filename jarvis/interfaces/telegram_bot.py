@@ -70,7 +70,7 @@ def _synthesize_to_ogg_opus(synthesizer: Synthesizer, text: str, urgent: bool = 
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(synthesizer.sample_rate)
-            wav_file.writeframes(audio.tobytes())
+            wav_file.writeframes(audio)
 
         ogg_path = Path(tmp_dir) / "reply.ogg"
         try:

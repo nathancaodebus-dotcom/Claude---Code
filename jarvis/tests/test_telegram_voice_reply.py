@@ -2,7 +2,6 @@ import subprocess
 import wave
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from interfaces.telegram_bot import _synthesize_to_ogg_opus
@@ -12,7 +11,7 @@ class FakeSynth:
     sample_rate = 22050
 
     def synthesize(self, text, urgent=False):
-        return np.zeros(500, dtype=np.int16)
+        return bytes(1000)  # 500 silent 16-bit samples, as raw PCM bytes
 
 
 def test_returns_none_when_ffmpeg_missing(monkeypatch):

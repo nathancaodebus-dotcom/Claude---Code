@@ -69,7 +69,8 @@ class VoiceLoop:
         self._audio_queue.put(indata.copy())
 
     def _speak(self, text: str, urgent: bool = False) -> None:
-        audio = self._tts.synthesize(text, urgent=urgent)
+        raw = self._tts.synthesize(text, urgent=urgent)
+        audio = np.frombuffer(raw, dtype=np.int16)
         sd.play(audio, samplerate=self._tts.sample_rate)
         sd.wait()
 

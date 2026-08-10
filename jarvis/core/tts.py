@@ -3,14 +3,18 @@ default, flat but reliable and free) or ElevenLabs (cloud, optional,
 expressive/emotional voices with an 'urgent' tone variant for alerts).
 
 Neither backend is imported at module load time — only whichever one gets
-selected, so installing just one of piper-tts / elevenlabs is enough.
+selected, so installing just one of piper-tts / elevenlabs is enough. This
+module itself deliberately has no numpy dependency (synthesize() returns raw
+16-bit PCM bytes) so it stays importable on platforms like Termux/Android
+where numpy has no prebuilt wheel — the Telegram interface needs this module
+just to write bytes into a WAV file, no numeric processing involved. Callers
+that do need an array (e.g. the Pi voice loop, for sounddevice playback)
+convert with np.frombuffer(..., dtype=np.int16) on their own end.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Protocol
-
-import numpy as np
 
 from core.config import config
 
@@ -18,7 +22,7 @@ from core.config import config
 class Synthesizer(Protocol):
     sample_rate: int
 
-    def synthesize(self, text: str, urgent: bool = False) -> np.ndarray: ...
+    def synthesize(self, text: str, urgent: bool = False) -> bytes: ...
 
 
 class PiperSynthesizer:
@@ -28,9 +32,8 @@ class PiperSynthesizer:
         self._voice = PiperVoice.load(voice_model_path)
         self.sample_rate = self._voice.config.sample_rate
 
-    def synthesize(self, text: str, urgent: bool = False) -> np.ndarray:
-        chunks = list(self._voice.synthesize_stream_raw(text))
-        return np.concatenate([np.frombuffer(c, dtype=np.int16) for c in chunks])
+    def synthesize(self, text: str, urgent: bool = False) -> bytes:
+        return b"".join(self._voice.synthesize_stream_raw(text))
 
 
 class ElevenLabsSynthesizer:
@@ -46,7 +49,7 @@ class ElevenLabsSynthesizer:
         self._client = ElevenLabs(api_key=api_key)
         self._voice_id = voice_id
 
-    def synthesize(self, text: str, urgent: bool = False) -> np.ndarray:
+    def synthesize(self, text: str, urgent: bool = False) -> bytes:
         voice_settings = (
             {"stability": 0.25, "similarity_boost": 0.8, "style": 0.6}
             if urgent
@@ -58,8 +61,7 @@ class ElevenLabsSynthesizer:
             voice_settings=voice_settings,
             output_format="pcm_44100",
         )
-        raw = b"".join(audio_chunks)
-        return np.frombuffer(raw, dtype=np.int16)
+        return b"".join(audio_chunks)
 
 
 def get_synthesizer(piper_model_path: str | None = None) -> Synthesizer:
