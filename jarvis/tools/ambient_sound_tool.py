@@ -6,13 +6,23 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 
-import numpy as np
-
 from core.attachments import push as push_attachment
 from tools.base import Tool
 
+try:
+    import numpy as np
+except ImportError:
+    # numpy has no prebuilt wheel for Termux/Android (Bionic, not manylinux)
+    # and building it from source needs a full C/Fortran/BLAS toolchain —
+    # degrade this tool instead of taking the whole registry down with it.
+    np = None
+
 SAMPLE_RATE = 44100
 MAX_DURATION_S = 600
+_NUMPY_MISSING_MSG = (
+    "numpy is not installed (it has no prebuilt wheel for Termux/Android and is heavy to "
+    "build from source there) — ambient sound generation isn't available here."
+)
 
 
 def _white_noise(n_samples: int) -> np.ndarray:
@@ -55,6 +65,8 @@ class GenerateAmbientSoundTool(Tool):
     }
 
     def run(self, noise_type: str, duration_seconds: int = 60) -> str:
+        if np is None:
+            return _NUMPY_MISSING_MSG
         duration_seconds = min(duration_seconds, MAX_DURATION_S)
         n_samples = SAMPLE_RATE * duration_seconds
 

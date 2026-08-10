@@ -9,10 +9,16 @@ import secrets
 import string
 from pathlib import Path
 
-import qrcode
-
 from core.attachments import push as push_attachment
 from tools.base import Tool
+
+try:
+    import qrcode
+except ImportError:
+    # qrcode[pil] pulls in Pillow, which needs system jpeg/zlib headers to
+    # build from source and can fail on some platforms — degrade just this
+    # one tool instead of losing the calculator/converter/password tools too.
+    qrcode = None
 
 _BIN_OPS = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
@@ -138,6 +144,8 @@ class GenerateQrCodeTool(Tool):
     }
 
     def run(self, text: str) -> str:
+        if qrcode is None:
+            return "qrcode/Pillow is not installed — QR code generation isn't available here."
         output_dir = Path("outputs")
         output_dir.mkdir(exist_ok=True)
         path = output_dir / f"qr_{abs(hash(text)) % 100000}.png"
