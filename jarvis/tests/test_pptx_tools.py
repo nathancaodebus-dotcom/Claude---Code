@@ -69,3 +69,9 @@ def test_list_slides(store):
 def test_operations_on_unknown_document_return_friendly_error(store):
     result = AddSlideTool(store).run(document_name="does-not-exist", title="X")
     assert "No presentation" in result
+
+
+def test_create_presentation_warns_on_cross_kind_name_collision(store):
+    store.register_document("xlsx", "budget", "/outputs/budget.xlsx")
+    result = CreatePresentationTool(store).run(title="Budget", document_name="budget")
+    assert "replaced an existing xlsx document" in result

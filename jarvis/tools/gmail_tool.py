@@ -68,7 +68,7 @@ class GmailSearchTool(Tool):
             )
             headers = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
             lines.append(
-                f"- From: {headers.get('From', '?')} | Subject: {headers.get('Subject', '(no subject)')} "
+                f"- id: {ref['id']} | From: {headers.get('From', '?')} | Subject: {headers.get('Subject', '(no subject)')} "
                 f"| Date: {headers.get('Date', '?')} | {msg.get('snippet', '')}"
             )
         return "\n".join(lines)

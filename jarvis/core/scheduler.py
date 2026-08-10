@@ -29,8 +29,9 @@ class ReminderScheduler:
             for reminder in self._store.due_reminders():
                 try:
                     self._notify(f"⏰ Reminder: {reminder.text}")
-                finally:
-                    self._store.mark_reminder_delivered(reminder.id)
+                except Exception:
+                    continue  # transient failure (e.g. TTS/network) — retry next poll
+                self._store.mark_reminder_delivered(reminder.id)
             self._stop_event.wait(self._poll_interval_s)
 
     def start(self) -> None:

@@ -6,7 +6,7 @@ from openpyxl import Workbook, load_workbook
 from core.attachments import push as push_attachment
 from core.store import Store
 from tools.base import Tool
-from tools.document_utils import resolve_path, slugify
+from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
 
 class CreateSpreadsheetTool(Tool):
@@ -45,9 +45,12 @@ class CreateSpreadsheetTool(Tool):
             sheet.append(row)
         wb.save(path)
 
-        self._store.register_document("xlsx", document_name, str(path))
+        previous = self._store.register_document("xlsx", document_name, str(path))
         push_attachment(str(path))
-        return f"Created spreadsheet '{document_name}' with {len(rows or [])} data rows, saved to {path}."
+        return (
+            f"Created spreadsheet '{document_name}' with {len(rows or [])} data rows, saved to {path}."
+            f"{kind_collision_warning(previous, 'xlsx')}"
+        )
 
 
 class AddSpreadsheetRowTool(Tool):

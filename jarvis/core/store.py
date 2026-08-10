@@ -188,14 +188,22 @@ class Store:
     # --- documents (generated PowerPoint/Word/Excel files, tracked by name so
     # a later voice command like 'add a slide about X' can find the file again) ---
 
-    def register_document(self, kind: str, name: str, path: str) -> None:
+    def register_document(self, kind: str, name: str, path: str) -> Document | None:
+        """Create or overwrite the document record for `name`. Returns the record
+        it replaced (if any) so callers can warn when a name collision crosses
+        kinds (e.g. a spreadsheet named 'budget' replacing a presentation of the
+        same name) — kind and path are always updated together so the row can
+        never end up pointing at a path of a different kind than it claims."""
+        previous = self.get_document(name)
         now = time.time()
         self._conn.execute(
             "INSERT INTO documents (kind, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT(name) DO UPDATE SET path = excluded.path, updated_at = excluded.updated_at",
+            "ON CONFLICT(name) DO UPDATE SET kind = excluded.kind, path = excluded.path, "
+            "updated_at = excluded.updated_at",
             (kind, name, path, now, now),
         )
         self._conn.commit()
+        return previous
 
     def touch_document(self, name: str) -> None:
         self._conn.execute(

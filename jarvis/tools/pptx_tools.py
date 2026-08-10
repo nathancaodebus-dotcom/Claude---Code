@@ -14,7 +14,7 @@ from pptx.util import Inches, Pt
 from core.attachments import push as push_attachment
 from core.store import Store
 from tools.base import Tool
-from tools.document_utils import resolve_path, slugify
+from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
 _TITLE_AND_CONTENT_LAYOUT = 1
 _TITLE_ONLY_LAYOUT = 5
@@ -83,11 +83,11 @@ class CreatePresentationTool(Tool):
             _add_slide(prs, slide["title"], slide.get("bullets", []))
 
         prs.save(path)
-        self._store.register_document("pptx", document_name, str(path))
+        previous = self._store.register_document("pptx", document_name, str(path))
         push_attachment(str(path))
         return (
             f"Created presentation '{document_name}' with {1 + len(slides or [])} slides, "
-            f"saved to {path}."
+            f"saved to {path}.{kind_collision_warning(previous, 'pptx')}"
         )
 
 

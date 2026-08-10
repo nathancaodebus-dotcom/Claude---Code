@@ -6,7 +6,7 @@ from docx import Document as WordDocument
 from core.attachments import push as push_attachment
 from core.store import Store
 from tools.base import Tool
-from tools.document_utils import resolve_path, slugify
+from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
 
 class CreateWordDocumentTool(Tool):
@@ -42,9 +42,9 @@ class CreateWordDocumentTool(Tool):
             doc.add_paragraph(paragraph)
         doc.save(path)
 
-        self._store.register_document("docx", document_name, str(path))
+        previous = self._store.register_document("docx", document_name, str(path))
         push_attachment(str(path))
-        return f"Created Word document '{document_name}', saved to {path}."
+        return f"Created Word document '{document_name}', saved to {path}.{kind_collision_warning(previous, 'docx')}"
 
 
 class AppendToWordDocumentTool(Tool):
