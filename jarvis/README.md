@@ -32,29 +32,31 @@ registering it in `tools/registry_builder.py` — nothing else changes.
 
 ## What Jarvis can do out of the box
 
-Around 90-110 tools depending on configuration, registered in
+Around 90-130 tools depending on configuration, registered in
 `tools/registry_builder.py`:
 
 | Category | Tools |
 |---|---|
-| Memory | remember/recall durable facts, preferences, and corrections about you |
-| Email & calendar *(needs Google setup, §2)* | search/read Gmail, **draft emails**, list/create Google Calendar events, search/add **contacts** |
+| Memory | remember/recall durable facts, preferences, and corrections; **semantic memory** (search_memory/index_memory, §10) for recalling something by meaning, not exact wording |
+| Email & calendar *(needs Google setup, §2)* | search/read Gmail, draft emails, **archive/mark-read/count unread** (triage, never auto-sends), list/create Google Calendar events, search/add contacts |
 | Other calendars *(§9)* | list/create events on **any CalDAV calendar** — Outlook, iCloud, Nextcloud |
 | Task managers | built-in to-dos, or **Todoist** (§9) if that's where you already live |
 | Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown |
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
-| Productivity | to-dos, notes, shopping list, reminders & timers, **project/milestone tracking** with automatic deadline reminders |
-| **Documents** | create/edit **PowerPoint** (slides), **Word** (paragraphs/headings), **Excel** (rows, formulas, charts) by voice or text; **read** existing PDF/Word files for summarizing |
-| **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, **create/fill playlists**, list Spotify Connect devices |
-| **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV, pause/resume/stop/volume — see the important caveat in §5 |
-| Live info | weather, historical weather comparison, sunrise/sunset, Wikipedia, dictionary, currency, stocks, **crypto**, news, custom **RSS feeds**, **Reddit**, GitHub release/commit watching, upcoming movies *(§9)* |
-| Open web | web search, fetch & read a webpage, shorten a URL, public IP lookup, **service uptime checks** |
-| Utilities | calculator, unit conversion, password generator, QR code generator, **ambient noise generator** (white/pink/brown) |
-| System / files | CPU/temperature/memory/disk/uptime, **find large/duplicate files**, **local backups**, **network speed test**, failed-command log for diagnosing what broke |
-| Automation | **run short Python scripts on demand** — off by default, see §9 for the security tradeoff |
-| Safety | **send an emergency alert** (+ location) to pre-configured contacts via Telegram |
-| Just for fun | coin flip, dice roll, magic 8-ball, random quote, joke, song lyrics, YouTube video transcripts/summaries |
-| **Briefings** | `morning_briefing` (weather + calendar + to-dos + news) and `evening_debrief` (remaining to-dos + tomorrow + lights left on) |
+| Productivity | to-dos, notes, shopping list, reminders & timers, project/milestone tracking, **meeting briefing dossiers** (prep on a person/company before a meeting) |
+| **Documents** | create/edit PowerPoint/Word/Excel (rows, formulas, charts) by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) |
+| **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
+| **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
+| Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
+| Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
+| Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files) |
+| **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
+| System / files | CPU/temp/memory/disk/uptime, **top processes + priority control**, **disk health (SMART)**, find large/duplicate files, local backups, network speed test, failed-command log |
+| Automation | run short Python scripts on demand (Docker-isolated if available, else subprocess) — off by default |
+| Safety | emergency alert with location, **kill switch** (wipe local data on a confirmation phrase), **credential leak checking** (HIBP) |
+| Vision | **analyze/critique a supplied image** (design mockups, screenshots, photos — no camera needed, works on any image file) |
+| Just for fun | coin flip, dice, 8-ball, quotes, jokes, song lyrics, YouTube transcripts/summaries |
+| **Briefings** | `morning_briefing`, `evening_debrief`, `prepare_meeting_briefing` |
 
 Everything except Gmail/Calendar/Home Assistant/Spotify/YouTube/Chromecast/
 CalDAV/Todoist/TMDb works with zero extra setup — just the Anthropic API
@@ -259,8 +261,40 @@ These all follow the same pattern as everything else — set the relevant
   even if the Telegram interface isn't the one currently running.
 - **Sandboxed script execution** (`SANDBOX_ENABLED=true`, off by default):
   lets Jarvis write and run short Python scripts for one-off automation.
-  Read `tools/sandbox_tools.py`'s docstring before enabling — it's a
-  resource-limited subprocess, not a hard security boundary.
+  Uses an isolated Docker container if `pip install docker` and a Docker
+  daemon are available, otherwise falls back to a plain resource-limited
+  subprocess (not a hard security boundary in that case) — read
+  `tools/sandbox_tools.py`'s docstring before enabling.
+
+## 10. Reasoning, dev tools & safety extras
+
+- **Semantic memory**: `pip install -r requirements-memory.txt` (downloads
+  a small local embedding model, no API key, runs fine on a Pi). Adds
+  `index_memory`/`search_memory` — recall by meaning, not exact wording,
+  beyond what `remember_fact`'s short facts cover.
+- **Sub-agent delegation**: no setup — `delegate_to_subagent` is always on.
+  Splits a big request into focused pieces (a 'researcher' pass, then a
+  'writer' pass) using separate one-shot Claude calls.
+- **Natural-language SQL**: `SQL_CONNECTION_STRING` (any SQLAlchemy URL —
+  install the matching driver for non-SQLite databases). Read-only by
+  default; Claude writes the SQL itself, no separate text-to-SQL model.
+- **Code security audit**: no setup — `audit_code_security` (bandit) and
+  `check_dependency_vulnerabilities` (OSV.dev, free/keyless) are always on.
+- **Named deploy/build commands**: `DEPLOY_COMMANDS` as JSON
+  (`{"build": "make build"}`) — deliberately not arbitrary shell access,
+  only pre-approved named commands can run.
+- **Expressive voice**: `ELEVENLABS_API_KEY` replaces local Piper in the
+  voice interface with a cloud voice that shifts tone for urgent alerts
+  vs. normal replies.
+- **Kill switch**: `KILL_SWITCH_PHRASE` — a secret phrase that, said or
+  typed exactly, wipes local memory/history and cached OAuth tokens.
+  Unset (default) disables the kill switch entirely.
+- **Credential leak checking**: `check_password_leaked` needs no key (uses
+  k-anonymity — the password itself is never transmitted); email breach
+  checking needs a paid `HIBP_API_KEY`.
+- **Image analysis**: no setup — `analyze_image` sends a local image file
+  to Claude's vision for critique/description (design mockups, screenshots,
+  photos). No camera needed, since it works from a file, not a live feed.
 
 ## What's deferred (from the full integration wishlist)
 
@@ -272,10 +306,11 @@ Some requested integrations aren't in yet, on purpose:
   line with an upfront recording disclosure (like any business "this call
   may be recorded" line) would be legal and is the planned approach — real
   phone-line interception is not.
-- **Computer vision** (OCR, object/barcode detection, visual description,
-  facial recognition): needs camera hardware to test against; facial
-  recognition specifically is being held for explicit confirmation given
-  its biometric/privacy weight.
+- **Live camera vision** (OCR/object/barcode detection from a webcam feed,
+  facial recognition): `analyze_image` (§10) now covers the *file-based*
+  half of this — critique or describe any image you already have — but
+  nothing here watches a live camera feed. Facial recognition specifically
+  is still held for explicit confirmation given its biometric/privacy weight.
 - **PC-level system control** (app launching, shutdown/lock, window
   management, keystroke emulation, Stream Deck): these only make sense if
   a Jarvis interface runs *on* the PC being controlled, not just the
@@ -285,10 +320,28 @@ Some requested integrations aren't in yet, on purpose:
   legitimate public API exists for third-party control of these; building
   them would mean scraping or reverse-engineering private endpoints, which
   isn't something this project does.
+- **Anti-bot-resistant scraping**: deliberately not built — tooling meant
+  to evade a site's bot detection is designed to circumvent access
+  controls, which isn't something this project does. Ordinary scraping
+  (`fetch_webpage`) is unaffected.
+- **Fully autonomous multi-person email negotiation / auto-send**: Jarvis
+  drafts and triages (archive/label/mark-read), but never sends mail on its
+  own — the same reasoning as the phone-call consent issue: an autonomous
+  agent sending real messages to real people without review is a blast
+  radius worth keeping a human in the loop for.
+- **Live fact-checking on a meeting interlocutor**: would require recording
+  and analyzing another person's speech in real time — the same Swiss
+  consent-law issue (Art. 179ter CP) as the phone-call feature.
+- **Full VM-per-execution isolation, offline local-model failover,
+  multi-server 99.99% redundancy, a visual workflow engine**: all
+  legitimate ideas, all disproportionate to what a personal assistant needs
+  — `run_python_snippet` already isolates via Docker when available, and
+  Jarvis's own tool-calling loop already *is* the automation orchestrator.
 - **Discord/Slack bots, Twilio phone line, Plex/Kodi, OBS replay buffer,
-  AudD music recognition, eye-tracking, gesture control**: technically
-  buildable, just not exercised yet — ask for any of these specifically and
-  they can follow the same pattern as everything else here.
+  AudD music recognition, eye-tracking, gesture control, BCI, robotic arm
+  control, AR glasses, haptics**: technically buildable (software ones) or
+  hardware-dependent (the rest) — ask for any specifically and the
+  software ones can follow the same pattern as everything else here.
 
 ## Tests
 

@@ -13,12 +13,17 @@ from tools.ambient_sound_tool import GenerateAmbientSoundTool
 from tools.backup_tools import RunBackupTool
 from tools.base import ToolRegistry
 from tools.briefing_tools import EveningDebriefTool, MorningBriefingTool
+from tools.chart_tool import GenerateChartTool
+from tools.deploy_tool import ListDeployCommandsTool, RunDeployCommandTool
+from tools.disk_health_tool import CheckDiskHealthTool
 from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
 from tools.document_reader_tools import ReadPdfTool, ReadWordDocumentTool
 from tools.emergency_tool import EmergencyAlertTool
 from tools.file_manager_tools import FindDuplicateFilesTool, FindLargeFilesTool, SummarizeDirectoryTool
+from tools.flashcard_tool import GenerateFlashcardsTool, GenerateQuizTool
 from tools.fun_tools import CoinFlipTool, JokeTool, MagicEightBallTool, RandomQuoteTool, RollDiceTool
 from tools.github_watch_tools import LatestGithubReleaseTool, RecentGithubCommitsTool
+from tools.image_analysis_tool import AnalyzeImageTool
 from tools.info_tools import (
     CryptoPriceTool,
     CurrencyConversionTool,
@@ -30,7 +35,10 @@ from tools.info_tools import (
     WeatherTool,
     WikipediaSummaryTool,
 )
+from tools.killswitch_tool import EmergencyWipeTool
+from tools.leak_check_tool import CheckEmailBreachedTool, CheckPasswordLeakedTool
 from tools.lyrics_tool import GetLyricsTool
+from tools.meeting_briefing_tool import PrepareMeetingBriefingTool
 from tools.memory_tool import RecallFactsTool, RememberFactTool
 from tools.network_tools import NetworkSpeedTestTool
 from tools.pptx_tools import (
@@ -62,7 +70,16 @@ from tools.project_tools import (
     ListProjectsTool,
 )
 from tools.rss_reddit_tools import ReadRssFeedTool, RedditTopPostsTool
-from tools.system_tool import ListFailedCommandsTool, SystemStatusTool
+from tools.security_audit_tools import CheckDependencyVulnerabilitiesTool, SecurityAuditCodeTool
+from tools.sql_tool import RunSqlQueryTool
+from tools.subagent_tool import DelegateToSubagentTool
+from tools.system_tool import (
+    ListFailedCommandsTool,
+    ListProcessesTool,
+    SetProcessPriorityTool,
+    SystemStatusTool,
+)
+from tools.text_file_tool import ReadTextFileTool
 from tools.uptime_monitor_tool import CheckMultipleUptimeTool, CheckUptimeTool
 from tools.utility_tools import CalculatorTool, GeneratePasswordTool, GenerateQrCodeTool, UnitConversionTool
 from tools.web_tools import FetchWebpageTool, PublicIpTool, ShortenUrlTool, WebSearchTool
@@ -152,6 +169,25 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     registry.register(RunBackupTool())
     registry.register(NetworkSpeedTestTool())
     registry.register(EmergencyAlertTool())
+    registry.register(EmergencyWipeTool())
+    registry.register(ListProcessesTool())
+    registry.register(SetProcessPriorityTool())
+    registry.register(CheckDiskHealthTool())
+    registry.register(ReadTextFileTool())
+    registry.register(SecurityAuditCodeTool())
+    registry.register(CheckDependencyVulnerabilitiesTool())
+    registry.register(RunSqlQueryTool())
+    registry.register(RunDeployCommandTool())
+    registry.register(ListDeployCommandsTool())
+    registry.register(CheckPasswordLeakedTool())
+    registry.register(CheckEmailBreachedTool())
+
+    # Reasoning / creativity / analysis
+    registry.register(DelegateToSubagentTool())
+    registry.register(GenerateChartTool())
+    registry.register(AnalyzeImageTool())
+    registry.register(GenerateFlashcardsTool())
+    registry.register(GenerateQuizTool())
 
     # Office documents (PowerPoint, Word, Excel) — create and edit by voice/text
     registry.register(CreatePresentationTool(store))
@@ -171,24 +207,45 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     registry.register(ReadPdfTool())
     registry.register(ReadWordDocumentTool())
 
-    # Morning briefing / evening debrief pull from whatever else got registered above
+    # Composite tools pull from whatever else got registered above
     registry.register(MorningBriefingTool(registry))
     registry.register(EveningDebriefTool(registry))
+    registry.register(PrepareMeetingBriefingTool(registry))
 
     if config.sandbox_enabled:
         from tools.sandbox_tools import RunPythonSnippetTool
 
         registry.register(RunPythonSnippetTool())
 
+    try:
+        from core.vector_memory import VectorMemory
+        from tools.semantic_memory_tool import IndexMemoryTool, SearchMemoryTool
+
+        vector_memory = VectorMemory()
+        registry.register(IndexMemoryTool(vector_memory))
+        registry.register(SearchMemoryTool(vector_memory))
+    except ImportError:
+        pass  # sentence-transformers not installed; semantic memory tools stay disabled
+
     if config.google_credentials_path:
         try:
             from tools.calendar_tool import CreateEventTool, ListEventsTool
-            from tools.gmail_tool import GmailCreateDraftTool, GmailReadTool, GmailSearchTool
+            from tools.gmail_tool import (
+                GmailArchiveTool,
+                GmailCreateDraftTool,
+                GmailMarkReadTool,
+                GmailReadTool,
+                GmailSearchTool,
+                GmailUnreadCountTool,
+            )
             from tools.google_contacts_tool import AddContactTool, SearchContactsTool
 
             registry.register(GmailSearchTool())
             registry.register(GmailReadTool())
             registry.register(GmailCreateDraftTool())
+            registry.register(GmailArchiveTool())
+            registry.register(GmailMarkReadTool())
+            registry.register(GmailUnreadCountTool())
             registry.register(ListEventsTool())
             registry.register(CreateEventTool())
             registry.register(SearchContactsTool())

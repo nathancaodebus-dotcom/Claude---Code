@@ -18,6 +18,9 @@ from core.config import config
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
+    # .modify covers labeling/archiving/trashing — deliberately NOT gmail.send,
+    # so Jarvis can triage your inbox but can never send mail on its own.
+    "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/contacts",
 ]

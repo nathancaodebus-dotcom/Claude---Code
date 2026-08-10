@@ -21,6 +21,7 @@ from core.config import config
 from core.memory import Memory
 from core.scheduler import ReminderScheduler
 from core.store import Store
+from core.tts import get_synthesizer
 from tools.registry_builder import build_registry
 
 SAMPLE_RATE = 16000
@@ -39,18 +40,18 @@ class VoiceLoop:
     def __init__(self) -> None:
         from faster_whisper import WhisperModel
         from openwakeword.model import Model as WakeWordModel
-        from piper.voice import PiperVoice
 
         memory = Memory()
         store = Store()
         self._agent = Agent(memory, build_registry(memory, store))
         self._wake_model = WakeWordModel(wakeword_models=[config.wake_word])
         self._stt = WhisperModel("small", device="cpu", compute_type="int8")
-        # Expects a Piper voice model matching config.voice_language, e.g.
+        # Uses ElevenLabs if ELEVENLABS_API_KEY is set (expressive, cloud), else
+        # local Piper — expects a voice model matching config.voice_language, e.g.
         # ~/.local/share/piper/fr_FR-siwis-medium.onnx — see README for setup.
-        self._tts = PiperVoice.load(self._piper_model_path())
+        self._tts = get_synthesizer(self._piper_model_path() if not config.elevenlabs_api_key else None)
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
-        self._scheduler = ReminderScheduler(store, notify=self._speak)
+        self._scheduler = ReminderScheduler(store, notify=lambda text: self._speak(text, urgent=True))
 
     def _piper_model_path(self) -> str:
         from pathlib import Path
@@ -67,10 +68,9 @@ class VoiceLoop:
     def _audio_callback(self, indata, frames, time_info, status) -> None:  # noqa: ANN001
         self._audio_queue.put(indata.copy())
 
-    def _speak(self, text: str) -> None:
-        audio_chunks = list(self._tts.synthesize_stream_raw(text))
-        audio = np.concatenate([np.frombuffer(c, dtype=np.int16) for c in audio_chunks])
-        sd.play(audio, samplerate=self._tts.config.sample_rate)
+    def _speak(self, text: str, urgent: bool = False) -> None:
+        audio = self._tts.synthesize(text, urgent=urgent)
+        sd.play(audio, samplerate=self._tts.sample_rate)
         sd.wait()
 
     def _record_utterance(self, stream: sd.InputStream) -> np.ndarray:

@@ -78,5 +78,18 @@ class Config:
         default_factory=lambda: _get("SANDBOX_ENABLED", "false").lower() == "true"
     )
 
+    sql_connection_string: str | None = field(default_factory=lambda: _get("SQL_CONNECTION_STRING"))
+
+    deploy_commands: str | None = field(default_factory=lambda: _get("DEPLOY_COMMANDS"))
+
+    elevenlabs_api_key: str | None = field(default_factory=lambda: _get("ELEVENLABS_API_KEY"))
+    elevenlabs_voice_id: str = field(
+        default_factory=lambda: _get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    )
+
+    kill_switch_phrase: str | None = field(default_factory=lambda: _get("KILL_SWITCH_PHRASE"))
+
+    hibp_api_key: str | None = field(default_factory=lambda: _get("HIBP_API_KEY"))
+
 
 config = Config()

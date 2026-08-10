@@ -5,3 +5,6 @@ faster-whisper>=1.0.0
 piper-tts>=1.2.0
 sounddevice>=0.4.6
 # numpy is already in requirements.txt (also used by generate_ambient_sound)
+
+# Optional: expressive cloud TTS instead of Piper, if ELEVENLABS_API_KEY is set
+elevenlabs>=1.0.0

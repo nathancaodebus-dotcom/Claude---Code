@@ -68,3 +68,58 @@ class ListFailedCommandsTool(Tool):
             f"- [{datetime.fromtimestamp(ts):%Y-%m-%d %H:%M}] {tool}: {error}"
             for tool, error, ts in rows
         )
+
+
+class ListProcessesTool(Tool):
+    name = "list_top_processes"
+    description = "List the top processes by CPU or memory usage, for spotting what's slowing the machine down."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "sort_by": {"type": "string", "enum": ["cpu", "memory"], "description": "Default 'cpu'."},
+            "max_results": {"type": "integer", "description": "Default 10."},
+        },
+    }
+
+    def run(self, sort_by: str = "cpu", max_results: int = 10) -> str:
+        processes = []
+        for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
+            try:
+                processes.append(proc.info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        key = "cpu_percent" if sort_by == "cpu" else "memory_percent"
+        processes.sort(key=lambda p: p.get(key) or 0, reverse=True)
+
+        lines = [
+            f"- [{p['pid']}] {p['name']}: CPU {p.get('cpu_percent', 0):.1f}%, Mem {p.get('memory_percent', 0):.1f}%"
+            for p in processes[:max_results]
+        ]
+        return "\n".join(lines) if lines else "No process data available."
+
+
+class SetProcessPriorityTool(Tool):
+    name = "set_process_priority"
+    description = "Lower or raise a process's scheduling priority (nice level) by its PID, to free up resources without killing it."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "pid": {"type": "integer"},
+            "nice_level": {
+                "type": "integer",
+                "description": "-20 (highest priority) to 19 (lowest). Positive values (lower priority) don't need elevated permissions.",
+            },
+        },
+        "required": ["pid", "nice_level"],
+    }
+
+    def run(self, pid: int, nice_level: int) -> str:
+        try:
+            proc = psutil.Process(pid)
+            proc.nice(max(-20, min(19, nice_level)))
+        except psutil.NoSuchProcess:
+            return f"No process with PID {pid}."
+        except psutil.AccessDenied:
+            return f"Permission denied changing priority of PID {pid} (try a positive nice_level, or run with more privileges)."
+        return f"Set PID {pid} ({proc.name()}) to nice level {nice_level}."

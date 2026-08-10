@@ -128,3 +128,49 @@ class GmailCreateDraftTool(Tool):
             .execute()
         )
         return f"Draft created (id={draft['id']}) to {to}: \"{subject}\". Not sent — review it in Gmail."
+
+
+class GmailArchiveTool(Tool):
+    name = "archive_email"
+    description = "Archive an email (removes it from the inbox, doesn't delete it), by message id."
+    input_schema = {
+        "type": "object",
+        "properties": {"message_id": {"type": "string"}},
+        "required": ["message_id"],
+    }
+
+    def run(self, message_id: str) -> str:
+        service = build("gmail", "v1", credentials=get_credentials())
+        service.users().messages().modify(
+            userId="me", id=message_id, body={"removeLabelIds": ["INBOX"]}
+        ).execute()
+        return f"Archived email {message_id}."
+
+
+class GmailMarkReadTool(Tool):
+    name = "mark_email_read"
+    description = "Mark an email as read, by message id."
+    input_schema = {
+        "type": "object",
+        "properties": {"message_id": {"type": "string"}},
+        "required": ["message_id"],
+    }
+
+    def run(self, message_id: str) -> str:
+        service = build("gmail", "v1", credentials=get_credentials())
+        service.users().messages().modify(
+            userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
+        ).execute()
+        return f"Marked email {message_id} as read."
+
+
+class GmailUnreadCountTool(Tool):
+    name = "count_unread_emails"
+    description = "Get the number of unread emails in the inbox (fast overview without listing them all)."
+    input_schema = {"type": "object", "properties": {}}
+
+    def run(self) -> str:
+        service = build("gmail", "v1", credentials=get_credentials())
+        results = service.users().messages().list(userId="me", q="is:unread", maxResults=500).execute()
+        count = results.get("resultSizeEstimate", len(results.get("messages", [])))
+        return f"{count} unread email(s)."
