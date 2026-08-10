@@ -41,5 +41,17 @@ class Config:
     wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_jarvis"))
     voice_language: str = field(default_factory=lambda: _get("VOICE_LANGUAGE", "fr"))
 
+    spotify_client_id: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_ID"))
+    spotify_client_secret: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_SECRET"))
+    spotify_redirect_uri: str = field(
+        default_factory=lambda: _get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
+    )
+    spotify_token_path: str = field(
+        default_factory=lambda: _get("SPOTIFY_TOKEN_PATH", "./spotify_token.json")
+    )
+
+    youtube_api_key: str | None = field(default_factory=lambda: _get("YOUTUBE_API_KEY"))
+    chromecast_name: str | None = field(default_factory=lambda: _get("CHROMECAST_NAME"))
+
 
 config = Config()

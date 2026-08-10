@@ -33,9 +33,19 @@ from tools.productivity_tools import (
     ListTodosTool,
     SetReminderTool,
 )
+from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
+from tools.pptx_tools import (
+    AddSlideTool,
+    CreatePresentationTool,
+    DeleteSlideTool,
+    EditSlideTool,
+    ListPresentationsTool,
+    ListSlidesTool,
+)
 from tools.system_tool import SystemStatusTool
 from tools.utility_tools import CalculatorTool, GeneratePasswordTool, GenerateQrCodeTool, UnitConversionTool
 from tools.web_tools import FetchWebpageTool, PublicIpTool, ShortenUrlTool, WebSearchTool
+from tools.xlsx_tools import AddSpreadsheetRowTool, CreateSpreadsheetTool, ListSpreadsheetsTool
 
 
 def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
@@ -89,6 +99,20 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     # Self-monitoring
     registry.register(SystemStatusTool())
 
+    # Office documents (PowerPoint, Word, Excel) — create and edit by voice/text
+    registry.register(CreatePresentationTool(store))
+    registry.register(AddSlideTool(store))
+    registry.register(EditSlideTool(store))
+    registry.register(DeleteSlideTool(store))
+    registry.register(ListSlidesTool(store))
+    registry.register(ListPresentationsTool(store))
+    registry.register(CreateWordDocumentTool(store))
+    registry.register(AppendToWordDocumentTool(store))
+    registry.register(ListWordDocumentsTool(store))
+    registry.register(CreateSpreadsheetTool(store))
+    registry.register(AddSpreadsheetRowTool(store))
+    registry.register(ListSpreadsheetsTool(store))
+
     if config.google_credentials_path:
         try:
             from tools.calendar_tool import CreateEventTool, ListEventsTool
@@ -106,5 +130,53 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
         registry.register(ListDevicesTool())
         registry.register(CallServiceTool())
+
+    if config.spotify_client_id and config.spotify_client_secret:
+        try:
+            from tools.spotify_tools import (
+                ListSpotifyDevicesTool,
+                PauseSpotifyTool,
+                PlaySpotifyTool,
+                ResumeSpotifyTool,
+                SearchSpotifyTool,
+                SetSpotifyVolumeTool,
+                SkipSpotifyTool,
+            )
+
+            registry.register(SearchSpotifyTool())
+            registry.register(PlaySpotifyTool())
+            registry.register(PauseSpotifyTool())
+            registry.register(ResumeSpotifyTool())
+            registry.register(SkipSpotifyTool())
+            registry.register(SetSpotifyVolumeTool())
+            registry.register(ListSpotifyDevicesTool())
+        except ImportError:
+            pass  # spotipy not installed; Spotify tools stay disabled
+
+    try:
+        from tools.media_tools import (
+            LaunchAppOnTvTool,
+            ListChromecastsTool,
+            PauseCastTool,
+            PlayYoutubeVideoTool,
+            ResumeCastTool,
+            SearchYoutubeTool,
+            SetCastVolumeTool,
+            StopCastingTool,
+        )
+
+        # Casting only needs the local network — no config required, though
+        # setting CHROMECAST_NAME saves repeating device_name on every call.
+        registry.register(ListChromecastsTool())
+        registry.register(LaunchAppOnTvTool())
+        registry.register(StopCastingTool())
+        registry.register(PauseCastTool())
+        registry.register(ResumeCastTool())
+        registry.register(SetCastVolumeTool())
+        if config.youtube_api_key:
+            registry.register(SearchYoutubeTool())
+            registry.register(PlayYoutubeVideoTool())
+    except ImportError:
+        pass  # pychromecast not installed; casting tools stay disabled
 
     return registry

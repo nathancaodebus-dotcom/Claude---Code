@@ -41,6 +41,15 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(delivered, due_at);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
+    path TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
 """
 
 
@@ -64,6 +73,14 @@ class Reminder:
     text: str
     due_at: float
     delivered: bool
+
+
+@dataclass
+class Document:
+    id: int
+    kind: str
+    name: str
+    path: str
 
 
 class Store:
@@ -167,3 +184,39 @@ class Store:
         cur = self._conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
         self._conn.commit()
         return cur.rowcount > 0
+
+    # --- documents (generated PowerPoint/Word/Excel files, tracked by name so
+    # a later voice command like 'add a slide about X' can find the file again) ---
+
+    def register_document(self, kind: str, name: str, path: str) -> None:
+        now = time.time()
+        self._conn.execute(
+            "INSERT INTO documents (kind, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET path = excluded.path, updated_at = excluded.updated_at",
+            (kind, name, path, now, now),
+        )
+        self._conn.commit()
+
+    def touch_document(self, name: str) -> None:
+        self._conn.execute(
+            "UPDATE documents SET updated_at = ? WHERE name = ?", (time.time(), name)
+        )
+        self._conn.commit()
+
+    def get_document(self, name: str) -> Document | None:
+        row = self._conn.execute(
+            "SELECT id, kind, name, path FROM documents WHERE name = ?", (name,)
+        ).fetchone()
+        return Document(id=row[0], kind=row[1], name=row[2], path=row[3]) if row else None
+
+    def list_documents(self, kind: str | None = None) -> list[Document]:
+        if kind:
+            rows = self._conn.execute(
+                "SELECT id, kind, name, path FROM documents WHERE kind = ? ORDER BY updated_at DESC",
+                (kind,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT id, kind, name, path FROM documents ORDER BY updated_at DESC"
+            ).fetchall()
+        return [Document(id=r[0], kind=r[1], name=r[2], path=r[3]) for r in rows]
