@@ -470,6 +470,51 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+## Response speed — what to actually expect
+
+Orion goes through Claude for every reply, which is fundamentally slower
+than a search engine's precomputed index — no LLM is going to feel as
+instant as Google for a query that needs the model to reason. What *is*
+already done to close that gap as much as it can be:
+
+- **Streaming**: replies are streamed sentence by sentence, so on the voice
+  interfaces Orion starts speaking the first sentence as soon as it's
+  ready, not after the whole answer is generated.
+- **Prompt caching**: the (large) set of tool definitions and the static
+  system prompt are cached, so they aren't reprocessed on every single
+  turn — [Anthropic's own guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
+  puts the latency reduction from this at up to 85% for long, mostly-static
+  prompts, which the tool list here is.
+
+The single biggest remaining cost is **tool calls**: any question needing
+live information (weather, web search, "what's the news today") costs a
+*second* full round trip to Claude — one call decides to use the tool, the
+tool runs, a second call turns the result into an answer — on top of
+however long the tool itself takes. `web_search` in particular scrapes
+DuckDuckGo's HTML results (no API key needed, but also no speed guarantee)
+rather than querying a precomputed index the way Google does, so "any
+information, as fast as Google" isn't fully achievable for anything
+requiring a live lookup — that's an inherent gap between an agent that
+reasons about what to look up and a search engine that already has it
+indexed, not something prompt engineering fixes.
+
+Published reference numbers (not from this project, from
+[public 2026 API benchmarks](https://www.kunalganglani.com/blog/llm-api-latency-benchmarks-2026)):
+Claude Haiku 4.5 delivers its first token in ~0.4-0.6s; Sonnet models are
+in the ~0.9-1.2s range. `ORION_MODEL` defaults to Sonnet for capability —
+switching it to a Haiku model would measurably cut latency at some cost to
+answer quality, if that trade is ever worth making for this use case.
+
+`scripts/benchmark_latency.py` measures your actual setup once you have a
+real `ANTHROPIC_API_KEY` in `.env` (this project's own dev environment has
+none, so these numbers can't be produced here) — time to first sentence
+and total time, for a plain question, a question needing a tool call, and
+back-to-back questions in one session to see prompt caching's effect:
+
+```bash
+python -m scripts.benchmark_latency
+```
+
 ## Privacy notes
 
 - Only your Anthropic API calls leave the device by default; STT/TTS for
