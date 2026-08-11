@@ -77,7 +77,7 @@ projet X' triggers `create_presentation` whether you type it or say it.
 
 ## How Orion learns
 
-Memory here works on two tracks, both automatic — neither requires the user
+Memory here works on three tracks, all automatic — none require the user
 to say "remember this":
 
 - **Facts, preferences, and corrections** (`core/memory.py`, the `facts`
@@ -93,11 +93,22 @@ to say "remember this":
   folded into a running per-session summary via one extra Claude call —
   merged with whatever was summarized before — so the gist of a long
   relationship survives even after the raw messages scroll out of context.
-  This runs automatically at the end of every `Agent.respond()` call.
+  This is triggered at the end of every `Agent.respond()` call but runs in
+  the background, so it never delays the answer you're waiting for.
+- **Lookup results** (`core/tool_cache.py`): when a read-only tool looks
+  something up (weather, a web search, a dictionary definition, ...), the
+  answer is kept for as long as that kind of information stays valid, so
+  asking again shortly after reuses it instead of looking it up again from
+  scratch — the closest thing here to "learned something new, remembers it
+  next time." Unlike the two tracks above, this is a speed optimization
+  scoped to one running process, not a durable store — it resets on
+  restart and only applies to safe-to-cache lookups (see the "Response
+  speed" section below for exactly which tools and why).
 
-Both are visible in `recall_facts` and, for a given session, in the
-"Summary of earlier conversation" block Orion sees in its own system
-prompt — nothing here is hidden state.
+All three are visible in code — `recall_facts`, the "Summary of earlier
+conversation" block Orion sees in its own system prompt, and
+`core/tool_cache.py`'s `CACHEABLE_TOOLS` map — nothing here is hidden
+state.
 
 ## 1. Setup
 
@@ -485,12 +496,41 @@ already done to close that gap as much as it can be:
   turn — [Anthropic's own guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
   puts the latency reduction from this at up to 85% for long, mostly-static
   prompts, which the tool list here is.
+- **Lookup caching**: read-only lookups (weather, web search, dictionary,
+  currency conversion, ...) are cached in memory per process, each for as
+  long as that kind of answer stays valid (`core/tool_cache.py` — minutes
+  for weather/news, up to a day for things like dictionary definitions or
+  video transcripts that basically never change). Asking the same or a
+  just-repeated question skips the tool *and* the extra Claude round trip
+  it costs entirely. Financial/live-status tools (stock/crypto prices,
+  uptime checks) are deliberately excluded — a cached answer there would
+  be actively misleading, not just slightly stale.
+- **Background consolidation**: once a session's history passes 60
+  messages, an extra Claude call rewrites the running conversation summary
+  (`core/consolidation.py`) — previously this ran inline, silently adding
+  a whole second API round trip's worth of latency to whichever response
+  happened to cross that threshold. It now runs in a background thread and
+  uses `ORION_FAST_MODEL` (a Haiku model by default) instead of the main
+  model, since a digest nobody reads directly doesn't need frontier-level
+  reasoning.
+- **Tighter output budget**: capped at 1024 tokens instead of 2048 —
+  generation is sequential, so every output token adds directly to
+  latency, and a fast conversational reply doesn't need 1500 words of
+  headroom. A single turn that genuinely needs more (a long document via a
+  tool call's arguments) just continues across tool-use iterations rather
+  than needing one huge one.
+- **Voice endpoint timing**: the trailing-silence window used to decide
+  you've finished speaking dropped from 1.2s to 0.7s, now that it's backed
+  by real ambient-noise calibration instead of a fixed threshold that
+  needed the extra margin to avoid false cutoffs in a noisy room.
 
-The single biggest remaining cost is **tool calls**: any question needing
-live information (weather, web search, "what's the news today") costs a
-*second* full round trip to Claude — one call decides to use the tool, the
-tool runs, a second call turns the result into an answer — on top of
-however long the tool itself takes. `web_search` in particular scrapes
+The single biggest remaining cost is **tool calls**: the *first* time a
+question needs live information (weather, web search, "what's the news
+today"), it costs a second full round trip to Claude — one call decides to
+use the tool, the tool runs, a second call turns the result into an answer
+— on top of however long the tool itself takes. Lookup caching (above)
+removes that cost for a repeated or near-repeated question, but not for a
+genuinely new one. `web_search` in particular scrapes
 DuckDuckGo's HTML results (no API key needed, but also no speed guarantee)
 rather than querying a precomputed index the way Google does, so "any
 information, as fast as Google" isn't fully achievable for anything

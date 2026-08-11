@@ -10,6 +10,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
+from core.tool_cache import ToolResultCache
+
 
 class Tool(ABC):
     name: str
@@ -33,6 +35,7 @@ class ToolRegistry:
     def __init__(self, on_failure: Callable[[str, str], None] | None = None) -> None:
         self._tools: dict[str, Tool] = {}
         self._on_failure = on_failure
+        self._cache = ToolResultCache()
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -52,12 +55,20 @@ class ToolRegistry:
             error = f"Error: unknown tool '{name}'."
             self._log_failure(name, error)
             return error
+
+        cached = self._cache.get(name, kwargs)
+        if cached is not None:
+            return cached
+
         try:
-            return tool.run(**kwargs)
+            result = tool.run(**kwargs)
         except Exception as exc:  # noqa: BLE001 - tool errors must surface to the model, not crash the loop
             error = f"Error running tool '{name}': {exc}"
             self._log_failure(name, error)
             return error
+
+        self._cache.set(name, kwargs, result)
+        return result
 
     def _log_failure(self, name: str, error: str) -> None:
         if self._on_failure is not None:

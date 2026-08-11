@@ -18,6 +18,13 @@ def _get(key: str, default: str | None = None) -> str | None:
 class Config:
     anthropic_api_key: str | None = field(default_factory=lambda: _get("ANTHROPIC_API_KEY"))
     model: str = field(default_factory=lambda: _get("ORION_MODEL", "claude-sonnet-5"))
+    # Used for internal housekeeping calls that don't need frontier-level
+    # reasoning (currently just conversation-summary consolidation) — a
+    # faster/cheaper model there costs nothing in answer quality since the
+    # user never sees its output directly, only the digest it produces.
+    fast_model: str = field(
+        default_factory=lambda: _get("ORION_FAST_MODEL", "claude-haiku-4-5-20251001")
+    )
     assistant_name: str = field(default_factory=lambda: _get("ORION_NAME", "Orion"))
     db_path: str = field(default_factory=lambda: _get("ORION_DB_PATH", "./orion.db"))
 

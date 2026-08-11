@@ -5,6 +5,7 @@ generated, e.g. to start speaking before the full text is ready)."""
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any, Callable
 
 import anthropic
@@ -63,7 +64,7 @@ class Agent:
         self._tools = tools
         self._client = anthropic.Anthropic(api_key=config.anthropic_api_key)
         self._consolidator = Consolidator(
-            memory, make_default_summarizer(self._client, config.model)
+            memory, make_default_summarizer(self._client, config.fast_model)
         )
 
     def _system_blocks(self, session_id: str) -> list[dict[str, Any]]:
@@ -120,7 +121,13 @@ class Agent:
             buffer = ""
             with self._client.messages.stream(
                 model=config.model,
-                max_tokens=2048,
+                # Generation is sequential — every output token adds directly to
+                # response latency, so this stays only as large as a fast,
+                # conversational reply actually needs (~750 words). If a single
+                # turn genuinely needs more (a long document via a tool call's
+                # arguments, say), the tool-use loop above already continues
+                # across iterations rather than needing one huge one.
+                max_tokens=1024,
                 system=self._system_blocks(session_id),
                 tools=self._cached_tool_schemas(),
                 messages=messages,
@@ -159,5 +166,15 @@ class Agent:
             messages.append({"role": "user", "content": tool_results})
 
         self._memory.append(session_id, "assistant", final_text)
-        self._consolidator.maybe_consolidate(session_id)
+        # maybe_consolidate is a no-op almost every turn (a cheap row count
+        # check) but, once a session crosses CONSOLIDATE_THRESHOLD messages,
+        # makes a full extra Claude call to rewrite the summary — running
+        # that inline would silently tack an entire second API round trip
+        # onto whichever response happens to cross the threshold. Memory's
+        # SQLite connections are already opened with check_same_thread=False
+        # for exactly this kind of cross-thread use, so it's safe to fire
+        # this in the background and return the user's answer immediately.
+        threading.Thread(
+            target=self._consolidator.maybe_consolidate, args=(session_id,), daemon=True
+        ).start()
         return final_text

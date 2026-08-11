@@ -5,6 +5,9 @@ messages.stream() context manager (matching the real SDK's `.text_stream` /
 and cache_control placement can all be verified without a real API call."""
 from __future__ import annotations
 
+import threading
+import time
+
 from core.agent import Agent
 from core.memory import Memory
 from tools.base import Tool, ToolRegistry
@@ -96,6 +99,33 @@ def test_respond_returns_full_streamed_text():
     assert reply == "Hello there."
     history = memory.history("s1")
     assert [m.content for m in history] == ["hi", "Hello there."]
+
+
+def test_consolidation_runs_in_background_and_does_not_block_the_response():
+    """maybe_consolidate makes a real Claude call once a session crosses the
+    threshold — respond() must return the user's answer without waiting for
+    that, or every response landing on the threshold would silently eat a
+    whole extra API round trip's worth of latency."""
+    final = _FakeMessage([_TextBlock("ok")], "end_turn")
+    agent, _ = _make_agent([(["ok"], final)])
+
+    consolidation_started = threading.Event()
+    consolidation_may_finish = threading.Event()
+
+    def slow_maybe_consolidate(session_id: str) -> None:
+        consolidation_started.set()
+        consolidation_may_finish.wait(timeout=2)
+
+    agent._consolidator.maybe_consolidate = slow_maybe_consolidate
+
+    start = time.perf_counter()
+    reply = agent.respond("s1", "hi")
+    elapsed = time.perf_counter() - start
+
+    assert reply == "ok"
+    assert elapsed < 1.0, "respond() waited for the consolidator instead of backgrounding it"
+    assert consolidation_started.wait(timeout=1), "background consolidation never ran"
+    consolidation_may_finish.set()  # let the background thread exit cleanly before the test ends
 
 
 def test_respond_streaming_calls_on_sentence_per_complete_sentence():

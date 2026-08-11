@@ -27,7 +27,13 @@ from tools.registry_builder import build_registry
 SAMPLE_RATE = 16000
 FRAME_SIZE = 1280  # 80ms at 16kHz, openWakeWord's expected chunk size
 SILENCE_THRESHOLD = 500  # fallback RMS amplitude below which counts as silence, until calibrated
-SILENCE_DURATION_S = 1.2  # stop recording after this much trailing silence
+# 0.7s matches the trailing-silence window most deployed voice assistants
+# use for end-of-utterance detection — close to how quickly a human
+# conversation partner treats a pause as "they're done talking." A fixed
+# threshold needed more margin to avoid false cutoffs in a noisy room; now
+# that SILENCE_THRESHOLD comes from real ambient-noise calibration (below)
+# instead of one constant for every room, that margin isn't needed here.
+SILENCE_DURATION_S = 0.7
 MAX_UTTERANCE_S = 15
 SESSION_ID = "voice"
 
@@ -47,7 +53,7 @@ MIN_SILENCE_THRESHOLD = 150  # floor, in case the room is closer to silent than 
 # they're going to say anything else at all needs more breathing room than
 # that, or the conversation ends before they've had a chance to speak again.
 MAX_CONVERSATION_TURNS = 20
-FOLLOWUP_LISTEN_GRACE_S = 4.0
+FOLLOWUP_LISTEN_GRACE_S = 3.0
 STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop orion", "goodbye"}
 
 # Barge-in: while Orion is talking, a loud-enough sound cuts playback short
