@@ -6,11 +6,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# torchaudio's audio loading now requires torchcodec, which needs the actual
+# FFmpeg shared libraries (not just the CLI) — apt's ffmpeg package provides
+# both. Without this, --augment_clips fails with "Could not load libtorchcodec".
+if command -v apt-get > /dev/null && ! ldconfig -p | grep -q libavutil; then
+    apt-get update -qq && apt-get install -y -qq ffmpeg
+fi
+
 python3 -m venv venv
 ./venv/bin/pip install --quiet --upgrade pip
 ./venv/bin/pip install --quiet torch torchaudio "numpy<2" "scipy==1.13.1"
 ./venv/bin/pip install --quiet \
-    torchinfo torchmetrics onnx onnxruntime \
+    torchinfo torchmetrics onnx onnxruntime torchcodec \
     audiomentations torch-audiomentations speechbrain acoustics pronouncing mutagen webrtcvad \
     tqdm pyyaml openwakeword
 ./venv/bin/pip install --quiet piper-phonemize==1.1.0
