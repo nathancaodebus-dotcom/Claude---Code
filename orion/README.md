@@ -50,7 +50,9 @@ Around 90-130 tools depending on configuration, registered in
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
 | Productivity | to-dos, notes, shopping list, reminders & timers, project/milestone tracking, **meeting briefing dossiers** (prep on a person/company before a meeting) |
 | **Documents** | create/edit PowerPoint/Word/Excel (rows, formulas, charts) by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) |
-| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text — local files for now, publishing online is a planned next step |
+| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text, then **publish it live** to GitHub Pages for free — local-only until you ask to publish |
+| **Images** *(§14)* | **generate** from a text prompt (needs `GEMINI_API_KEY`, paid, see the cost caveat there) or **edit** an existing file — resize/crop/rotate/filters/adjustments/text overlays, no API key needed |
+| **Video** *(§14)* | **edit** an existing file — trim, concatenate, extract/replace audio, convert format, burn in captions — via ffmpeg, no API key needed. Generating video from scratch isn't built yet, see §14 for why |
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
@@ -494,14 +496,67 @@ consistent, tested-looking shell.
 - Output lands in `outputs/websites/<site_name>/` — open `index.html` in
   any browser to view it, no server needed.
 
-**This creates local files only — it does not publish anything online.**
-Getting a real, publicly reachable URL (a custom domain, hosting) is a
-separate step planned for later, not yet built.
+**Creating a site only writes local files — nothing is online until you
+publish it.**
+
+- `publish_website_to_github_pages` — free. Needs `GITHUB_PAGES_TOKEN` (a
+  [personal access token](https://github.com/settings/tokens) with `repo`
+  scope) and `GITHUB_PAGES_OWNER` (your GitHub username or org). Creates a
+  repo named after the site if one doesn't exist yet, pushes every file,
+  and enables Pages — returns `https://<owner>.github.io/<site_name>/`.
+  Can take a minute to actually go live after the tool returns.
+- **Infomaniak** (paid, Swiss hosting) is the planned alternative — not
+  built yet. It needs SFTP support (the `paramiko` library), which is a
+  real dependency worth confirming before it's added, rather than pulling
+  it in silently.
+
+## 14. Image and video generation/editing
+
+**Editing needs no API key or setup** — `tools/image_edit_tools.py`
+(Pillow) and `tools/video_edit_tools.py` (ffmpeg, already required for
+Telegram voice replies) work on any existing image/video file the moment
+Orion has a path to one (uploaded via Telegram, or already on disk):
+
+- Images: `edit_image` (resize, crop, rotate, grayscale, blur, sharpen,
+  brightness/contrast/saturation) and `add_text_to_image` (captions,
+  watermarks).
+- Video: `trim_video`, `concatenate_videos`, `extract_audio_from_video`,
+  `add_audio_to_video` (replace the audio track — background music, a
+  voiceover), `convert_video_format`, `add_caption_to_video` (burned-in
+  text, not a toggleable subtitle track).
+
+**Image generation is a paid API call**, via Google Imagen through the
+Gemini API — a separate key (`GEMINI_API_KEY`) from `ANTHROPIC_API_KEY`,
+[no free tier](https://ai.google.dev/gemini-api/docs/pricing), a few cents
+per image. `generate_image` only registers as a tool when this key is set,
+so it's simply absent rather than failing at call time if you haven't set
+one up — get a key at https://aistudio.google.com/apikey.
+
+**Video generation isn't built.** Google's Veo API is the natural
+counterpart to Imagen here, but it has no free tier at all and bills per
+*second* of output — up to $0.60/s depending on model and resolution, so a
+single 10-second clip can run several dollars. That's a real, ongoing cost
+with no built-in limit, which is exactly the kind of thing this project
+adds guardrails for before turning on (see §12's reasoning for crypto
+trading) rather than wiring up quietly. Worth building once there's an
+explicit ceiling on cost (a max clip length, a per-day cap, or similar) —
+ask when you want to set that up.
 
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:
 
+- **Video generation** (Veo or similar): no free tier and billed per
+  second of output — see §14 for the actual numbers. Needs an explicit
+  cost ceiling agreed on before it's wired up, not a default-on tool.
+- **Microsoft 365** (Outlook, Microsoft Calendar, OneDrive, Teams,
+  alongside the existing Google integration): a full OAuth-based
+  integration on the scale of the Google one (§2) — planned as the next
+  feature after this batch, not squeezed into it.
+- **Infomaniak website hosting**: the paid/Swiss alternative to GitHub
+  Pages (§13) — needs the `paramiko` SFTP library added as a new
+  dependency, worth confirming before adding rather than pulling in
+  silently. GitHub Pages (free) is built and working today.
 - **Autonomous crypto trade execution** (real exchange/broker API
   integration, no confirmation step): §12 covers what's actually built —
   research, comparison, technical indicators, and a paper portfolio with a

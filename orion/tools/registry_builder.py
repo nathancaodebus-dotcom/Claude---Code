@@ -331,6 +331,36 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     _register_safe(registry, "image analysis", _image_analysis)
 
+    def _image_edit() -> None:
+        # tools/image_edit_tools.py itself degrades gracefully without
+        # Pillow (can fail to build without system jpeg/zlib headers) —
+        # this import always succeeds.
+        from tools.image_edit_tools import AddTextToImageTool, EditImageTool
+
+        registry.register(EditImageTool())
+        registry.register(AddTextToImageTool())
+
+    _register_safe(registry, "image editing", _image_edit)
+
+    def _video_edit() -> None:
+        from tools.video_edit_tools import (
+            AddAudioToVideoTool,
+            AddCaptionToVideoTool,
+            ConcatenateVideosTool,
+            ConvertVideoFormatTool,
+            ExtractAudioFromVideoTool,
+            TrimVideoTool,
+        )
+
+        registry.register(TrimVideoTool())
+        registry.register(ConcatenateVideosTool())
+        registry.register(ExtractAudioFromVideoTool())
+        registry.register(AddAudioToVideoTool())
+        registry.register(ConvertVideoFormatTool())
+        registry.register(AddCaptionToVideoTool())
+
+    _register_safe(registry, "video editing", _video_edit)
+
     def _flashcards() -> None:
         from tools.flashcard_tool import GenerateFlashcardsTool, GenerateQuizTool
 
@@ -376,6 +406,14 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(ListWebsitesTool(store))
 
     _register_safe(registry, "website creation", _website)
+
+    if config.github_pages_token and config.github_pages_owner:
+        def _website_publish() -> None:
+            from tools.website_publish_tools import PublishWebsiteToGithubPagesTool
+
+            registry.register(PublishWebsiteToGithubPagesTool(store))
+
+        _register_safe(registry, "website publishing (GitHub Pages)", _website_publish)
 
     def _docx() -> None:
         from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
@@ -466,6 +504,14 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
             registry.register(AddContactTool())
 
         _register_safe(registry, "Google (Gmail/Calendar/Contacts)", _google)
+
+    if config.gemini_api_key:
+        def _image_gen() -> None:
+            from tools.image_gen_tools import GenerateImageTool
+
+            registry.register(GenerateImageTool())
+
+        _register_safe(registry, "image generation (Gemini)", _image_gen)
 
     if config.caldav_url and config.caldav_username and config.caldav_password:
         def _caldav() -> None:

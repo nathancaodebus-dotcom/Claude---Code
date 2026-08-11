@@ -103,5 +103,24 @@ class Config:
 
     hibp_api_key: str | None = field(default_factory=lambda: _get("HIBP_API_KEY"))
 
+    # Image generation (Google Imagen via the Gemini API) — separate,
+    # usage-billed API key, distinct from ANTHROPIC_API_KEY. No free tier;
+    # each image costs real money (a few cents), which is why this tool
+    # only registers when a key is actually present (see registry_builder.py)
+    # rather than silently failing at call time.
+    gemini_api_key: str | None = field(default_factory=lambda: _get("GEMINI_API_KEY"))
+    gemini_image_model: str = field(
+        default_factory=lambda: _get("GEMINI_IMAGE_MODEL", "imagen-4.0-generate-001")
+    )
+
+    # Website hosting (§13 level 2). Free/default path: push outputs/websites/<site>
+    # to a GitHub repo and enable Pages — needs a token with repo scope.
+    # Paid alternative: Infomaniak Web Hosting over SFTP.
+    github_pages_token: str | None = field(default_factory=lambda: _get("GITHUB_PAGES_TOKEN"))
+    github_pages_owner: str | None = field(default_factory=lambda: _get("GITHUB_PAGES_OWNER"))
+    infomaniak_ftp_host: str | None = field(default_factory=lambda: _get("INFOMANIAK_FTP_HOST"))
+    infomaniak_ftp_username: str | None = field(default_factory=lambda: _get("INFOMANIAK_FTP_USERNAME"))
+    infomaniak_ftp_password: str | None = field(default_factory=lambda: _get("INFOMANIAK_FTP_PASSWORD"))
+
 
 config = Config()
