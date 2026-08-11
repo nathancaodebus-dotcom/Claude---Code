@@ -1,7 +1,7 @@
 """Shared OAuth helper for Gmail + Calendar tools.
 
 Uses the standard Google "installed app" flow: on first run it opens a
-browser to authorize, then caches a refresh token on disk so Jarvis never
+browser to authorize, then caches a refresh token on disk so Orion never
 has to re-prompt. Both tools request their scopes on the same token file,
 so you only authorize once.
 """
@@ -19,7 +19,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
     # .modify covers labeling/archiving/trashing — deliberately NOT gmail.send,
-    # so Jarvis can triage your inbox but can never send mail on its own.
+    # so Orion can triage your inbox but can never send mail on its own.
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/contacts",

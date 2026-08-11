@@ -32,7 +32,7 @@ from core.tts import Synthesizer, get_synthesizer_if_available
 from tools.registry_builder import build_registry
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("jarvis.telegram")
+logger = logging.getLogger("orion.telegram")
 
 SESSION_ID = "telegram"
 REMINDER_POLL_INTERVAL_S = 15

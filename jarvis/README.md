@@ -1,4 +1,6 @@
-# Jarvis
+# Orion
+
+**O.R.I.O.N. — Omniscient Reconnaissance & Intelligence Network.**
 
 A personal AI assistant you can talk to about anything, at any time — it
 reads your email, manages your calendar, controls your smart home, creates
@@ -33,7 +35,7 @@ jarvis/
 Adding a new capability means writing one `Tool` subclass in `tools/` and
 registering it in `tools/registry_builder.py` — nothing else changes.
 
-## What Jarvis can do out of the box
+## What Orion can do out of the box
 
 Around 90-130 tools depending on configuration, registered in
 `tools/registry_builder.py`:
@@ -73,7 +75,7 @@ voice loop) funnels through the same tool-using agent, anything dictated
 out loud works exactly like typed text — 'crée-moi un PowerPoint sur le
 projet X' triggers `create_presentation` whether you type it or say it.
 
-## How Jarvis learns
+## How Orion learns
 
 Memory here works on two tracks, both automatic — neither requires the user
 to say "remember this":
@@ -94,7 +96,7 @@ to say "remember this":
   This runs automatically at the end of every `Agent.respond()` call.
 
 Both are visible in `recall_facts` and, for a given session, in the
-"Summary of earlier conversation" block Jarvis sees in its own system
+"Summary of earlier conversation" block Orion sees in its own system
 prompt — nothing here is hidden state.
 
 ## 1. Setup
@@ -125,7 +127,7 @@ python -m interfaces.cli
 2. Create an **OAuth client ID** of type "Desktop app", download the JSON,
    save it as `credentials.json` in this folder (or point
    `GOOGLE_CREDENTIALS_PATH` at it).
-3. Run `python -m interfaces.cli` and ask Jarvis to check your email — it
+3. Run `python -m interfaces.cli` and ask Orion to check your email — it
    will open a browser to authorize on first use, then cache a token so it
    never asks again.
 
@@ -133,7 +135,7 @@ python -m interfaces.cli
 
 Home Assistant is the easiest self-hosted hub for controlling lights,
 switches, thermostats, etc. regardless of brand — it can run on the same
-Raspberry Pi as Jarvis.
+Raspberry Pi as Orion.
 
 1. Install Home Assistant ([installation guide](https://www.home-assistant.io/installation/raspberrypi/)),
    pair your devices with it as you normally would.
@@ -148,7 +150,7 @@ Raspberry Pi as Jarvis.
    add `http://localhost:8888/callback` (or your own `SPOTIFY_REDIRECT_URI`) as
    a Redirect URI.
 2. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env`.
-3. Run `python -m interfaces.cli` and ask Jarvis to play something — first
+3. Run `python -m interfaces.cli` and ask Orion to play something — first
    use opens a browser to authorize, then caches a token.
 
 **Requires Spotify Premium** and a device with Spotify Connect active (the
@@ -163,7 +165,7 @@ stream audio by itself.
 publish no public API for search or playback — nobody outside Netflix/Disney
 can build a real "find and play this movie" integration for them, and any
 tool claiming otherwise is scraping or reverse-engineering their apps in a
-way that's fragile and against their terms. What Jarvis *can* do
+way that's fragile and against their terms. What Orion *can* do
 legitimately, using Google's standard Cast protocol (the same thing your
 phone's "Cast" button uses):
 
@@ -185,15 +187,15 @@ Setup:
 
 If launching Netflix/Disney+/YouTube Music stops working, their Chromecast
 app ids may have changed — override them via `CHROMECAST_APP_IDS` in `.env`
-(JSON, e.g. `{"netflix": "XXXXXXXX"}`); ask Jarvis to `list_chromecasts`
+(JSON, e.g. `{"netflix": "XXXXXXXX"}`); ask Orion to `list_chromecasts`
 first to confirm it can see your TV at all.
 
 ## 6. Android access via Telegram — a real voice conversation, not just chat
 
 No app to build — Telegram already has a great Android client with voice
-messages and push notifications. Send Jarvis a voice message and it **speaks
+messages and push notifications. Send Orion a voice message and it **speaks
 back** with a voice message of its own, not just text — this is the
-"talk to Jarvis from your phone" path, and it's fully operational once set up.
+"talk to Orion from your phone" path, and it's fully operational once set up.
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram, `/newbot`,
    follow the prompts, copy the token into `TELEGRAM_BOT_TOKEN`.
@@ -218,17 +220,17 @@ back** with a voice message of its own, not just text — this is the
    back (plus the text, for reference) — a real back-and-forth conversation,
    asynchronous like any voice note, from anywhere with signal, not just at
    home. Reminders/timers are pushed to you automatically when due (spoken
-   too, if TTS is configured), and anything Jarvis generates as a file
+   too, if TTS is configured), and anything Orion generates as a file
    (e.g. a QR code) is sent back as a photo/document.
 
 This runs wherever you start the process — the Raspberry Pi, a home server,
-or even the same laptop as the CLI. Point it at the same `JARVIS_DB_PATH` as
+or even the same laptop as the CLI. Point it at the same `ORION_DB_PATH` as
 your Pi's voice loop and they share memory/facts/to-dos; point it at a
 different one and they're independent.
 
 ## 7. Always-listening voice on a Raspberry Pi
 
-For the closest experience to actually talking to Jarvis out loud:
+For the closest experience to actually talking to Orion out loud:
 
 ```bash
 pip install -r requirements-voice.txt
@@ -243,12 +245,12 @@ python -m interfaces.voice.voice_loop
 ```
 
 Say the wake word (`WAKE_WORD` in `.env`, default `hey_jarvis`), then
-speak your request; Jarvis answers out loud.
+speak your request; Orion answers out loud.
 
 Once the wake word has fired, the conversation stays open — keep talking
 turn after turn without repeating it, until you go quiet, say "stop" (or
 "arrête"), or hit the 20-turn cap. Replies are also streamed sentence by
-sentence: Jarvis starts speaking the first sentence as soon as it's ready
+sentence: Orion starts speaking the first sentence as soon as it's ready
 instead of waiting for the whole answer, and the (fairly large) set of tool
 definitions sent to Claude on every turn is prompt-cached so it isn't
 reprocessed from scratch each time — both cut down the pause between asking
@@ -257,7 +259,7 @@ and hearing a reply.
 On first start (and each time you launch it), it spends about a second and
 a half measuring the room's actual background noise and sets its
 silence-detection threshold from that, rather than a fixed value that's
-wrong for most rooms/mics. You can also talk over Jarvis while it's
+wrong for most rooms/mics. You can also talk over Orion while it's
 speaking to cut it off and start your next turn immediately, instead of
 having to wait for it to finish — though since this is a plain volume
 check on the same mic (no real echo cancellation), a speaker and mic
@@ -285,7 +287,7 @@ These all follow the same pattern as everything else — set the relevant
   `https://caldav.icloud.com` with an
   [app-specific password](https://appleid.apple.com).
 - **Todoist**: `TODOIST_API_TOKEN` from Todoist Settings → Integrations →
-  Developer. Independent from Jarvis's own built-in to-do list — use
+  Developer. Independent from Orion's own built-in to-do list — use
   whichever (or both).
 - **Obsidian**: `OBSIDIAN_VAULT_PATH` pointing at your vault folder (or any
   folder — it's just markdown files, Obsidian reads the filesystem).
@@ -300,7 +302,7 @@ These all follow the same pattern as everything else — set the relevant
   Telegram chat ids from @userinfobot) — reuses `TELEGRAM_BOT_TOKEN`, works
   even if the Telegram interface isn't the one currently running.
 - **Sandboxed script execution** (`SANDBOX_ENABLED=true`, off by default):
-  lets Jarvis write and run short Python scripts for one-off automation.
+  lets Orion write and run short Python scripts for one-off automation.
   Uses an isolated Docker container if `pip install docker` and a Docker
   daemon are available, otherwise falls back to a plain resource-limited
   subprocess (not a hard security boundary in that case) — read
@@ -336,12 +338,12 @@ These all follow the same pattern as everything else — set the relevant
   to Claude's vision for critique/description (design mockups, screenshots,
   photos). No camera needed, since it works from a file, not a live feed.
 
-## 11. Talking to Jarvis straight from the phone, no Telegram — Termux
+## 11. Talking to Orion straight from the phone, no Telegram — Termux
 
-§6 (Telegram) is the reliable, recommended way to reach Jarvis from
+§6 (Telegram) is the reliable, recommended way to reach Orion from
 Android. This is a second, more direct option for when you'd rather have a
 home-screen button that starts a spoken conversation, with nothing running
-on a server — Jarvis's core runs *on the phone itself*, via
+on a server — Orion's core runs *on the phone itself*, via
 [Termux](https://termux.dev/) (a real terminal + Python environment for
 Android, no root needed).
 
@@ -349,7 +351,7 @@ Android, no root needed).
 openWakeWord — which are unlikely to have prebuilt wheels for Termux's
 environment and would be painful to compile on a phone — this uses
 Android's *own* built-in speech recognition and text-to-speech through the
-Termux:API app (`termux-speech-to-text` / `termux-tts-speak`). Jarvis's
+Termux:API app (`termux-speech-to-text` / `termux-tts-speak`). Orion's
 own dependencies (`anthropic`, `httpx`, ...) are otherwise ordinary
 lightweight Python packages.
 
@@ -384,15 +386,15 @@ Setup:
    stays disabled; the rest still works.
 3. `cp .env.example .env`, fill in `ANTHROPIC_API_KEY`.
 4. `python -m interfaces.termux.jarvis_termux` — Android's speech
-   recognition prompt appears, speak, and Jarvis answers out loud.
+   recognition prompt appears, speak, and Orion answers out loud.
 5. Optional, for a home-screen button: install the **Termux:Widget** app
    (also F-Droid), then:
    ```bash
    mkdir -p ~/.shortcuts
-   cp interfaces/termux/jarvis.sh ~/.shortcuts/Jarvis.sh
-   chmod +x ~/.shortcuts/Jarvis.sh
+   cp interfaces/termux/jarvis.sh ~/.shortcuts/Orion.sh
+   chmod +x ~/.shortcuts/Orion.sh
    ```
-   Add the Termux:Widget widget to your home screen and pick "Jarvis" —
+   Add the Termux:Widget widget to your home screen and pick "Orion" —
    one tap starts a conversation.
 
 **Honest limitation, stated plainly**: this is tap-to-talk, not hands-free
@@ -410,7 +412,7 @@ Some requested integrations aren't in yet, on purpose:
 
 - **Phone calls** (answering, filtering, transcribing): in Switzerland,
   recording a conversation without every participant's consent is a
-  criminal offense (Art. 179ter CP). A dedicated Twilio-based Jarvis phone
+  criminal offense (Art. 179ter CP). A dedicated Twilio-based Orion phone
   line with an upfront recording disclosure (like any business "this call
   may be recorded" line) would be legal and is the planned approach — real
   phone-line interception is not.
@@ -421,7 +423,7 @@ Some requested integrations aren't in yet, on purpose:
   is still held for explicit confirmation given its biometric/privacy weight.
 - **PC-level system control** (app launching, shutdown/lock, window
   management, keystroke emulation, Stream Deck): these only make sense if
-  a Jarvis interface runs *on* the PC being controlled, not just the
+  a Orion interface runs *on* the PC being controlled, not just the
   Pi/phone — and several (input emulation, remote shutdown) need a
   deliberate security decision before being wired up.
 - **Apple Music, Amazon price tracking, game console control**: no
@@ -432,7 +434,7 @@ Some requested integrations aren't in yet, on purpose:
   to evade a site's bot detection is designed to circumvent access
   controls, which isn't something this project does. Ordinary scraping
   (`fetch_webpage`) is unaffected.
-- **Fully autonomous multi-person email negotiation / auto-send**: Jarvis
+- **Fully autonomous multi-person email negotiation / auto-send**: Orion
   drafts and triages (archive/label/mark-read), but never sends mail on its
   own — the same reasoning as the phone-call consent issue: an autonomous
   agent sending real messages to real people without review is a blast
@@ -444,7 +446,7 @@ Some requested integrations aren't in yet, on purpose:
   multi-server 99.99% redundancy, a visual workflow engine**: all
   legitimate ideas, all disproportionate to what a personal assistant needs
   — `run_python_snippet` already isolates via Docker when available, and
-  Jarvis's own tool-calling loop already *is* the automation orchestrator.
+  Orion's own tool-calling loop already *is* the automation orchestrator.
 - **Discord/Slack bots, Twilio phone line, Plex/Kodi, OBS replay buffer,
   AudD music recognition, eye-tracking, gesture control, BCI, robotic arm
   control, AR glasses, haptics**: technically buildable (software ones) or
@@ -465,4 +467,4 @@ pytest
 - The Telegram bot only responds to `TELEGRAM_ALLOWED_USER_ID` — anyone
   else's messages are silently ignored.
 - All memory (conversation history, remembered facts) lives in a local
-  SQLite file (`JARVIS_DB_PATH`) — nothing is synced anywhere.
+  SQLite file (`ORION_DB_PATH`) — nothing is synced anywhere.

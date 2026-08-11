@@ -4,7 +4,7 @@ the main assistant, useful for breaking a big ask ('prepare a comparative
 report on X') into focused pieces without cluttering the main conversation
 with intermediate work.
 
-This is a single non-tool-using call (the sub-agent doesn't get Jarvis's
+This is a single non-tool-using call (the sub-agent doesn't get Orion's
 tools — it reasons over what it's given), which keeps it simple and cheap.
 For sub-tasks that need tools too, the main agent should just call those
 tools itself instead of delegating.

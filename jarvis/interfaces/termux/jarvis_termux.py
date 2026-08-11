@@ -1,8 +1,8 @@
-"""Talk to Jarvis directly from an Android phone via Termux — no Telegram,
+"""Talk to Orion directly from an Android phone via Termux — no Telegram,
 no Raspberry Pi, no heavy ML models installed on the phone. Speech
 recognition and speech synthesis both go through Android's own built-in
 engines via Termux:API (`termux-speech-to-text` / `termux-tts-speak`), so
-the only Python dependencies this needs on-device are Jarvis's lightweight
+the only Python dependencies this needs on-device are Orion's lightweight
 core ones (anthropic, httpx, ...) — nothing like faster-whisper, Piper, or
 openWakeWord, which are unlikely to build cleanly in Termux's environment.
 
@@ -37,7 +37,7 @@ from tools.registry_builder import build_registry
 
 SESSION_ID = "termux"
 MAX_TURNS_PER_SESSION = 20
-STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop jarvis", "goodbye"}
+STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop orion", "goodbye"}
 LISTEN_TIMEOUT_S = 30
 
 

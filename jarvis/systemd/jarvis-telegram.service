@@ -1,5 +1,5 @@
 [Unit]
-Description=Jarvis - Telegram interface
+Description=Orion - Telegram interface
 After=network-online.target
 Wants=network-online.target
 

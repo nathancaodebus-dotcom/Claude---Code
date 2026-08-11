@@ -18,7 +18,7 @@ from core.memory import Memory
 from core.store import Store
 from tools.base import ToolRegistry
 
-logger = logging.getLogger("jarvis.registry")
+logger = logging.getLogger("orion.registry")
 
 
 def _register_safe(registry: ToolRegistry, label: str, register_fn) -> None:

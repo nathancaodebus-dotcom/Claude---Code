@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 
 from tools.base import Tool
 
-_USER_AGENT = "Mozilla/5.0 (compatible; JarvisAssistant/1.0)"
+_USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
 
 
 class WebSearchTool(Tool):
@@ -95,7 +95,7 @@ class ShortenUrlTool(Tool):
 
 class PublicIpTool(Tool):
     name = "get_public_ip"
-    description = "Get the public IP address of the machine Jarvis is running on."
+    description = "Get the public IP address of the machine Orion is running on."
     input_schema = {"type": "object", "properties": {}}
 
     def run(self) -> str:

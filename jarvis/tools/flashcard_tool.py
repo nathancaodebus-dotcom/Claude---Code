@@ -14,7 +14,7 @@ from tools.document_utils import resolve_path, slugify
 
 _BASIC_MODEL = genanki.Model(
     1607392319,
-    "Jarvis Basic",
+    "Orion Basic",
     fields=[{"name": "Question"}, {"name": "Answer"}],
     templates=[
         {

@@ -8,7 +8,7 @@ from tools.base import Tool
 
 class NetworkSpeedTestTool(Tool):
     name = "run_speed_test"
-    description = "Run a network speed test (download/upload/ping) from the machine Jarvis runs on. Takes ~20-30 seconds."
+    description = "Run a network speed test (download/upload/ping) from the machine Orion runs on. Takes ~20-30 seconds."
     input_schema = {"type": "object", "properties": {}}
 
     def run(self) -> str:

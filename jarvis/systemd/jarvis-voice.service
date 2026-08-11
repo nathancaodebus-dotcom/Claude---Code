@@ -1,5 +1,5 @@
 [Unit]
-Description=Jarvis - voice interface (wake word + mic + speaker)
+Description=Orion - voice interface (wake word + mic + speaker)
 After=sound.target network-online.target
 Wants=network-online.target
 

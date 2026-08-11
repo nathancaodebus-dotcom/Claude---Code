@@ -2,7 +2,7 @@
 
 Every integration (Gmail, Calendar, Home Assistant, ...) implements one
 `Tool` subclass. The agent loop never knows about specific integrations —
-it only talks to the registry, so adding a new capability to Jarvis means
+it only talks to the registry, so adding a new capability to Orion means
 adding one file here and registering it, nothing in core/agent.py changes.
 """
 from __future__ import annotations

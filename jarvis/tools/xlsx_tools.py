@@ -170,7 +170,7 @@ class AddSpreadsheetChartTool(Tool):
 
 class ListSpreadsheetsTool(Tool):
     name = "list_spreadsheets"
-    description = "List all spreadsheets Jarvis has created."
+    description = "List all spreadsheets Orion has created."
     input_schema = {"type": "object", "properties": {}}
 
     def __init__(self, store: Store):

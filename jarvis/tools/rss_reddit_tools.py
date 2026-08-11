@@ -7,7 +7,7 @@ import httpx
 
 from tools.base import Tool
 
-_USER_AGENT = "Mozilla/5.0 (compatible; JarvisAssistant/1.0)"
+_USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
 
 
 class ReadRssFeedTool(Tool):

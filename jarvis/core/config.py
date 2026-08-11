@@ -17,9 +17,9 @@ def _get(key: str, default: str | None = None) -> str | None:
 @dataclass(frozen=True)
 class Config:
     anthropic_api_key: str | None = field(default_factory=lambda: _get("ANTHROPIC_API_KEY"))
-    model: str = field(default_factory=lambda: _get("JARVIS_MODEL", "claude-sonnet-5"))
-    assistant_name: str = field(default_factory=lambda: _get("JARVIS_NAME", "Jarvis"))
-    db_path: str = field(default_factory=lambda: _get("JARVIS_DB_PATH", "./jarvis.db"))
+    model: str = field(default_factory=lambda: _get("ORION_MODEL", "claude-sonnet-5"))
+    assistant_name: str = field(default_factory=lambda: _get("ORION_NAME", "Orion"))
+    db_path: str = field(default_factory=lambda: _get("ORION_DB_PATH", "./orion.db"))
 
     telegram_bot_token: str | None = field(default_factory=lambda: _get("TELEGRAM_BOT_TOKEN"))
     telegram_allowed_user_id: str | None = field(
@@ -38,6 +38,10 @@ class Config:
         default_factory=lambda: _get("HOME_ASSISTANT_TOKEN")
     )
 
+    # Stays "hey_jarvis" even though the assistant is now Orion: openWakeWord
+    # only ships a few pretrained wake-word models, and this is the closest
+    # one available — there's no ready-made "hey_orion" model to switch to
+    # without training a custom one (see README §7).
     wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_jarvis"))
     voice_language: str = field(default_factory=lambda: _get("VOICE_LANGUAGE", "fr"))
 

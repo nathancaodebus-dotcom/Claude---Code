@@ -82,7 +82,7 @@ class AppendToWordDocumentTool(Tool):
 
 class ListWordDocumentsTool(Tool):
     name = "list_word_documents"
-    description = "List all Word documents Jarvis has created."
+    description = "List all Word documents Orion has created."
     input_schema = {"type": "object", "properties": {}}
 
     def __init__(self, store: Store):

@@ -53,7 +53,7 @@ class CheckEmailBreachedTool(Tool):
 
         response = httpx.get(
             f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}",
-            headers={"hibp-api-key": config.hibp_api_key, "User-Agent": "JarvisAssistant"},
+            headers={"hibp-api-key": config.hibp_api_key, "User-Agent": "OrionAssistant"},
             timeout=10,
         )
         if response.status_code == 404:

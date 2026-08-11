@@ -1,9 +1,9 @@
 """Control smart-home devices (lights, switches, thermostats...) via Home Assistant.
 
 Home Assistant is the de-facto self-hosted domotique hub — it runs happily
-on the same Raspberry Pi as Jarvis (or on a separate one) and exposes a
+on the same Raspberry Pi as Orion (or on a separate one) and exposes a
 simple REST API that already understands whatever brand of light/plug/
-sensor you own, so Jarvis never needs brand-specific integrations.
+sensor you own, so Orion never needs brand-specific integrations.
 """
 from __future__ import annotations
 

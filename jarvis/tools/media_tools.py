@@ -2,7 +2,7 @@
 streaming apps (Netflix, Disney+, Spotify, YouTube Music) on the TV.
 
 Important limitation, stated plainly: Netflix and Disney+ publish no public
-API for search or playback control, so Jarvis can only *launch their app* on
+API for search or playback control, so Orion can only *launch their app* on
 the Chromecast (exactly what casting from your phone does) — it cannot pick
 a specific title for you inside those apps. YouTube is different: Google
 documents an official Cast controller for it, so search + 'play this

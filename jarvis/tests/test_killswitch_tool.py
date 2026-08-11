@@ -9,7 +9,7 @@ def kill_switch(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     object.__setattr__(config, "kill_switch_phrase", "burn it down")
-    object.__setattr__(config, "db_path", str(tmp_path / "jarvis.db"))
+    object.__setattr__(config, "db_path", str(tmp_path / "orion.db"))
     yield
     object.__setattr__(config, "kill_switch_phrase", None)
 

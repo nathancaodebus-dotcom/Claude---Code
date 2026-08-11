@@ -1,4 +1,4 @@
-"""Local semantic memory: a minimal RAG layer over everything Jarvis has
+"""Local semantic memory: a minimal RAG layer over everything Orion has
 been told, so it can recall something said months ago even if the wording
 was completely different from how it's asked about later.
 

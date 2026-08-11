@@ -1,6 +1,6 @@
-"""Lets Jarvis report on the health of the machine it's running on — CPU,
+"""Lets Orion report on the health of the machine it's running on — CPU,
 memory, disk, uptime, and (on a Raspberry Pi) core temperature. The closest
-thing here to JARVIS reporting suit diagnostics."""
+thing here to ORION reporting suit diagnostics."""
 from __future__ import annotations
 
 import time
@@ -35,7 +35,7 @@ def _cpu_temperature_c() -> float | None:
 class SystemStatusTool(Tool):
     name = "get_system_status"
     description = (
-        "Get the health status of the machine Jarvis is running on: CPU usage/temperature, "
+        "Get the health status of the machine Orion is running on: CPU usage/temperature, "
         "memory usage, disk usage, and uptime. Useful for checking on the Raspberry Pi it lives on."
     )
     input_schema = {"type": "object", "properties": {}}

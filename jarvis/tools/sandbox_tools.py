@@ -7,7 +7,7 @@ Two backends, picked automatically:
   runs in a throwaway python:3-slim container with no network access and a
   memory cap — a real isolation boundary.
 - Subprocess (fallback): resource-limited but NOT a hard security boundary —
-  it runs as the same OS user as Jarvis. Fine for things the user themselves
+  it runs as the same OS user as Orion. Fine for things the user themselves
   asked to automate; not a defense against untrusted/adversarial input.
 """
 from __future__ import annotations

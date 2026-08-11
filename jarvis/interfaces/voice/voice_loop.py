@@ -1,5 +1,5 @@
 """Always-listening voice interface for a Raspberry Pi with a mic + speaker —
-the closest thing to actually talking to Jarvis out loud.
+the closest thing to actually talking to Orion out loud.
 
 Pipeline: wake word (openWakeWord) -> record utterance -> local STT
 (faster-whisper) -> agent -> local TTS (Piper) -> playback. Everything runs
@@ -48,13 +48,13 @@ MIN_SILENCE_THRESHOLD = 150  # floor, in case the room is closer to silent than 
 # that, or the conversation ends before they've had a chance to speak again.
 MAX_CONVERSATION_TURNS = 20
 FOLLOWUP_LISTEN_GRACE_S = 4.0
-STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop jarvis", "goodbye"}
+STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop orion", "goodbye"}
 
-# Barge-in: while Jarvis is talking, a loud-enough sound cuts playback short
+# Barge-in: while Orion is talking, a loud-enough sound cuts playback short
 # so the user can interrupt instead of having to wait it out. The multiplier
 # is much stricter than the ordinary silence threshold on purpose — this is
 # a plain RMS check on the same microphone used for everything else, with no
-# acoustic echo cancellation, so it needs a real margin to avoid Jarvis's own
+# acoustic echo cancellation, so it needs a real margin to avoid Orion's own
 # voice bleeding from the speaker into the mic (worse the closer they are,
 # e.g. both built into one Pi case) triggering a false interruption. This
 # reduces false positives; it does not eliminate them the way real AEC would.

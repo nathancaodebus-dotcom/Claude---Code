@@ -1,5 +1,5 @@
 """Todoist integration — for users who already live in Todoist rather than
-Jarvis's own built-in to-do list (tools/productivity_tools.py). Both can be
+Orion's own built-in to-do list (tools/productivity_tools.py). Both can be
 enabled at once; they're independent, unrelated task stores."""
 from __future__ import annotations
 

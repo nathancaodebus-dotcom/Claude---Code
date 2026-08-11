@@ -1,6 +1,6 @@
 """Read an arbitrary local text/code file — enables things like 'document
 this project' by combining this with the existing document-creation tools
-(Jarvis reads the source, then writes the docs)."""
+(Orion reads the source, then writes the docs)."""
 from __future__ import annotations
 
 from pathlib import Path

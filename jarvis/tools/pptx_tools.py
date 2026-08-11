@@ -234,7 +234,7 @@ class ListSlidesTool(Tool):
 
 class ListPresentationsTool(Tool):
     name = "list_presentations"
-    description = "List all presentations Jarvis has created."
+    description = "List all presentations Orion has created."
     input_schema = {"type": "object", "properties": {}}
 
     def __init__(self, store: Store):
