@@ -23,11 +23,15 @@ so this pipeline substitutes:
 | Multi-speaker TTS checkpoint for positives | Unaffected — `piper-sample-generator`'s LibriTTS-R checkpoint is hosted on a GitHub release, not HF, so this part *is* the official method |
 
 **Honest limitation**: Speech Commands is real audio but far smaller and
-less varied than the official 2,000-hour set, so this baseline model likely
-has a higher false-accept/false-reject rate than a model trained the
-official way. The single biggest thing you can do to improve it is add real
-recordings of yourself (and anyone else who'll use it) saying "Hey Orion" —
-see "Improving the model" below.
+less varied than the official 2,000-hour set. The actual numbers from the
+`hey_orion.onnx` shipped here, measured on held-out validation data by
+`--train_model` itself: **76% accuracy, 53% recall, ~30 false positives/hour**.
+Read: when it fires, it's almost always a real "Hey Orion" — but it also
+misses roughly half of genuine attempts, entirely because the model has
+only ever heard synthetic TTS voices, never a real one. The single biggest
+thing you can do to improve it is add real recordings of yourself (and
+anyone else who'll use it) saying "Hey Orion" — see "Improving the model"
+below; expect that alone to move recall substantially.
 
 ## Reproducing or retraining
 

@@ -274,13 +274,19 @@ Speech Commands as a substitute negative dataset instead). It ships at
 resolves to it automatically — no extra setup needed.
 
 Being trained on a smaller, less varied substitute dataset than the official
-recipe calls for, it's a solid baseline rather than a maximally-tuned model —
-expect an occasional missed trigger or false wake in a noisy room. The
-single best way to sharpen it is adding real recordings of your own voice
-saying "Hey Orion" (easiest via Telegram voice notes) and retraining; see
-"Improving the model with real recordings" in that same README. If it's
-ever unreliable enough to be annoying, `WAKE_WORD=hey_jarvis` switches back
-to openWakeWord's own working built-in model while you improve it.
+recipe calls for, this is a real but imperfect baseline — the actual
+validation numbers from this training run: **76% accuracy, 53% recall,
+~30 false positives/hour** on held-out data. In plain terms: when it
+triggers, it's almost always right, but it'll also miss roughly half of
+genuine "Hey Orion" attempts, and may occasionally trigger on nothing in
+particular (recall and false-positive rate both improve significantly by
+retraining with real voice samples, since the current model has *only*
+ever heard synthetic TTS speech). The single best way to sharpen it is
+adding real recordings of your own voice saying "Hey Orion" (easiest via
+Telegram voice notes) and retraining; see "Improving the model with real
+recordings" in that same README. If it's unreliable enough to be annoying
+in the meantime, `WAKE_WORD=hey_jarvis` switches back to openWakeWord's own
+working built-in model while you improve it.
 
 Once the wake word has fired, the conversation stays open — keep talking
 turn after turn without repeating it, until you go quiet, say "stop" (or

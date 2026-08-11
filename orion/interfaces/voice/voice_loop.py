@@ -112,6 +112,17 @@ class VoiceLoop:
         if bundled_path.exists():
             model_ref = str(bundled_path)
 
+        # openWakeWord needs its frozen feature-extraction (melspectrogram +
+        # embedding) and VAD models on disk before it can load *any*
+        # wakeword model, custom or official, and doesn't fetch them on its
+        # own — nothing in this project ever called this before, so it's
+        # only ever worked in environments where something else happened to
+        # trigger the download. download_models() no-ops per file that
+        # already exists, so this is cheap on every later startup.
+        from openwakeword.utils import download_models
+
+        download_models(model_names=[config.wake_word])
+
         try:
             # Forced explicitly rather than left to openWakeWord's own
             # auto-detection: that only falls back from tflite to onnx when
