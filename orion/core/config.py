@@ -45,11 +45,13 @@ class Config:
         default_factory=lambda: _get("HOME_ASSISTANT_TOKEN")
     )
 
-    # openWakeWord has no pretrained "hey_orion" model — this only works once
-    # you've trained a custom one (or switched wake-word engines) and pointed
-    # WAKE_WORD at it; see README §7. interfaces/voice/voice_loop.py raises a
-    # clear, actionable error at startup rather than a cryptic one if no
-    # model matching this value can be loaded.
+    # openWakeWord has no pretrained "hey_orion" model of its own, but a custom
+    # one trained with scripts/wake_word_training/ (see that directory's
+    # README for how and why) ships at wake_word_models/hey_orion.onnx —
+    # interfaces/voice/voice_loop.py resolves this default to that file
+    # automatically. Set WAKE_WORD to an openWakeWord bundled name (e.g.
+    # hey_jarvis) or a path to your own model to use something else; a clear,
+    # actionable error is raised at startup if nothing matches. See README §7.
     wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_orion"))
     voice_language: str = field(default_factory=lambda: _get("VOICE_LANGUAGE", "fr"))
 

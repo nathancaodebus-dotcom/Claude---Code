@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import queue
 import time
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -24,6 +25,8 @@ from core.scheduler import ReminderScheduler
 from core.store import Store
 from core.tts import get_synthesizer
 from tools.registry_builder import build_registry
+
+_BUNDLED_WAKE_MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "wake_word_models"
 
 SAMPLE_RATE = 16000
 FRAME_SIZE = 1280  # 80ms at 16kHz, openWakeWord's expected chunk size
@@ -98,21 +101,35 @@ class VoiceLoop:
     def _load_wake_model(self, wake_word_model_cls):  # noqa: ANN001
         """openWakeWord only ships a handful of pretrained models (alexa,
         hey_mycroft, hey_jarvis, ...) — WAKE_WORD defaults to "hey_orion",
-        which isn't one of them, and there's no ready-made model for it
-        until you train a custom one and point WAKE_WORD at that model
-        file's path (or switch wake-word engines). Fail loudly with what to
-        do about it instead of letting openWakeWord's own error, or silent
-        never-triggering detection, be the only signal."""
+        which isn't one of them. A custom "hey_orion" model trained with
+        scripts/wake_word_training/ (see that directory's README) ships at
+        wake_word_models/hey_orion.onnx, so the default WAKE_WORD resolves
+        to it automatically with no extra setup. Anything else in WAKE_WORD
+        (an official bundled name, or a path to your own custom model) is
+        passed straight through to openWakeWord as before."""
+        model_ref = config.wake_word
+        bundled_path = _BUNDLED_WAKE_MODELS_DIR / f"{config.wake_word}.onnx"
+        if bundled_path.exists():
+            model_ref = str(bundled_path)
+
         try:
-            return wake_word_model_cls(wakeword_models=[config.wake_word])
+            # Forced explicitly rather than left to openWakeWord's own
+            # auto-detection: that only falls back from tflite to onnx when
+            # tflite_runtime isn't importable, and tflite_runtime *is*
+            # installed on some setups (it's a faster-whisper/piper-tts
+            # transitive dependency) — which would otherwise try (and fail)
+            # to load our onnx-only custom model as tflite. onnxruntime
+            # covers both this and openWakeWord's official bundled models.
+            return wake_word_model_cls(wakeword_models=[model_ref], inference_framework="onnx")
         except Exception as exc:
             raise RuntimeError(
                 f"Could not load wake word model '{config.wake_word}': {exc}\n"
-                "openWakeWord has no pretrained model for that phrase — its bundled models "
-                "are alexa, hey_mycroft, hey_jarvis, timer, and weather. To fix this:\n"
-                f"  1. Train a custom '{config.wake_word}' model (openWakeWord's training "
-                "notebook, ~30-60 min) and set WAKE_WORD to the resulting model file's path, or\n"
-                "  2. Set WAKE_WORD=hey_jarvis in .env for now to use the working built-in "
+                "openWakeWord's own pretrained models are alexa, hey_mycroft, hey_jarvis, "
+                "timer, and weather. To fix this:\n"
+                f"  1. Train a custom '{config.wake_word}' model with scripts/wake_word_training/ "
+                "(see that directory's README) and set WAKE_WORD to the resulting model file's "
+                "path, or\n"
+                "  2. Set WAKE_WORD=hey_jarvis in .env for now to use a working built-in "
                 "model while you do that.\n"
                 "See README §7 for details."
             ) from exc

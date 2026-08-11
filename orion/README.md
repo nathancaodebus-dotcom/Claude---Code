@@ -263,15 +263,24 @@ python -m interfaces.voice.voice_loop
 Say the wake word (`WAKE_WORD` in `.env`), then speak your request; Orion
 answers out loud.
 
-**The `hey_orion` default won't actually trigger yet.** openWakeWord only
-ships a handful of pretrained models — alexa, hey_mycroft, hey_jarvis,
-timer, weather — and "hey_orion" isn't one of them, so there's no ready-made
-model for it. `VoiceLoop` fails fast at startup with instructions rather
-than silently never detecting anything. Until a custom model is trained
-(openWakeWord's training notebook, ~30-60 min) and `WAKE_WORD` is pointed
-at it — or a different wake-word engine that supports arbitrary phrases is
-wired in instead — set `WAKE_WORD=hey_jarvis` to use the working built-in
-model in the meantime.
+**"Hey Orion" actually works.** openWakeWord ships no pretrained model for
+that phrase itself (its bundled models are alexa, hey_mycroft, hey_jarvis,
+timer, weather), so a custom one was trained specifically for this project —
+see `scripts/wake_word_training/README.md` for exactly how (short version:
+openWakeWord's official recipe leans on Hugging Face for its training data,
+which isn't reachable from where this was built, so it's trained on Google
+Speech Commands as a substitute negative dataset instead). It ships at
+`wake_word_models/hey_orion.onnx`, and the `WAKE_WORD=hey_orion` default
+resolves to it automatically — no extra setup needed.
+
+Being trained on a smaller, less varied substitute dataset than the official
+recipe calls for, it's a solid baseline rather than a maximally-tuned model —
+expect an occasional missed trigger or false wake in a noisy room. The
+single best way to sharpen it is adding real recordings of your own voice
+saying "Hey Orion" (easiest via Telegram voice notes) and retraining; see
+"Improving the model with real recordings" in that same README. If it's
+ever unreliable enough to be annoying, `WAKE_WORD=hey_jarvis` switches back
+to openWakeWord's own working built-in model while you improve it.
 
 Once the wake word has fired, the conversation stays open — keep talking
 turn after turn without repeating it, until you go quiet, say "stop" (or
