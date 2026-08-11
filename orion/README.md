@@ -53,6 +53,7 @@ Around 90-130 tools depending on configuration, registered in
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
+| **Crypto trading** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order |
 | Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
 | Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files) |
 | **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
@@ -427,10 +428,57 @@ don't need to tap again between exchanges — until you go quiet or say
 "stop" (or "arrête"), so a single tap gets you a real back-and-forth
 conversation, just not one that starts itself.
 
+## 12. Crypto trading — research and paper portfolio only
+
+**Read this before using it.** No autonomous, unsupervised trading was
+built here — deliberately. There's no exchange or broker integration in
+this codebase at all: nothing here can place a real order, on any
+platform, under any circumstance. What's actually here is a research and
+decision-support layer, backed by a paper (simulated) portfolio, no setup
+or API key required:
+
+- `get_crypto_market_data` / `compare_crypto_assets` — live price, 24h
+  change, market cap, and volume, for one coin or several side by side.
+- `get_crypto_technical_indicators` — 7-day and 30-day simple moving
+  averages, 14-day RSI, and recent daily-return volatility for a coin.
+  Reports raw numbers only; Orion still has to reason about what they mean
+  for your actual question, same as it would for any other data.
+- Two (or however many you want) named paper portfolios — e.g. `stable`
+  for long-term/lower-risk positions, `risky` for the fast, frequent kind
+  — tracked with **`propose_crypto_trade` → you decide →
+  `confirm_crypto_trade` or `reject_crypto_trade`**. Proposing a trade
+  fetches the live price itself (never a number Claude supplies), but
+  changes nothing until you explicitly confirm it. `list_crypto_holdings`
+  shows live unrealized P&L against your average buy price;
+  `list_pending_crypto_trades` shows what's awaiting your decision.
+
+**Why it stops there.** No LLM-driven system — this one included — has a
+track record of reliably beating the market autonomously; markets are
+adversarial, and a model can misread a number, hallucinate, or (if it's
+ever wired to browse the live web for "research") get steered by
+manipulated content it reads along the way. Combine that with unsupervised
+execution on real money, especially at high frequency on a volatile asset,
+and mistakes compound fast with no one watching. Keeping a human
+confirmation step on every position change is the same design choice this
+project already makes for Gmail (drafts and triages, never auto-sends) —
+applied to something with a more immediate, harder-to-reverse cost.
+
+If you build or wire up real exchange execution yourself on top of this,
+treat the paper-tracking numbers here as informative, not validated —
+they've never been tested against real capital, slippage, fees, or a live
+order book.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:
 
+- **Autonomous crypto trade execution** (real exchange/broker API
+  integration, no confirmation step): §12 covers what's actually built —
+  research, comparison, technical indicators, and a paper portfolio with a
+  mandatory human confirmation before any position changes. Wiring that up
+  to a real exchange to place unsupervised orders is a materially
+  different, much higher-stakes step this project doesn't take — see §12
+  for the reasoning.
 - **Phone calls** (answering, filtering, transcribing): in Switzerland,
   recording a conversation without every participant's consent is a
   criminal offense (Art. 179ter CP). A dedicated Twilio-based Orion phone

@@ -72,6 +72,36 @@ CREATE TABLE IF NOT EXISTS failed_commands (
     error TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+
+-- Crypto portfolio tracking. "portfolio" is a free-text label (e.g.
+-- 'stable', 'risky') rather than its own table — there's nothing to manage
+-- about a portfolio beyond the name it groups holdings/trades under.
+-- Orion never updates crypto_holdings directly: every position change goes
+-- through a proposal that the user must confirm (see tools/crypto_tools.py)
+-- — this is a decision-support and paper-tracking layer, not a connection
+-- to a real exchange, so nothing here places a real order on its own.
+CREATE TABLE IF NOT EXISTS crypto_holdings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    avg_buy_price_usd REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    UNIQUE(portfolio, coin)
+);
+
+CREATE TABLE IF NOT EXISTS crypto_trade_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio TEXT NOT NULL,
+    action TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    price_usd REAL NOT NULL,
+    reasoning TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at REAL NOT NULL,
+    resolved_at REAL
+);
 """
 
 
@@ -118,6 +148,28 @@ class Milestone:
     text: str
     due_at: float | None
     done: bool
+
+
+@dataclass
+class CryptoHolding:
+    id: int
+    portfolio: str
+    coin: str
+    quantity: float
+    avg_buy_price_usd: float
+
+
+@dataclass
+class CryptoTradeProposal:
+    id: int
+    portfolio: str
+    action: str
+    coin: str
+    quantity: float
+    price_usd: float
+    reasoning: str
+    status: str
+    created_at: float
 
 
 class Store:
@@ -331,3 +383,140 @@ class Store:
             (limit,),
         ).fetchall()
         return rows
+
+    # --- crypto portfolio (paper-tracked; see tools/crypto_tools.py for why
+    # every position change goes through a proposal + explicit confirmation
+    # rather than being applied directly) ---
+
+    def propose_crypto_trade(
+        self, portfolio: str, action: str, coin: str, quantity: float, price_usd: float, reasoning: str
+    ) -> int:
+        if action not in ("buy", "sell"):
+            raise ValueError(f"action must be 'buy' or 'sell', got '{action}'.")
+        if quantity <= 0:
+            raise ValueError("quantity must be positive.")
+        cur = self._conn.execute(
+            "INSERT INTO crypto_trade_proposals "
+            "(portfolio, action, coin, quantity, price_usd, reasoning, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
+            (portfolio, action, coin.lower(), quantity, price_usd, reasoning, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def get_crypto_trade_proposal(self, proposal_id: int) -> CryptoTradeProposal | None:
+        row = self._conn.execute(
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at "
+            "FROM crypto_trade_proposals WHERE id = ?",
+            (proposal_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return CryptoTradeProposal(
+            id=row[0], portfolio=row[1], action=row[2], coin=row[3],
+            quantity=row[4], price_usd=row[5], reasoning=row[6], status=row[7], created_at=row[8],
+        )
+
+    def list_pending_crypto_trades(self, portfolio: str | None = None) -> list[CryptoTradeProposal]:
+        query = (
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at "
+            "FROM crypto_trade_proposals WHERE status = 'pending'"
+        )
+        params: tuple = ()
+        if portfolio:
+            query += " AND portfolio = ?"
+            params = (portfolio,)
+        query += " ORDER BY created_at"
+        rows = self._conn.execute(query, params).fetchall()
+        return [
+            CryptoTradeProposal(
+                id=r[0], portfolio=r[1], action=r[2], coin=r[3],
+                quantity=r[4], price_usd=r[5], reasoning=r[6], status=r[7], created_at=r[8],
+            )
+            for r in rows
+        ]
+
+    def confirm_crypto_trade(self, proposal_id: int) -> None:
+        """Applies a pending proposal to holdings. Raises ValueError (with a
+        message meant to be shown as-is) if the proposal doesn't exist, was
+        already resolved, or a sell would take a holding negative — this
+        method is the only path that ever changes crypto_holdings, so it's
+        also the only place that needs to guard against a bad sell."""
+        proposal = self.get_crypto_trade_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError(f"No trade proposal with id {proposal_id}.")
+        if proposal.status != "pending":
+            raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
+
+        existing = self._conn.execute(
+            "SELECT quantity, avg_buy_price_usd FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
+            (proposal.portfolio, proposal.coin),
+        ).fetchone()
+
+        if proposal.action == "buy":
+            if existing is None:
+                new_quantity, new_avg_price = proposal.quantity, proposal.price_usd
+            else:
+                old_quantity, old_avg_price = existing
+                new_quantity = old_quantity + proposal.quantity
+                new_avg_price = (
+                    old_quantity * old_avg_price + proposal.quantity * proposal.price_usd
+                ) / new_quantity
+            self._conn.execute(
+                "INSERT INTO crypto_holdings (portfolio, coin, quantity, avg_buy_price_usd, updated_at) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(portfolio, coin) DO UPDATE SET "
+                "quantity = excluded.quantity, avg_buy_price_usd = excluded.avg_buy_price_usd, "
+                "updated_at = excluded.updated_at",
+                (proposal.portfolio, proposal.coin, new_quantity, new_avg_price, time.time()),
+            )
+        else:  # sell
+            if existing is None or existing[0] < proposal.quantity:
+                held = existing[0] if existing else 0.0
+                raise ValueError(
+                    f"Can't sell {proposal.quantity} {proposal.coin} from '{proposal.portfolio}' — "
+                    f"only {held} held."
+                )
+            old_quantity, old_avg_price = existing
+            new_quantity = old_quantity - proposal.quantity
+            if new_quantity == 0:
+                self._conn.execute(
+                    "DELETE FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
+                    (proposal.portfolio, proposal.coin),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE crypto_holdings SET quantity = ?, updated_at = ? "
+                    "WHERE portfolio = ? AND coin = ?",
+                    (new_quantity, time.time(), proposal.portfolio, proposal.coin),
+                )
+
+        self._conn.execute(
+            "UPDATE crypto_trade_proposals SET status = 'confirmed', resolved_at = ? WHERE id = ?",
+            (time.time(), proposal_id),
+        )
+        self._conn.commit()
+
+    def reject_crypto_trade(self, proposal_id: int) -> None:
+        proposal = self.get_crypto_trade_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError(f"No trade proposal with id {proposal_id}.")
+        if proposal.status != "pending":
+            raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
+        self._conn.execute(
+            "UPDATE crypto_trade_proposals SET status = 'rejected', resolved_at = ? WHERE id = ?",
+            (time.time(), proposal_id),
+        )
+        self._conn.commit()
+
+    def list_crypto_holdings(self, portfolio: str | None = None) -> list[CryptoHolding]:
+        query = "SELECT id, portfolio, coin, quantity, avg_buy_price_usd FROM crypto_holdings"
+        params: tuple = ()
+        if portfolio:
+            query += " WHERE portfolio = ?"
+            params = (portfolio,)
+        query += " ORDER BY portfolio, coin"
+        rows = self._conn.execute(query, params).fetchall()
+        return [
+            CryptoHolding(id=r[0], portfolio=r[1], coin=r[2], quantity=r[3], avg_buy_price_usd=r[4])
+            for r in rows
+        ]

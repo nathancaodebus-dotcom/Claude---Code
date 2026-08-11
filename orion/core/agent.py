@@ -48,7 +48,13 @@ that you've opened the app and the user will need to pick the title themselves, 
 
 Some capabilities are duplicated across a built-in version and an external service (to-dos vs. Todoist, \
 notes vs. Obsidian) — if both are available and the user hasn't said which they mean, ask once, then \
-remember the answer as a preference so you don't ask again."""
+remember the answer as a preference so you don't ask again.
+
+Crypto trading tools are research and paper-tracking only — there is no connection to a real exchange, \
+and propose_crypto_trade never executes anything by itself. After proposing a trade, tell the user what \
+you'd do and why, then explicitly ask them to confirm or reject it — never say a trade is 'done' until \
+they've confirmed it and confirm_crypto_trade has actually run. Never call confirm_crypto_trade on your \
+own initiative, no matter how confident you are in the analysis."""
 
 MAX_TOOL_ITERATIONS = 8
 

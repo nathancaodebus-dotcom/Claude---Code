@@ -109,6 +109,29 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     _register_safe(registry, "live info", _live_info)
 
+    def _crypto_trading() -> None:
+        from tools.crypto_tools import (
+            CompareCryptoAssetsTool,
+            ConfirmCryptoTradeTool,
+            GetCryptoMarketDataTool,
+            GetCryptoTechnicalIndicatorsTool,
+            ListCryptoHoldingsTool,
+            ListPendingCryptoTradesTool,
+            ProposeCryptoTradeTool,
+            RejectCryptoTradeTool,
+        )
+
+        registry.register(GetCryptoMarketDataTool())
+        registry.register(CompareCryptoAssetsTool())
+        registry.register(GetCryptoTechnicalIndicatorsTool())
+        registry.register(ProposeCryptoTradeTool(store))
+        registry.register(ConfirmCryptoTradeTool(store))
+        registry.register(RejectCryptoTradeTool(store))
+        registry.register(ListPendingCryptoTradesTool(store))
+        registry.register(ListCryptoHoldingsTool(store))
+
+    _register_safe(registry, "crypto trading (research + paper portfolio)", _crypto_trading)
+
     def _rss_reddit() -> None:
         from tools.rss_reddit_tools import ReadRssFeedTool, RedditTopPostsTool
 
