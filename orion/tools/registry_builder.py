@@ -415,6 +415,17 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
         _register_safe(registry, "website publishing (GitHub Pages)", _website_publish)
 
+    if config.infomaniak_ftp_host and config.infomaniak_ftp_username and config.infomaniak_ftp_password:
+        def _website_publish_infomaniak() -> None:
+            # tools/website_publish_tools.py itself degrades gracefully
+            # without paramiko (Rust-adjacent cryptography dependency,
+            # slow/fragile to build on Termux) — this import always succeeds.
+            from tools.website_publish_tools import PublishWebsiteToInfomaniakTool
+
+            registry.register(PublishWebsiteToInfomaniakTool(store))
+
+        _register_safe(registry, "website publishing (Infomaniak)", _website_publish_infomaniak)
+
     def _docx() -> None:
         from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
 
@@ -504,6 +515,32 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
             registry.register(AddContactTool())
 
         _register_safe(registry, "Google (Gmail/Calendar/Contacts)", _google)
+
+    if config.microsoft_client_id:
+        def _microsoft() -> None:
+            from tools.microsoft_calendar_tool import CreateOutlookEventTool, ListOutlookEventsTool
+            from tools.microsoft_contacts_tool import AddOutlookContactTool, SearchOutlookContactsTool
+            from tools.outlook_tool import (
+                OutlookArchiveTool,
+                OutlookCreateDraftTool,
+                OutlookMarkReadTool,
+                OutlookReadTool,
+                OutlookSearchTool,
+                OutlookUnreadCountTool,
+            )
+
+            registry.register(OutlookSearchTool())
+            registry.register(OutlookReadTool())
+            registry.register(OutlookCreateDraftTool())
+            registry.register(OutlookArchiveTool())
+            registry.register(OutlookMarkReadTool())
+            registry.register(OutlookUnreadCountTool())
+            registry.register(ListOutlookEventsTool())
+            registry.register(CreateOutlookEventTool())
+            registry.register(SearchOutlookContactsTool())
+            registry.register(AddOutlookContactTool())
+
+        _register_safe(registry, "Microsoft 365 (Outlook Mail/Calendar/Contacts)", _microsoft)
 
     if config.gemini_api_key:
         def _image_gen() -> None:

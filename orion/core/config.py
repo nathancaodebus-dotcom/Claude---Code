@@ -122,5 +122,15 @@ class Config:
     infomaniak_ftp_username: str | None = field(default_factory=lambda: _get("INFOMANIAK_FTP_USERNAME"))
     infomaniak_ftp_password: str | None = field(default_factory=lambda: _get("INFOMANIAK_FTP_PASSWORD"))
 
+    # Microsoft 365 (Outlook Mail/Calendar/Contacts), alongside the existing
+    # Google integration rather than replacing it — see tools/microsoft_auth.py.
+    # MICROSOFT_CLIENT_ID is an Azure AD app registration's Application
+    # (client) ID, registered as a public client (no client secret needed —
+    # device code flow doesn't use one).
+    microsoft_client_id: str | None = field(default_factory=lambda: _get("MICROSOFT_CLIENT_ID"))
+    microsoft_token_path: str = field(
+        default_factory=lambda: _get("MICROSOFT_TOKEN_PATH", "./microsoft_token.json")
+    )
+
 
 config = Config()

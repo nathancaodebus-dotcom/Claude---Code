@@ -62,4 +62,15 @@ bandit>=1.7.0
 # otherwise falls back to a plain subprocess automatically.
 docker>=7.0.0
 
+# Website publishing to Infomaniak (SFTP) — tools/website_publish_tools.py
+# degrades gracefully without it. Pulls in cryptography (Rust), so it can
+# be slow/fail to build on Termux the same way jiter/pydantic-core can —
+# comment this out there if it's a problem; GitHub Pages publishing doesn't
+# need it.
+paramiko>=3.4.0
+
+# Microsoft 365 (Outlook Mail/Calendar/Contacts) — device-code OAuth via
+# MSAL, mirrors google-auth-oauthlib's role for Gmail/Calendar.
+msal>=1.28.0
+
 # Voice (Raspberry Pi), optional — install with: pip install -r requirements-voice.txt

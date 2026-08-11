@@ -44,13 +44,14 @@ Around 90-130 tools depending on configuration, registered in
 |---|---|
 | Memory | remember/recall durable facts, preferences, and corrections; **semantic memory** (search_memory/index_memory, §10) for recalling something by meaning, not exact wording |
 | Email & calendar *(needs Google setup, §2)* | search/read Gmail, draft emails, **archive/mark-read/count unread** (triage, never auto-sends), list/create Google Calendar events, search/add contacts |
+| Outlook / Microsoft 365 *(needs Azure app registration, §15)* | same shape as the Google row above but for Outlook Mail/Calendar/Contacts via Microsoft Graph — search/read/draft mail (never auto-sends), archive/mark-read/count unread, list/create calendar events, search/add contacts |
 | Other calendars *(§9)* | list/create events on **any CalDAV calendar** — Outlook, iCloud, Nextcloud |
 | Task managers | built-in to-dos, or **Todoist** (§9) if that's where you already live |
 | Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown |
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
 | Productivity | to-dos, notes, shopping list, reminders & timers, project/milestone tracking, **meeting briefing dossiers** (prep on a person/company before a meeting) |
 | **Documents** | create/edit PowerPoint/Word/Excel (rows, formulas, charts) by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) |
-| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text, then **publish it live** to GitHub Pages for free — local-only until you ask to publish |
+| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text, then **publish it live** to GitHub Pages for free, or to Infomaniak (paid, Swiss) over SFTP — local-only until you ask to publish |
 | **Images** *(§14)* | **generate** from a text prompt (needs `GEMINI_API_KEY`, paid, see the cost caveat there) or **edit** an existing file — resize/crop/rotate/filters/adjustments/text overlays, no API key needed |
 | **Video** *(§14)* | **edit** an existing file — trim, concatenate, extract/replace audio, convert format, burn in captions — via ffmpeg, no API key needed. Generating video from scratch isn't built yet, see §14 for why |
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
@@ -505,10 +506,16 @@ publish it.**
   repo named after the site if one doesn't exist yet, pushes every file,
   and enables Pages — returns `https://<owner>.github.io/<site_name>/`.
   Can take a minute to actually go live after the tool returns.
-- **Infomaniak** (paid, Swiss hosting) is the planned alternative — not
-  built yet. It needs SFTP support (the `paramiko` library), which is a
-  real dependency worth confirming before it's added, rather than pulling
-  it in silently.
+- `publish_website_to_infomaniak` — paid, Swiss hosting, over SFTP. Needs
+  `INFOMANIAK_FTP_HOST`/`INFOMANIAK_FTP_USERNAME`/`INFOMANIAK_FTP_PASSWORD`
+  from your [Infomaniak Manager](https://manager.infomaniak.com/) (Web
+  Hosting → your hosting → FTP/SFTP access), and the `paramiko` package
+  (already in `requirements.txt`, guarded the same way Pillow/numpy/qrcode
+  are elsewhere — if it fails to build on a given machine, this tool just
+  reports that clearly instead of the whole assistant crashing). Uploads
+  every file under an optional `remote_dir` (defaults to a folder named
+  after the site) — point your domain/subdomain's docroot at it in the
+  Infomaniak Manager to go live.
 
 ## 14. Image and video generation/editing
 
@@ -542,6 +549,38 @@ trading) rather than wiring up quietly. Worth building once there's an
 explicit ceiling on cost (a max clip length, a per-day cap, or similar) —
 ask when you want to set that up.
 
+## 15. Microsoft 365 (Outlook Mail/Calendar/Contacts)
+
+Same shape as §2's Google integration, alongside it rather than replacing
+it — use whichever account (or both) makes sense for a given request.
+Setup uses a device-code sign-in instead of a browser popup, since Orion
+usually runs headless on the Pi:
+
+1. In [Entra ID / Azure AD](https://entra.microsoft.com/) → **App
+   registrations** → **New registration**. No redirect URI is needed —
+   this uses the OAuth device code flow, not a browser callback.
+2. Under **Authentication**, enable **"Allow public client flows"** (this
+   is what lets Orion sign in without a client secret).
+3. Under **API permissions**, add these Microsoft Graph delegated
+   permissions: `Mail.Read`, `Mail.ReadWrite`, `Calendars.ReadWrite`,
+   `Contacts.ReadWrite`. `Mail.Send` is deliberately not requested — same
+   "drafts and triages, never auto-sends" boundary as Gmail (§2).
+4. Copy the app's **Application (client) ID** into `MICROSOFT_CLIENT_ID`
+   in `.env`.
+5. Run `python -m interfaces.cli` and ask Orion to check your Outlook
+   inbox — on first use it prints a URL and a short code; enter both from
+   any device (phone, laptop) to authorize. The token is then cached to
+   `MICROSOFT_TOKEN_PATH` so it never asks again.
+
+Tools (`tools/outlook_tool.py`, `tools/microsoft_calendar_tool.py`,
+`tools/microsoft_contacts_tool.py`): `search_outlook_emails`,
+`read_outlook_email`, `create_outlook_email_draft` (never sends),
+`archive_outlook_email`, `mark_outlook_email_read`,
+`count_unread_outlook_emails`, `list_outlook_calendar_events`,
+`create_outlook_calendar_event`, `search_outlook_contacts`,
+`add_outlook_contact` — all registered only when `MICROSOFT_CLIENT_ID` is
+set, same config-gating pattern as every other optional integration here.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:
@@ -549,14 +588,10 @@ Some requested integrations aren't in yet, on purpose:
 - **Video generation** (Veo or similar): no free tier and billed per
   second of output — see §14 for the actual numbers. Needs an explicit
   cost ceiling agreed on before it's wired up, not a default-on tool.
-- **Microsoft 365** (Outlook, Microsoft Calendar, OneDrive, Teams,
-  alongside the existing Google integration): a full OAuth-based
-  integration on the scale of the Google one (§2) — planned as the next
-  feature after this batch, not squeezed into it.
-- **Infomaniak website hosting**: the paid/Swiss alternative to GitHub
-  Pages (§13) — needs the `paramiko` SFTP library added as a new
-  dependency, worth confirming before adding rather than pulling in
-  silently. GitHub Pages (free) is built and working today.
+- **Microsoft 365 beyond Mail/Calendar/Contacts** (OneDrive, Teams): §15
+  covers Outlook Mail/Calendar/Contacts, mirroring the Google integration's
+  scope (§2) — OneDrive file access and Teams aren't built, ask if you want
+  either added.
 - **Autonomous crypto trade execution** (real exchange/broker API
   integration, no confirmation step): §12 covers what's actually built —
   research, comparison, technical indicators, and a paper portfolio with a

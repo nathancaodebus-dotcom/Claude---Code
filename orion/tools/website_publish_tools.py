@@ -1,15 +1,19 @@
 """Publish a locally-created website (tools/website_tools.py) somewhere
-actually reachable online — level 2 of website creation.
+actually reachable online — level 2 of website creation. Two paths, each
+registered independently based on which is configured (see
+tools/registry_builder.py):
 
-Free/default path: push the site's files to a GitHub repo via the REST API
-and enable Pages on it. Needs GITHUB_PAGES_TOKEN (a personal access token
-with 'repo' scope — https://github.com/settings/tokens) and
-GITHUB_PAGES_OWNER (a GitHub username or org). Only registers as a tool
-when both are set (see tools/registry_builder.py).
-
-Infomaniak (paid, Swiss hosting) is the planned alternative but isn't built
-yet — it needs SFTP support (paramiko), a real dependency choice worth
-confirming before adding rather than pulling in silently.
+- Free/default: push the site's files to a GitHub repo via the REST API
+  and enable Pages on it. Needs GITHUB_PAGES_TOKEN (a personal access
+  token with 'repo' scope — https://github.com/settings/tokens) and
+  GITHUB_PAGES_OWNER (a GitHub username or org).
+- Paid/Swiss: upload the site's files to Infomaniak Web Hosting over SFTP.
+  Needs INFOMANIAK_FTP_HOST/USERNAME/PASSWORD from the Infomaniak Manager,
+  and the `paramiko` package — guards its own import the same way
+  Pillow/numpy/qrcode do elsewhere in this project, since it pulls in
+  cryptography-adjacent code that's slow/fragile to build on Termux in
+  particular (fine on a normal Pi/desktop install, which is what this was
+  built for).
 """
 from __future__ import annotations
 
@@ -21,6 +25,16 @@ import httpx
 from core.config import config
 from core.store import Store
 from tools.base import Tool
+
+try:
+    import paramiko
+except ImportError:
+    paramiko = None
+
+_PARAMIKO_MISSING_MSG = (
+    "paramiko is not installed — Infomaniak publishing needs it for SFTP "
+    "(pip install paramiko; it's in requirements.txt but may have failed to build)."
+)
 
 _GITHUB_API = "https://api.github.com"
 
@@ -115,3 +129,83 @@ class PublishWebsiteToGithubPagesTool(Tool):
             return f"Files uploaded, but couldn't enable Pages: {pages_response.text[:300]}"
 
         return f"Published to https://{owner}.github.io/{repo}/ (may take a minute to go live)."
+
+
+class PublishWebsiteToInfomaniakTool(Tool):
+    name = "publish_website_to_infomaniak"
+    description = (
+        "Publish a website (created with create_website) to Infomaniak Web Hosting over SFTP — "
+        "the paid Swiss alternative to the free publish_website_to_github_pages. Uploads every "
+        "file into remote_dir (default: a folder named after the site)."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "site_name": {"type": "string"},
+            "remote_dir": {
+                "type": "string",
+                "description": "Remote directory to upload into, e.g. a subdomain's docroot. "
+                "Defaults to a folder named after the site.",
+            },
+        },
+        "required": ["site_name"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(self, site_name: str, remote_dir: str | None = None) -> str:
+        if paramiko is None:
+            return _PARAMIKO_MISSING_MSG
+
+        doc = self._store.get_document(site_name)
+        if not doc or doc.kind != "website":
+            return f"No website named '{site_name}'. Use create_website first."
+
+        site_dir = Path(doc.path)
+        remote_base = remote_dir or site_name
+        files = _site_files(site_dir)
+
+        transport = paramiko.Transport((config.infomaniak_ftp_host, 22))
+        try:
+            transport.connect(username=config.infomaniak_ftp_username, password=config.infomaniak_ftp_password)
+        except paramiko.AuthenticationException:
+            transport.close()
+            return "Infomaniak SFTP login failed — check INFOMANIAK_FTP_USERNAME/PASSWORD."
+        except (OSError, paramiko.SSHException) as exc:
+            transport.close()
+            return f"Could not connect to Infomaniak: {exc}"
+
+        try:
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            self._mkdir_p(sftp, remote_base)
+            for file_path in files:
+                relative = file_path.relative_to(site_dir).as_posix()
+                remote_path = f"{remote_base}/{relative}"
+                remote_parent = str(Path(remote_path).parent.as_posix())
+                self._mkdir_p(sftp, remote_parent)
+                sftp.put(str(file_path), remote_path)
+            sftp.close()
+        except (OSError, paramiko.SSHException) as exc:
+            return f"Upload to Infomaniak failed partway through: {exc}"
+        finally:
+            transport.close()
+
+        return (
+            f"Uploaded {len(files)} file(s) to Infomaniak under '{remote_base}'. "
+            "Check your Infomaniak domain/subdomain mapping for the live URL."
+        )
+
+    @staticmethod
+    def _mkdir_p(sftp, remote_directory: str) -> None:
+        """SFTP has no recursive mkdir — create each path segment that
+        doesn't already exist."""
+        if remote_directory in ("", "."):
+            return
+        path = ""
+        for part in remote_directory.strip("/").split("/"):
+            path = f"{path}/{part}" if path else part
+            try:
+                sftp.stat(path)
+            except (FileNotFoundError, OSError):
+                sftp.mkdir(path)
