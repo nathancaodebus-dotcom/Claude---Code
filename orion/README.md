@@ -50,6 +50,7 @@ Around 90-130 tools depending on configuration, registered in
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
 | Productivity | to-dos, notes, shopping list, reminders & timers, project/milestone tracking, **meeting briefing dossiers** (prep on a person/company before a meeting) |
 | **Documents** | create/edit PowerPoint/Word/Excel (rows, formulas, charts) by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) |
+| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text — local files for now, publishing online is a planned next step |
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
@@ -467,6 +468,35 @@ If you build or wire up real exchange execution yourself on top of this,
 treat the paper-tracking numbers here as informative, not validated —
 they've never been tested against real capital, slippage, fees, or a live
 order book.
+
+## 13. Website creation
+
+Ask Orion to create a site and it writes plain HTML/CSS straight to disk —
+no framework, no build step, no external font/CDN dependency, so pages
+load instantly and there's nothing to break. Every page shares one clean,
+responsive, dark-mode-aware CSS baseline (`tools/website_tools.py`); Claude
+supplies each page's actual content as semantic HTML, so wording and
+structure are still fully under your control, just wrapped in a
+consistent, tested-looking shell.
+
+```
+"crée-moi un site pour mon portfolio, avec une page d'accueil et une page contact"
+"ajoute une page 'projets' avec une liste de mes trois derniers projets"
+"change le texte de la page contact"
+```
+
+- `create_website` — one or more pages, returns the `site_name` for later
+  `add_website_page` / `edit_website_page` / `delete_website_page` /
+  `list_website_pages` calls, same pattern as the presentation/document
+  tools. Every page in a site links to every other page in its nav, so
+  adding or removing a page regenerates all of them, not just the one that
+  changed.
+- Output lands in `outputs/websites/<site_name>/` — open `index.html` in
+  any browser to view it, no server needed.
+
+**This creates local files only — it does not publish anything online.**
+Getting a real, publicly reachable URL (a custom domain, hosting) is a
+separate step planned for later, not yet built.
 
 ## What's deferred (from the full integration wishlist)
 

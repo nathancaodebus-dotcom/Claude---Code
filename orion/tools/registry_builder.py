@@ -358,6 +358,25 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     _register_safe(registry, "PowerPoint", _pptx)
 
+    def _website() -> None:
+        from tools.website_tools import (
+            AddWebsitePageTool,
+            CreateWebsiteTool,
+            DeleteWebsitePageTool,
+            EditWebsitePageTool,
+            ListWebsitePagesTool,
+            ListWebsitesTool,
+        )
+
+        registry.register(CreateWebsiteTool(store))
+        registry.register(AddWebsitePageTool(store))
+        registry.register(EditWebsitePageTool(store))
+        registry.register(DeleteWebsitePageTool(store))
+        registry.register(ListWebsitePagesTool(store))
+        registry.register(ListWebsitesTool(store))
+
+    _register_safe(registry, "website creation", _website)
+
     def _docx() -> None:
         from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
 
