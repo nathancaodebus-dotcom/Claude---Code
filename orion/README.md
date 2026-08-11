@@ -363,6 +363,15 @@ These all follow the same pattern as everything else — set the relevant
 - **Image analysis**: no setup — `analyze_image` sends a local image file
   to Claude's vision for critique/description (design mockups, screenshots,
   photos). No camera needed, since it works from a file, not a live feed.
+- **Proactive health monitoring**: no setup — `core/health_monitor.py`
+  watches the same failure log `list_failed_commands` reads from, and
+  pushes an alert (same channel as reminders: printed on CLI, spoken on
+  the voice loop, a Telegram message) the moment a tool has failed 3+
+  times in the last hour, instead of waiting for you to notice something's
+  broken and ask. Re-alerts on the same tool are capped at once per 6
+  hours so a sustained outage doesn't spam you, and a failed delivery
+  (e.g. a network blip) retries on the next poll rather than being lost
+  until the cooldown clears.
 
 ## 11. Talking to Orion straight from the phone, no Telegram — Termux
 

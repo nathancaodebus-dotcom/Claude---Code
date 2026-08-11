@@ -5,6 +5,7 @@ from __future__ import annotations
 from core import attachments
 from core.agent import Agent
 from core.config import config
+from core.health_monitor import HealthMonitor
 from core.memory import Memory
 from core.scheduler import ReminderScheduler
 from core.store import Store
@@ -23,6 +24,9 @@ def main() -> None:
 
     scheduler = ReminderScheduler(store, notify=lambda text: print(f"\n{config.assistant_name}> {text}\n"))
     scheduler.start()
+
+    health_monitor = HealthMonitor(store, notify=lambda text: print(f"\n{config.assistant_name}> {text}\n"))
+    health_monitor.start()
 
     print(f"{config.assistant_name} is online. Type 'exit' to quit.\n")
     while True:
@@ -44,6 +48,7 @@ def main() -> None:
             print(f"[attachment saved: {path}]")
 
     scheduler.stop()
+    health_monitor.stop()
 
 
 if __name__ == "__main__":

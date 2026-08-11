@@ -18,6 +18,7 @@ import sounddevice as sd
 from core import attachments
 from core.agent import Agent
 from core.config import config
+from core.health_monitor import HealthMonitor
 from core.memory import Memory
 from core.scheduler import ReminderScheduler
 from core.store import Store
@@ -88,6 +89,7 @@ class VoiceLoop:
         self._tts = get_synthesizer(self._piper_model_path() if not config.elevenlabs_api_key else None)
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
         self._scheduler = ReminderScheduler(store, notify=lambda text: self._speak(text, urgent=True))
+        self._health_monitor = HealthMonitor(store, notify=lambda text: self._speak(text, urgent=True))
         # Overwritten by _calibrate_silence_threshold() once run() starts;
         # this fallback only matters if something (e.g. a reminder) speaks
         # before that's had a chance to run.
@@ -235,6 +237,7 @@ class VoiceLoop:
     def run(self) -> None:
         print(f"{config.assistant_name} voice loop running. Say '{config.wake_word}' to start.")
         self._scheduler.start()
+        self._health_monitor.start()
 
         with sd.InputStream(
             samplerate=SAMPLE_RATE,

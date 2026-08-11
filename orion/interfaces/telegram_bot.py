@@ -9,8 +9,10 @@ configured, otherwise a local Piper model if one happens to be present on
 whatever machine runs this bot. If neither is available, replies stay
 text-only exactly as before; nothing breaks.
 
-Also the interface that delivers proactive reminders/timers: a JobQueue job
-polls the reminder store and messages the owner when one comes due.
+Also the interface that delivers proactive pushes: a JobQueue job polls the
+reminder store and messages the owner when one comes due, and a second job
+polls for tools that have started failing repeatedly (core/health_monitor.py)
+so a dead integration surfaces on its own instead of waiting to be asked.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from telegram.ext import Application, ContextTypes, MessageHandler, filters
 from core import attachments
 from core.agent import Agent
 from core.config import config
+from core.health_monitor import pending_alerts
 from core.memory import Memory
 from core.store import Store
 from core.tts import Synthesizer, get_synthesizer_if_available
@@ -36,6 +39,7 @@ logger = logging.getLogger("orion.telegram")
 
 SESSION_ID = "telegram"
 REMINDER_POLL_INTERVAL_S = 15
+HEALTH_POLL_INTERVAL_S = 300
 
 
 def _is_authorized(update: Update) -> bool:
@@ -145,14 +149,21 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
                     await context.bot.send_voice(chat_id=config.telegram_allowed_user_id, voice=ogg_bytes)
             store.mark_reminder_delivered(reminder.id)
 
+    async def check_health_alerts(context: ContextTypes.DEFAULT_TYPE) -> None:
+        for tool_name, message in pending_alerts(store):
+            await context.bot.send_message(chat_id=config.telegram_allowed_user_id, text=message)
+            store.mark_health_alerted(tool_name)
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
     if application.job_queue is not None:
         application.job_queue.run_repeating(check_reminders, interval=REMINDER_POLL_INTERVAL_S, first=5)
+        application.job_queue.run_repeating(check_health_alerts, interval=HEALTH_POLL_INTERVAL_S, first=30)
     else:
         logger.warning(
             "JobQueue unavailable (install 'python-telegram-bot[job-queue]') — "
-            "reminders won't be pushed proactively, only listable via list_reminders."
+            "reminders and health alerts won't be pushed proactively, only listable via "
+            "list_reminders / list_failed_commands."
         )
     return application
 

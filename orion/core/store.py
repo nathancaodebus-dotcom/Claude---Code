@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS failed_commands (
     created_at REAL NOT NULL
 );
 
+-- Tracks the last time each tool triggered a proactive health alert (see
+-- core/health_monitor.py), so a sustained outage gets one push notification
+-- per cooldown window instead of one every poll.
+CREATE TABLE IF NOT EXISTS health_alerts (
+    tool_name TEXT PRIMARY KEY,
+    last_alerted_at REAL NOT NULL
+);
+
 -- Crypto portfolio tracking. "portfolio" is a free-text label (e.g.
 -- 'stable', 'risky') rather than its own table — there's nothing to manage
 -- about a portfolio beyond the name it groups holdings/trades under.
@@ -383,6 +391,30 @@ class Store:
             (limit,),
         ).fetchall()
         return rows
+
+    def recent_failure_counts(self, window_s: float) -> dict[str, int]:
+        cutoff = time.time() - window_s
+        rows = self._conn.execute(
+            "SELECT tool_name, COUNT(*) FROM failed_commands WHERE created_at >= ? GROUP BY tool_name",
+            (cutoff,),
+        ).fetchall()
+        return {tool_name: count for tool_name, count in rows}
+
+    # --- health alerts (proactive, see core/health_monitor.py) ---
+
+    def last_health_alert(self, tool_name: str) -> float | None:
+        row = self._conn.execute(
+            "SELECT last_alerted_at FROM health_alerts WHERE tool_name = ?", (tool_name,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def mark_health_alerted(self, tool_name: str) -> None:
+        self._conn.execute(
+            "INSERT INTO health_alerts (tool_name, last_alerted_at) VALUES (?, ?) "
+            "ON CONFLICT(tool_name) DO UPDATE SET last_alerted_at = excluded.last_alerted_at",
+            (tool_name, time.time()),
+        )
+        self._conn.commit()
 
     # --- crypto portfolio (paper-tracked; see tools/crypto_tools.py for why
     # every position change goes through a proposal + explicit confirmation
