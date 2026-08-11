@@ -26,10 +26,18 @@ from tools.registry_builder import build_registry
 
 SAMPLE_RATE = 16000
 FRAME_SIZE = 1280  # 80ms at 16kHz, openWakeWord's expected chunk size
-SILENCE_THRESHOLD = 500  # RMS amplitude below this counts as silence
+SILENCE_THRESHOLD = 500  # fallback RMS amplitude below which counts as silence, until calibrated
 SILENCE_DURATION_S = 1.2  # stop recording after this much trailing silence
 MAX_UTTERANCE_S = 15
 SESSION_ID = "voice"
+
+# Ambient noise varies a lot by room/mic, and a fixed SILENCE_THRESHOLD is
+# either too twitchy in a noisy room or too slow to notice silence in a
+# quiet one. Measure the real ambient level once at startup and set the
+# actual threshold from that instead.
+CALIBRATION_DURATION_S = 1.5
+SILENCE_MARGIN_MULTIPLIER = 2.5  # threshold = ambient RMS * this
+MIN_SILENCE_THRESHOLD = 150  # floor, in case the room is closer to silent than any mic's noise floor
 
 # Once the wake word has fired once, keep the conversation open turn after
 # turn instead of requiring it again for every exchange (matching the
@@ -41,6 +49,17 @@ SESSION_ID = "voice"
 MAX_CONVERSATION_TURNS = 20
 FOLLOWUP_LISTEN_GRACE_S = 4.0
 STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop jarvis", "goodbye"}
+
+# Barge-in: while Jarvis is talking, a loud-enough sound cuts playback short
+# so the user can interrupt instead of having to wait it out. The multiplier
+# is much stricter than the ordinary silence threshold on purpose — this is
+# a plain RMS check on the same microphone used for everything else, with no
+# acoustic echo cancellation, so it needs a real margin to avoid Jarvis's own
+# voice bleeding from the speaker into the mic (worse the closer they are,
+# e.g. both built into one Pi case) triggering a false interruption. This
+# reduces false positives; it does not eliminate them the way real AEC would.
+BARGE_IN_LOUDNESS_MULTIPLIER = 3.0
+BARGE_IN_CONSECUTIVE_CHUNKS = 2
 
 
 def _rms(chunk: np.ndarray) -> float:
@@ -63,6 +82,10 @@ class VoiceLoop:
         self._tts = get_synthesizer(self._piper_model_path() if not config.elevenlabs_api_key else None)
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
         self._scheduler = ReminderScheduler(store, notify=lambda text: self._speak(text, urgent=True))
+        # Overwritten by _calibrate_silence_threshold() once run() starts;
+        # this fallback only matters if something (e.g. a reminder) speaks
+        # before that's had a chance to run.
+        self._silence_threshold = float(SILENCE_THRESHOLD)
 
     def _piper_model_path(self) -> str:
         from pathlib import Path
@@ -79,11 +102,30 @@ class VoiceLoop:
     def _audio_callback(self, indata, frames, time_info, status) -> None:  # noqa: ANN001
         self._audio_queue.put(indata.copy())
 
-    def _speak(self, text: str, urgent: bool = False) -> None:
+    def _speak(self, text: str, urgent: bool = False) -> bool:
+        """Plays text as speech. Returns True if the user talked loudly
+        enough, for long enough, to count as barging in — playback was cut
+        short in that case rather than played to completion."""
         raw = self._tts.synthesize(text, urgent=urgent)
         audio = np.frombuffer(raw, dtype=np.int16)
+        self._drain_queue()
         sd.play(audio, samplerate=self._tts.sample_rate)
-        sd.wait()
+
+        loud_chunks = 0
+        barge_in_level = self._silence_threshold * BARGE_IN_LOUDNESS_MULTIPLIER
+        while sd.get_stream().active:
+            try:
+                chunk = self._audio_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if _rms(chunk) > barge_in_level:
+                loud_chunks += 1
+                if loud_chunks >= BARGE_IN_CONSECUTIVE_CHUNKS:
+                    sd.stop()
+                    return True
+            else:
+                loud_chunks = 0
+        return False
 
     def _record_utterance(
         self, stream: sd.InputStream, max_initial_silence_s: float | None = None
@@ -97,7 +139,7 @@ class VoiceLoop:
             chunk = self._audio_queue.get()
             frames.append(chunk)
 
-            if _rms(chunk) < SILENCE_THRESHOLD:
+            if _rms(chunk) < self._silence_threshold:
                 silence_start = silence_start or time.time()
                 limit = SILENCE_DURATION_S if speech_detected else (max_initial_silence_s or SILENCE_DURATION_S)
                 if time.time() - silence_start > limit:
@@ -114,6 +156,21 @@ class VoiceLoop:
     def _drain_queue(self) -> None:
         while not self._audio_queue.empty():
             self._audio_queue.get_nowait()
+
+    def _calibrate_silence_threshold(self) -> None:
+        """Measures the real ambient noise level for a moment so silence
+        detection is neither too twitchy (noisy room) nor too slow to
+        notice silence (quiet room) with a one-size-fits-all constant."""
+        print("Calibrating microphone for ambient noise...")
+        self._drain_queue()
+        levels = []
+        deadline = time.time() + CALIBRATION_DURATION_S
+        while time.time() < deadline:
+            levels.append(_rms(self._audio_queue.get()))
+
+        ambient = float(np.median(levels)) if levels else float(SILENCE_THRESHOLD)
+        self._silence_threshold = max(MIN_SILENCE_THRESHOLD, ambient * SILENCE_MARGIN_MULTIPLIER)
+        print(f"Ambient noise level: {ambient:.0f} — silence threshold set to {self._silence_threshold:.0f}")
 
     def _listen_and_transcribe(self, stream: sd.InputStream, *, is_followup: bool) -> str:
         utterance = self._record_utterance(
@@ -158,6 +215,7 @@ class VoiceLoop:
             blocksize=FRAME_SIZE,
             callback=self._audio_callback,
         ) as stream:
+            self._calibrate_silence_threshold()
             while True:
                 chunk = self._audio_queue.get()
                 prediction = self._wake_model.predict(chunk.flatten())

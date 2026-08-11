@@ -254,6 +254,16 @@ definitions sent to Claude on every turn is prompt-cached so it isn't
 reprocessed from scratch each time — both cut down the pause between asking
 and hearing a reply.
 
+On first start (and each time you launch it), it spends about a second and
+a half measuring the room's actual background noise and sets its
+silence-detection threshold from that, rather than a fixed value that's
+wrong for most rooms/mics. You can also talk over Jarvis while it's
+speaking to cut it off and start your next turn immediately, instead of
+having to wait for it to finish — though since this is a plain volume
+check on the same mic (no real echo cancellation), a speaker and mic
+crammed close together may occasionally misfire; move them apart a bit if
+that happens.
+
 ## 8. Running as background services on the Pi
 
 ```bash

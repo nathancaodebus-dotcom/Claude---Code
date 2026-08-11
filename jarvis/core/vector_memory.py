@@ -39,6 +39,32 @@ class MemoryMatch:
     score: float
 
 
+def _top_k_matches(
+    query_vec: np.ndarray, rows: list[tuple[str, str, bytes]], top_k: int
+) -> list[MemoryMatch]:
+    """Scores every row against query_vec in one vectorized matrix multiply
+    instead of a per-row Python loop, and uses a partial (O(n)) top-k
+    selection instead of a full sort — still a flat in-memory scan (no
+    vector DB / ANN index), which stays fast enough at the thousands-of-
+    entries scale a personal assistant's memory actually reaches, just
+    without leaving obvious performance on the table for something this
+    cheap to fix."""
+    if not rows:
+        return []
+
+    embeddings = np.stack([np.frombuffer(blob, dtype=np.float32) for _, _, blob in rows])
+    scores = embeddings @ query_vec.astype(np.float32)  # both normalized -> dot product == cosine similarity
+
+    top_k = min(top_k, len(rows))
+    top_indices = np.argpartition(-scores, top_k - 1)[:top_k]
+    top_indices = top_indices[np.argsort(-scores[top_indices])]
+
+    return [
+        MemoryMatch(text=rows[i][0], source=rows[i][1], score=float(scores[i]))
+        for i in top_indices
+    ]
+
+
 class VectorMemory:
     def __init__(self, db_path: str | None = None):
         from sentence_transformers import SentenceTransformer
@@ -65,13 +91,4 @@ class VectorMemory:
         rows = self._conn.execute("SELECT text, source, embedding FROM memory_embeddings").fetchall()
         if not rows:
             return []
-
-        query_vec = self._embed(query)
-        scored = []
-        for text, source, blob in rows:
-            vec = np.frombuffer(blob, dtype=np.float32)
-            score = float(np.dot(query_vec, vec))  # both normalized -> dot product == cosine similarity
-            scored.append(MemoryMatch(text=text, source=source, score=score))
-
-        scored.sort(key=lambda m: m.score, reverse=True)
-        return scored[:top_k]
+        return _top_k_matches(self._embed(query), rows, top_k)
