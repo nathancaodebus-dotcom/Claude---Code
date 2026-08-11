@@ -245,6 +245,15 @@ python -m interfaces.voice.voice_loop
 Say the wake word (`WAKE_WORD` in `.env`, default `hey_jarvis`), then
 speak your request; Jarvis answers out loud.
 
+Once the wake word has fired, the conversation stays open — keep talking
+turn after turn without repeating it, until you go quiet, say "stop" (or
+"arrête"), or hit the 20-turn cap. Replies are also streamed sentence by
+sentence: Jarvis starts speaking the first sentence as soon as it's ready
+instead of waiting for the whole answer, and the (fairly large) set of tool
+definitions sent to Claude on every turn is prompt-cached so it isn't
+reprocessed from scratch each time — both cut down the pause between asking
+and hearing a reply.
+
 ## 8. Running as background services on the Pi
 
 ```bash

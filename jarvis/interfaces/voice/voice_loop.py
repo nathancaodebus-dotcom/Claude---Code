@@ -31,6 +31,17 @@ SILENCE_DURATION_S = 1.2  # stop recording after this much trailing silence
 MAX_UTTERANCE_S = 15
 SESSION_ID = "voice"
 
+# Once the wake word has fired once, keep the conversation open turn after
+# turn instead of requiring it again for every exchange (matching the
+# Termux interface's behavior). FOLLOWUP_LISTEN_GRACE_S is deliberately more
+# generous than SILENCE_DURATION_S: that constant is for detecting when an
+# utterance the user has already started *ends*, but deciding whether
+# they're going to say anything else at all needs more breathing room than
+# that, or the conversation ends before they've had a chance to speak again.
+MAX_CONVERSATION_TURNS = 20
+FOLLOWUP_LISTEN_GRACE_S = 4.0
+STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop jarvis", "goodbye"}
+
 
 def _rms(chunk: np.ndarray) -> float:
     return float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
@@ -74,9 +85,12 @@ class VoiceLoop:
         sd.play(audio, samplerate=self._tts.sample_rate)
         sd.wait()
 
-    def _record_utterance(self, stream: sd.InputStream) -> np.ndarray:
+    def _record_utterance(
+        self, stream: sd.InputStream, max_initial_silence_s: float | None = None
+    ) -> np.ndarray:
         frames: list[np.ndarray] = []
         silence_start: float | None = None
+        speech_detected = False
         start_time = time.time()
 
         while True:
@@ -85,15 +99,53 @@ class VoiceLoop:
 
             if _rms(chunk) < SILENCE_THRESHOLD:
                 silence_start = silence_start or time.time()
-                if time.time() - silence_start > SILENCE_DURATION_S:
+                limit = SILENCE_DURATION_S if speech_detected else (max_initial_silence_s or SILENCE_DURATION_S)
+                if time.time() - silence_start > limit:
                     break
             else:
+                speech_detected = True
                 silence_start = None
 
             if time.time() - start_time > MAX_UTTERANCE_S:
                 break
 
         return np.concatenate(frames).flatten()
+
+    def _drain_queue(self) -> None:
+        while not self._audio_queue.empty():
+            self._audio_queue.get_nowait()
+
+    def _listen_and_transcribe(self, stream: sd.InputStream, *, is_followup: bool) -> str:
+        utterance = self._record_utterance(
+            stream, max_initial_silence_s=FOLLOWUP_LISTEN_GRACE_S if is_followup else None
+        )
+        segments, _ = self._stt.transcribe(
+            utterance.astype(np.float32) / 32768.0, language=config.voice_language
+        )
+        return " ".join(s.text for s in segments).strip()
+
+    def _converse(self, stream: sd.InputStream) -> None:
+        """Runs a full back-and-forth once the wake word has fired: keeps
+        listening turn after turn — no need to repeat the wake word — until
+        the user goes quiet, says a stop phrase, or hits the turn cap."""
+        for turn in range(MAX_CONVERSATION_TURNS):
+            text = self._listen_and_transcribe(stream, is_followup=turn > 0)
+            if not text:
+                break  # nothing said — end the conversation, back to wake-word listening
+
+            print(f"you (spoken)> {text}")
+            if text.strip().lower() in STOP_PHRASES:
+                self._speak("Goodbye.")
+                break
+
+            reply = self._agent.respond_streaming(SESSION_ID, text, on_sentence=self._speak)
+            print(f"{config.assistant_name}> {reply}")
+
+            saved_files = attachments.drain()
+            if saved_files:
+                print(f"[files saved: {', '.join(saved_files)}]")
+
+            self._drain_queue()
 
     def run(self) -> None:
         print(f"{config.assistant_name} voice loop running. Say '{config.wake_word}' to start.")
@@ -113,26 +165,8 @@ class VoiceLoop:
                     continue
 
                 print("Wake word detected, listening...")
-                # Drain the wake-word chunk backlog so recording starts fresh.
-                while not self._audio_queue.empty():
-                    self._audio_queue.get_nowait()
-
-                utterance = self._record_utterance(stream)
-                segments, _ = self._stt.transcribe(
-                    utterance.astype(np.float32) / 32768.0, language=config.voice_language
-                )
-                text = " ".join(s.text for s in segments).strip()
-                if not text:
-                    continue
-
-                print(f"you (spoken)> {text}")
-                reply = self._agent.respond(SESSION_ID, text)
-                print(f"{config.assistant_name}> {reply}")
-                self._speak(reply)
-
-                saved_files = attachments.drain()
-                if saved_files:
-                    print(f"[files saved: {', '.join(saved_files)}]")
+                self._drain_queue()  # drop the wake-word backlog so recording starts fresh
+                self._converse(stream)
 
 
 def main() -> None:

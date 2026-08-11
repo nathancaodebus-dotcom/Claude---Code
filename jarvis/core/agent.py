@@ -1,6 +1,11 @@
 """The Jarvis agent loop: one Claude tool-use loop shared by every interface
-(CLI, Telegram, voice). Interfaces only ever call `Agent.respond()`."""
+(CLI, Telegram, voice). Interfaces only ever call `Agent.respond()` (or
+`Agent.respond_streaming()` for one that wants to react to the reply as it's
+generated, e.g. to start speaking before the full text is ready)."""
 from __future__ import annotations
+
+import re
+from typing import Any, Callable
 
 import anthropic
 
@@ -9,7 +14,10 @@ from core.consolidation import Consolidator, make_default_summarizer
 from core.memory import Memory
 from tools.base import ToolRegistry
 
-SYSTEM_PROMPT_TEMPLATE = """You are {name}, the user's personal AI assistant — a second self they can \
+# Static instructions only — never changes across users, sessions, or turns,
+# which is what makes it worth prompt-caching (see _system_blocks below).
+# Per-user facts/summary are appended as a separate, uncached block.
+SYSTEM_PROMPT_STATIC = """You are {name}, the user's personal AI assistant — a second self they can \
 ask for absolutely anything, at any time: answering questions, managing email, managing their \
 calendar, controlling devices in their home, generating and editing documents (PowerPoint, Word, \
 Excel), playing music and video, or just talking things through. Requests arrive as dictated speech \
@@ -37,13 +45,14 @@ that you've opened the app and the user will need to pick the title themselves, 
 
 Some capabilities are duplicated across a built-in version and an external service (to-dos vs. Todoist, \
 notes vs. Obsidian) — if both are available and the user hasn't said which they mean, ask once, then \
-remember the answer as a preference so you don't ask again.
-
-{facts_block}
-
-{summary_block}"""
+remember the answer as a preference so you don't ask again."""
 
 MAX_TOOL_ITERATIONS = 8
+
+# Chunk streamed text into sentences at ., !, ?, or … followed by whitespace,
+# so a voice interface can start synthesizing/speaking each sentence as soon
+# as it's complete instead of waiting for the whole reply.
+_SENTENCE_END_RE = re.compile(r"[.!?…]+(?:\s+|$)")
 
 
 class Agent:
@@ -55,14 +64,49 @@ class Agent:
             memory, make_default_summarizer(self._client, config.model)
         )
 
-    def _system_prompt(self, session_id: str) -> str:
-        return SYSTEM_PROMPT_TEMPLATE.format(
-            name=config.assistant_name,
-            facts_block=self._memory.facts_as_prompt_block(),
-            summary_block=self._memory.summary_as_prompt_block(session_id),
+    def _system_blocks(self, session_id: str) -> list[dict[str, Any]]:
+        static_text = SYSTEM_PROMPT_STATIC.format(name=config.assistant_name)
+        blocks = [
+            {"type": "text", "text": static_text, "cache_control": {"type": "ephemeral"}}
+        ]
+
+        dynamic_text = "\n\n".join(
+            block
+            for block in (
+                self._memory.facts_as_prompt_block(),
+                self._memory.summary_as_prompt_block(session_id),
+            )
+            if block
         )
+        if dynamic_text:
+            blocks.append({"type": "text", "text": dynamic_text})
+        return blocks
+
+    def _cached_tool_schemas(self) -> list[dict[str, Any]]:
+        """Marks a cache breakpoint after the tool definitions (by far the
+        largest and most stable part of every request — over a hundred tool
+        schemas that never change between calls) so Claude reuses them
+        instead of reprocessing the full list on every single turn."""
+        schemas = self._tools.anthropic_schemas()
+        if not schemas:
+            return schemas
+        schemas = list(schemas)
+        schemas[-1] = {**schemas[-1], "cache_control": {"type": "ephemeral"}}
+        return schemas
 
     def respond(self, session_id: str, user_message: str) -> str:
+        return self.respond_streaming(session_id, user_message, on_sentence=None)
+
+    def respond_streaming(
+        self,
+        session_id: str,
+        user_message: str,
+        on_sentence: Callable[[str], None] | None,
+    ) -> str:
+        """Runs the same tool-use loop as respond(), but streams the final
+        answer and calls on_sentence(text) as each sentence completes,
+        instead of only returning once the whole reply is done. Pass None
+        for on_sentence to just get the full text back, as respond() does."""
         self._memory.append(session_id, "user", user_message)
 
         messages = [
@@ -71,13 +115,24 @@ class Agent:
 
         final_text = ""
         for _ in range(MAX_TOOL_ITERATIONS):
-            response = self._client.messages.create(
+            buffer = ""
+            with self._client.messages.stream(
                 model=config.model,
                 max_tokens=2048,
-                system=self._system_prompt(session_id),
-                tools=self._tools.anthropic_schemas(),
+                system=self._system_blocks(session_id),
+                tools=self._cached_tool_schemas(),
                 messages=messages,
-            )
+            ) as stream:
+                for delta in stream.text_stream:
+                    buffer += delta
+                    if on_sentence is not None:
+                        while (match := _SENTENCE_END_RE.search(buffer)) is not None:
+                            on_sentence(buffer[: match.end()].strip())
+                            buffer = buffer[match.end():]
+                response = stream.get_final_message()
+
+            if on_sentence is not None and buffer.strip():
+                on_sentence(buffer.strip())
 
             text_blocks = [b.text for b in response.content if b.type == "text"]
             final_text = "\n".join(text_blocks).strip()
