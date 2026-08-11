@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from interfaces.termux.jarvis_termux import MAX_TURNS_PER_SESSION, run_conversation
+from interfaces.termux.orion_termux import MAX_TURNS_PER_SESSION, run_conversation
 
 
 class FakeAgent:

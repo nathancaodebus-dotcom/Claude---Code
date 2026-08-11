@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/jarvis
-EnvironmentFile=/home/pi/jarvis/.env
-ExecStart=/home/pi/jarvis/.venv/bin/python -m interfaces.voice.voice_loop
+WorkingDirectory=/home/pi/orion
+EnvironmentFile=/home/pi/orion/.env
+ExecStart=/home/pi/orion/.venv/bin/python -m interfaces.voice.voice_loop
 Restart=on-failure
 RestartSec=5
 

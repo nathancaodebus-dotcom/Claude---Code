@@ -21,8 +21,8 @@ Setup (see README §11 for the full walkthrough):
        same plugin architecture used everywhere else here, any tool whose
        dependency didn't install just stays disabled)
     4. cp .env.example .env, fill in ANTHROPIC_API_KEY
-    5. python -m interfaces.termux.jarvis_termux
-    6. Optional: copy jarvis.sh into ~/.shortcuts/ for a Termux:Widget
+    5. python -m interfaces.termux.orion_termux
+    6. Optional: copy orion.sh into ~/.shortcuts/ for a Termux:Widget
        home-screen button that starts a conversation with one tap.
 """
 from __future__ import annotations

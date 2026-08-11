@@ -2,19 +2,18 @@
 # Termux:Widget shortcut — copy or symlink this file into ~/.shortcuts/ to
 # get a one-tap home-screen button that starts a conversation with Orion.
 # Termux:Widget labels the button after the destination filename, hence
-# copying it to Orion.sh below even though the source file here keeps its
-# original name.
+# copying it to Orion.sh below.
 #
 #   mkdir -p ~/.shortcuts
-#   cp ~/jarvis/interfaces/termux/jarvis.sh ~/.shortcuts/Orion.sh
+#   cp ~/orion/interfaces/termux/orion.sh ~/.shortcuts/Orion.sh
 #   chmod +x ~/.shortcuts/Orion.sh
 #
 # Then add the Termux:Widget widget to your home screen and pick "Orion".
-# Adjust JARVIS_DIR below if you cloned the repo somewhere other than ~/jarvis.
+# Adjust ORION_DIR below if you cloned the repo somewhere other than ~/orion.
 
 set -e
-JARVIS_DIR="$HOME/jarvis"
+ORION_DIR="$HOME/orion"
 
-cd "$JARVIS_DIR"
+cd "$ORION_DIR"
 source .venv/bin/activate
-python -m interfaces.termux.jarvis_termux
+python -m interfaces.termux.orion_termux

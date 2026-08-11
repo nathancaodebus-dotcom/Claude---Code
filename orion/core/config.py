@@ -38,11 +38,12 @@ class Config:
         default_factory=lambda: _get("HOME_ASSISTANT_TOKEN")
     )
 
-    # Stays "hey_jarvis" even though the assistant is now Orion: openWakeWord
-    # only ships a few pretrained wake-word models, and this is the closest
-    # one available — there's no ready-made "hey_orion" model to switch to
-    # without training a custom one (see README §7).
-    wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_jarvis"))
+    # openWakeWord has no pretrained "hey_orion" model — this only works once
+    # you've trained a custom one (or switched wake-word engines) and pointed
+    # WAKE_WORD at it; see README §7. interfaces/voice/voice_loop.py raises a
+    # clear, actionable error at startup rather than a cryptic one if no
+    # model matching this value can be loaded.
+    wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_orion"))
     voice_language: str = field(default_factory=lambda: _get("VOICE_LANGUAGE", "fr"))
 
     spotify_client_id: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_ID"))

@@ -74,7 +74,7 @@ class VoiceLoop:
         memory = Memory()
         store = Store()
         self._agent = Agent(memory, build_registry(memory, store))
-        self._wake_model = WakeWordModel(wakeword_models=[config.wake_word])
+        self._wake_model = self._load_wake_model(WakeWordModel)
         self._stt = WhisperModel("small", device="cpu", compute_type="int8")
         # Uses ElevenLabs if ELEVENLABS_API_KEY is set (expressive, cloud), else
         # local Piper — expects a voice model matching config.voice_language, e.g.
@@ -86,6 +86,28 @@ class VoiceLoop:
         # this fallback only matters if something (e.g. a reminder) speaks
         # before that's had a chance to run.
         self._silence_threshold = float(SILENCE_THRESHOLD)
+
+    def _load_wake_model(self, wake_word_model_cls):  # noqa: ANN001
+        """openWakeWord only ships a handful of pretrained models (alexa,
+        hey_mycroft, hey_jarvis, ...) — WAKE_WORD defaults to "hey_orion",
+        which isn't one of them, and there's no ready-made model for it
+        until you train a custom one and point WAKE_WORD at that model
+        file's path (or switch wake-word engines). Fail loudly with what to
+        do about it instead of letting openWakeWord's own error, or silent
+        never-triggering detection, be the only signal."""
+        try:
+            return wake_word_model_cls(wakeword_models=[config.wake_word])
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not load wake word model '{config.wake_word}': {exc}\n"
+                "openWakeWord has no pretrained model for that phrase — its bundled models "
+                "are alexa, hey_mycroft, hey_jarvis, timer, and weather. To fix this:\n"
+                f"  1. Train a custom '{config.wake_word}' model (openWakeWord's training "
+                "notebook, ~30-60 min) and set WAKE_WORD to the resulting model file's path, or\n"
+                "  2. Set WAKE_WORD=hey_jarvis in .env for now to use the working built-in "
+                "model while you do that.\n"
+                "See README §7 for details."
+            ) from exc
 
     def _piper_model_path(self) -> str:
         from pathlib import Path

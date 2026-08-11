@@ -16,7 +16,7 @@ operational voice interfaces**, not one primary and one afterthought — see
 ## How it's built
 
 ```
-jarvis/
+orion/
   core/
     agent.py        # the Claude tool-use loop every interface shares
     memory.py       # SQLite: conversation history + long-term facts
@@ -102,7 +102,7 @@ prompt — nothing here is hidden state.
 ## 1. Setup
 
 ```bash
-cd jarvis
+cd orion
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -244,8 +244,18 @@ voice model for your language into `~/.local/share/piper/` (e.g.
 python -m interfaces.voice.voice_loop
 ```
 
-Say the wake word (`WAKE_WORD` in `.env`, default `hey_jarvis`), then
-speak your request; Orion answers out loud.
+Say the wake word (`WAKE_WORD` in `.env`), then speak your request; Orion
+answers out loud.
+
+**The `hey_orion` default won't actually trigger yet.** openWakeWord only
+ships a handful of pretrained models — alexa, hey_mycroft, hey_jarvis,
+timer, weather — and "hey_orion" isn't one of them, so there's no ready-made
+model for it. `VoiceLoop` fails fast at startup with instructions rather
+than silently never detecting anything. Until a custom model is trained
+(openWakeWord's training notebook, ~30-60 min) and `WAKE_WORD` is pointed
+at it — or a different wake-word engine that supports arbitrary phrases is
+wired in instead — set `WAKE_WORD=hey_jarvis` to use the working built-in
+model in the meantime.
 
 Once the wake word has fired, the conversation stays open — keep talking
 turn after turn without repeating it, until you go quiet, say "stop" (or
@@ -269,13 +279,13 @@ that happens.
 ## 8. Running as background services on the Pi
 
 ```bash
-sudo cp systemd/jarvis-telegram.service systemd/jarvis-voice.service /etc/systemd/system/
+sudo cp systemd/orion-telegram.service systemd/orion-voice.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now jarvis-telegram jarvis-voice
+sudo systemctl enable --now orion-telegram orion-voice
 ```
 
 Edit the `User=`, `WorkingDirectory=` and venv path in the unit files first
-if your setup differs from `/home/pi/jarvis`.
+if your setup differs from `/home/pi/orion`.
 
 ## 9. Optional extras (calendars, tasks, notes, movies, backups, safety, automation)
 
@@ -363,8 +373,8 @@ Setup:
 2. In Termux:
    ```bash
    pkg install python termux-api git rust binutils
-   git clone <your fork/branch of this repo> jarvis
-   cd jarvis/jarvis
+   git clone <your fork/branch of this repo> orion
+   cd orion/orion
    python -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
    ```
@@ -385,13 +395,13 @@ Setup:
    project means any tool whose dependency didn't install just silently
    stays disabled; the rest still works.
 3. `cp .env.example .env`, fill in `ANTHROPIC_API_KEY`.
-4. `python -m interfaces.termux.jarvis_termux` — Android's speech
+4. `python -m interfaces.termux.orion_termux` — Android's speech
    recognition prompt appears, speak, and Orion answers out loud.
 5. Optional, for a home-screen button: install the **Termux:Widget** app
    (also F-Droid), then:
    ```bash
    mkdir -p ~/.shortcuts
-   cp interfaces/termux/jarvis.sh ~/.shortcuts/Orion.sh
+   cp interfaces/termux/orion.sh ~/.shortcuts/Orion.sh
    chmod +x ~/.shortcuts/Orion.sh
    ```
    Add the Termux:Widget widget to your home screen and pick "Orion" —
@@ -423,7 +433,7 @@ Some requested integrations aren't in yet, on purpose:
   is still held for explicit confirmation given its biometric/privacy weight.
 - **PC-level system control** (app launching, shutdown/lock, window
   management, keystroke emulation, Stream Deck): these only make sense if
-  a Orion interface runs *on* the PC being controlled, not just the
+  an Orion interface runs *on* the PC being controlled, not just the
   Pi/phone — and several (input emulation, remote shutdown) need a
   deliberate security decision before being wired up.
 - **Apple Music, Amazon price tracking, game console control**: no
