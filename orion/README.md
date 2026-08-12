@@ -37,7 +37,7 @@ registering it in `tools/registry_builder.py` — nothing else changes.
 
 ## What Orion can do out of the box
 
-Around 90-130 tools depending on configuration, registered in
+Around 90-155 tools depending on configuration, registered in
 `tools/registry_builder.py`:
 
 | Category | Tools |
@@ -45,6 +45,7 @@ Around 90-130 tools depending on configuration, registered in
 | Memory | remember/recall durable facts, preferences, and corrections; **semantic memory** (search_memory/index_memory, §10) for recalling something by meaning, not exact wording |
 | Email & calendar *(needs Google setup, §2)* | search/read Gmail, draft emails, **archive/mark-read/count unread** (triage, never auto-sends), list/create Google Calendar events, search/add contacts |
 | Outlook / Microsoft 365 *(needs Azure app registration, §15)* | same shape as the Google row above but for Outlook Mail/Calendar/Contacts via Microsoft Graph — search/read/draft mail (never auto-sends), archive/mark-read/count unread, list/create calendar events, search/add contacts |
+| **Shopify** *(needs a custom app token, §16)* | run real parts of an e-commerce business — list/view/fulfill orders, sales summaries, create/update products, manage stock, search customers, create discount codes. Deliberately no refunds or order cancellation, see §16 for why |
 | Other calendars *(§9)* | list/create events on **any CalDAV calendar** — Outlook, iCloud, Nextcloud |
 | Task managers | built-in to-dos, or **Todoist** (§9) if that's where you already live |
 | Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown, with note listing/search by title |
@@ -604,6 +605,50 @@ Tools (`tools/outlook_tool.py`, `tools/microsoft_calendar_tool.py`,
 `create_outlook_calendar_event`, `search_outlook_contacts`,
 `add_outlook_contact` — all registered only when `MICROSOFT_CLIENT_ID` is
 set, same config-gating pattern as every other optional integration here.
+
+## 16. Shopify (e-commerce store management)
+
+Lets Orion run real parts of a Shopify-based online business: check and
+fulfill orders, manage the product catalog and stock levels, look up
+customers, create discount codes, and summarize recent sales — by voice
+or text, from wherever you're talking to Orion.
+
+1. In your Shopify admin: **Settings → Apps and sales channels → Develop
+   apps → Create an app**.
+2. Under **Configuration → Admin API integration**, grant these scopes:
+   `read_orders`, `write_orders`, `read_products`, `write_products`,
+   `read_inventory`, `write_inventory`, `read_customers`,
+   `read_price_rules`, `write_price_rules`.
+3. **Install the app**, then reveal and copy the **Admin API access
+   token** (shown once).
+4. Set `SHOPIFY_STORE_DOMAIN` (e.g. `your-store.myshopify.com`) and
+   `SHOPIFY_ACCESS_TOKEN` in `.env`.
+
+```
+"combien de commandes non expédiées j'ai en ce moment ?"
+"expédie la commande 1042 avec le numéro de suivi 1Z999AA1"
+"crée un produit 'Mug Orion' à 19.90 CHF"
+"remets le stock du t-shirt noir à 50"
+"fais-moi un résumé des ventes des 7 derniers jours"
+"crée un code promo BIENVENUE10, 10% de réduction"
+```
+
+Tools (`tools/shopify_tools.py`): `list_shopify_orders`,
+`get_shopify_order`, `fulfill_shopify_order`, `get_shopify_sales_summary`,
+`list_shopify_products`, `get_shopify_product`, `create_shopify_product`,
+`update_shopify_product`, `update_shopify_inventory`,
+`search_shopify_customers`, `get_shopify_customer_orders`,
+`create_shopify_discount` — registered only when both
+`SHOPIFY_STORE_DOMAIN` and `SHOPIFY_ACCESS_TOKEN` are set.
+
+**Deliberately missing: refunds and order cancellation.** Both move money
+back out or void a sale — the same category of action as auto-sending
+email (§ Gmail) or executing a real crypto trade (§12), which this
+project keeps a human in the loop for rather than letting an LLM do
+unsupervised. Everything built here either reads data or takes a normal,
+expected, reversible forward action (shipping a paid order, updating a
+listing, restocking inventory, creating a discount) — nothing that
+un-does a sale a customer already completed.
 
 ## What's deferred (from the full integration wishlist)
 

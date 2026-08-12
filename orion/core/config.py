@@ -134,5 +134,12 @@ class Config:
         default_factory=lambda: _get("MICROSOFT_TOKEN_PATH", "./microsoft_token.json")
     )
 
+    # Shopify (e-commerce store management) — a custom app's Admin API
+    # access token, not OAuth, since this manages the user's own store
+    # rather than acting as a public app for other merchants.
+    shopify_store_domain: str | None = field(default_factory=lambda: _get("SHOPIFY_STORE_DOMAIN"))
+    shopify_access_token: str | None = field(default_factory=lambda: _get("SHOPIFY_ACCESS_TOKEN"))
+    shopify_api_version: str = field(default_factory=lambda: _get("SHOPIFY_API_VERSION", "2024-10"))
+
 
 config = Config()

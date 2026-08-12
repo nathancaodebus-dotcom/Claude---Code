@@ -568,6 +568,38 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
         _register_safe(registry, "Microsoft 365 (Outlook Mail/Calendar/Contacts)", _microsoft)
 
+    if config.shopify_store_domain and config.shopify_access_token:
+        def _shopify() -> None:
+            from tools.shopify_tools import (
+                CreateShopifyDiscountTool,
+                CreateShopifyProductTool,
+                FulfillShopifyOrderTool,
+                GetShopifyCustomerOrdersTool,
+                GetShopifyOrderTool,
+                GetShopifyProductTool,
+                GetShopifySalesSummaryTool,
+                ListShopifyOrdersTool,
+                ListShopifyProductsTool,
+                SearchShopifyCustomersTool,
+                UpdateShopifyInventoryTool,
+                UpdateShopifyProductTool,
+            )
+
+            registry.register(ListShopifyOrdersTool())
+            registry.register(GetShopifyOrderTool())
+            registry.register(FulfillShopifyOrderTool())
+            registry.register(GetShopifySalesSummaryTool())
+            registry.register(ListShopifyProductsTool())
+            registry.register(GetShopifyProductTool())
+            registry.register(CreateShopifyProductTool())
+            registry.register(UpdateShopifyProductTool())
+            registry.register(UpdateShopifyInventoryTool())
+            registry.register(SearchShopifyCustomersTool())
+            registry.register(GetShopifyCustomerOrdersTool())
+            registry.register(CreateShopifyDiscountTool())
+
+        _register_safe(registry, "Shopify (e-commerce)", _shopify)
+
     if config.gemini_api_key:
         def _image_gen() -> None:
             from tools.image_gen_tools import GenerateImageTool
