@@ -125,6 +125,25 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+**On Windows** (PowerShell), the only difference is how the virtualenv is
+activated and copying `.env`:
+
+```powershell
+cd orion
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+(If PowerShell refuses to run the activation script with an "execution
+policy" error, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+once, or activate via `.venv\Scripts\activate.bat` in cmd.exe instead.)
+Everything else in this README — every `python -m ...` command, every
+`.env` variable — is identical on Windows; only shell syntax for
+activating the venv and installing OS packages (ffmpeg, etc.) differs,
+called out inline below where it comes up.
+
 Edit `.env`:
 
 - `ANTHROPIC_API_KEY` — required. Get one at https://console.anthropic.com.
@@ -225,9 +244,12 @@ back** with a voice message of its own, not just text — this is the
    in §7 if this bot happens to run on the same machine as the voice loop.
    Without either, voice messages still work — you just get a text reply
    instead of a spoken one.
-4. Install [ffmpeg](https://ffmpeg.org/) (`apt install ffmpeg` / `brew
-   install ffmpeg`) — needed to encode replies into the Opus format
-   Telegram requires for voice notes. Without it, replies fall back to text.
+4. Install [ffmpeg](https://ffmpeg.org/) (`apt install ffmpeg` on
+   Debian/Raspberry Pi OS, `brew install ffmpeg` on macOS, `winget install
+   ffmpeg` or `choco install ffmpeg` on Windows — or download a build from
+   ffmpeg.org and add it to your `PATH` manually) — needed to encode
+   replies into the Opus format Telegram requires for voice notes. Without
+   it, replies fall back to text.
 5. Run it:
    ```bash
    python -m interfaces.telegram_bot
@@ -245,17 +267,27 @@ or even the same laptop as the CLI. Point it at the same `ORION_DB_PATH` as
 your Pi's voice loop and they share memory/facts/to-dos; point it at a
 different one and they're independent.
 
-## 7. Always-listening voice on a Raspberry Pi
+## 7. Always-listening voice
 
-For the closest experience to actually talking to Orion out loud:
+Works the same way on a Raspberry Pi, a Linux/macOS machine, or Windows —
+for the closest experience to actually talking to Orion out loud:
 
 ```bash
 pip install -r requirements-voice.txt
 ```
 
+**On Windows**, this installs cleanly with no extra system package —
+`sounddevice`'s wheel already bundles PortAudio (unlike Debian/Raspberry
+Pi OS, where `sudo apt install libportaudio2` is sometimes needed
+separately; not applicable here).
+
 Download a [Piper](https://github.com/rhasspy/piper/blob/master/VOICES.md)
 voice model for your language into `~/.local/share/piper/` (e.g.
-`fr_FR-siwis-medium.onnx` for French).
+`fr_FR-siwis-medium.onnx` for French). On Windows this is
+`C:\Users\<you>\.local\share\piper\` — `Path.home()` resolves there the
+same way, it's just not the OS-idiomatic location; create the folder
+manually (`mkdir $env:USERPROFILE\.local\share\piper` in PowerShell) and
+drop the `.onnx` file in.
 
 ```bash
 python -m interfaces.voice.voice_loop
@@ -308,7 +340,9 @@ check on the same mic (no real echo cancellation), a speaker and mic
 crammed close together may occasionally misfire; move them apart a bit if
 that happens.
 
-## 8. Running as background services on the Pi
+## 8. Running as background services
+
+**On Linux** (Raspberry Pi or otherwise):
 
 ```bash
 sudo cp systemd/orion-telegram.service systemd/orion-voice.service /etc/systemd/system/
@@ -318,6 +352,15 @@ sudo systemctl enable --now orion-telegram orion-voice
 
 Edit the `User=`, `WorkingDirectory=` and venv path in the unit files first
 if your setup differs from `/home/pi/orion`.
+
+**On Windows**, systemd doesn't exist — the equivalent is a **Scheduled
+Task** set to run at logon (Task Scheduler → Create Task → trigger "At
+log on" → action running
+`C:\path\to\orion\.venv\Scripts\python.exe -m interfaces.voice.voice_loop`
+with "Start in" set to the `orion` folder), or a small always-on console
+window if you'd rather see its output live. Not set up yet in this repo —
+ask when you're ready to move past manual testing and this gets built out
+properly rather than as an afterthought here.
 
 ## 9. Optional extras (calendars, tasks, notes, movies, backups, safety, automation)
 
