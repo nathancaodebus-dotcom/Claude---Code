@@ -6,9 +6,12 @@ import pytest
 from tools.video_edit_tools import (
     AddAudioToVideoTool,
     AddCaptionToVideoTool,
+    AddWatermarkToVideoTool,
+    ChangeVideoSpeedTool,
     ConcatenateVideosTool,
     ConvertVideoFormatTool,
     ExtractAudioFromVideoTool,
+    ExtractVideoFrameTool,
     TrimVideoTool,
 )
 
@@ -180,3 +183,72 @@ def test_custom_output_path_is_respected(workdir, monkeypatch, tmp_path):
     TrimVideoTool().run(path=str(source), start_seconds=0, duration_seconds=1, output_path=str(custom))
 
     assert custom.exists()
+
+
+def test_add_watermark_missing_files(workdir):
+    result = AddWatermarkToVideoTool().run(video_path="nope.mp4", image_path="also-nope.png")
+    assert "is not a file" in result
+
+
+def test_add_watermark_success(workdir, monkeypatch):
+    video = _touch(workdir / "clip.mp4")
+    (workdir / "logo.png").write_bytes(b"fake png bytes")
+    _mock_ffmpeg_success(monkeypatch)
+
+    result = AddWatermarkToVideoTool().run(video_path=str(video), image_path=str(workdir / "logo.png"))
+
+    assert "Added watermark" in result
+    assert (workdir / "outputs" / "videos" / "clip-watermarked.mp4").exists()
+
+
+def test_add_watermark_position_maps_to_overlay_filter(workdir, monkeypatch):
+    video = _touch(workdir / "clip.mp4")
+    (workdir / "logo.png").write_bytes(b"fake png bytes")
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        Path(cmd[-1]).write_bytes(b"fake output")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    AddWatermarkToVideoTool().run(
+        video_path=str(video), image_path=str(workdir / "logo.png"), position="top-left"
+    )
+
+    filter_arg = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+    assert filter_arg == "overlay=10:10"
+
+
+def test_change_video_speed_success(workdir, monkeypatch):
+    source = _touch(workdir / "clip.mp4")
+    _mock_ffmpeg_success(monkeypatch)
+
+    result = ChangeVideoSpeedTool().run(path=str(source), speed_factor=2.0)
+
+    assert "2.0x" in result
+    assert (workdir / "outputs" / "videos" / "clip-speed.mp4").exists()
+
+
+def test_change_video_speed_clamps_out_of_range_values(workdir, monkeypatch):
+    source = _touch(workdir / "clip.mp4")
+    _mock_ffmpeg_success(monkeypatch)
+
+    result = ChangeVideoSpeedTool().run(path=str(source), speed_factor=10.0)
+
+    assert "2.0x" in result
+
+
+def test_extract_video_frame_success(workdir, monkeypatch):
+    source = _touch(workdir / "clip.mp4")
+    _mock_ffmpeg_success(monkeypatch)
+
+    result = ExtractVideoFrameTool().run(path=str(source), at_seconds=3.5)
+
+    assert "Extracted the frame" in result
+    assert (workdir / "outputs" / "videos" / "clip-frame.png").exists()
+
+
+def test_extract_video_frame_missing_source(workdir):
+    result = ExtractVideoFrameTool().run(path="nope.mp4")
+    assert "is not a file" in result

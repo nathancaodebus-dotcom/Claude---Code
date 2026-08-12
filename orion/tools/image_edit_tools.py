@@ -9,13 +9,14 @@ instead of taking the registry down with it.
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from core.attachments import push as push_attachment
 from tools.base import Tool
 
 try:
-    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 except ImportError:
     Image = None
 
@@ -59,9 +60,9 @@ def _load_font(size: int):
 class EditImageTool(Tool):
     name = "edit_image"
     description = (
-        "Apply one edit operation to an image: resize, crop, rotate, grayscale, blur, sharpen, "
-        "or adjust (brightness/contrast/saturation). Each call does one operation; chain calls "
-        "for multiple edits."
+        "Apply one edit operation to an image: resize, crop, rotate, grayscale, sepia, invert, "
+        "blur, sharpen, or adjust (brightness/contrast/saturation). Each call does one operation; "
+        "chain calls for multiple edits."
     )
     input_schema = {
         "type": "object",
@@ -69,7 +70,7 @@ class EditImageTool(Tool):
             "path": {"type": "string", "description": "Path to the source image."},
             "operation": {
                 "type": "string",
-                "enum": ["resize", "crop", "rotate", "grayscale", "blur", "sharpen", "adjust"],
+                "enum": ["resize", "crop", "rotate", "grayscale", "sepia", "invert", "blur", "sharpen", "adjust"],
             },
             "width": {"type": "integer", "description": "For 'resize'."},
             "height": {"type": "integer", "description": "For 'resize'."},
@@ -123,6 +124,16 @@ class EditImageTool(Tool):
             img = img.rotate(angle or 0, expand=True)
         elif operation == "grayscale":
             img = img.convert("L")
+        elif operation == "sepia":
+            grayscale = img.convert("L")
+            img = ImageOps.colorize(grayscale, black="#3f2a14", white="#f4e2c8")
+        elif operation == "invert":
+            has_alpha = img.mode in ("RGBA", "LA")
+            alpha = img.getchannel("A") if has_alpha else None
+            inverted = ImageOps.invert(img.convert("RGB"))
+            img = inverted.convert("RGBA")
+            if alpha is not None:
+                img.putalpha(alpha)
         elif operation == "blur":
             img = img.filter(ImageFilter.GaussianBlur(radius=4))
         elif operation == "sharpen":
@@ -198,3 +209,54 @@ class AddTextToImageTool(Tool):
         _save(img, out_path)
         push_attachment(str(out_path))
         return f"Added text to '{path}', saved to {out_path}."
+
+
+class CreateImageCollageTool(Tool):
+    name = "create_image_collage"
+    description = "Combine multiple images into a single grid collage, in the order given."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "At least 2 image paths.",
+            },
+            "columns": {"type": "integer", "description": "Default: as close to a square grid as possible."},
+            "cell_size": {"type": "integer", "description": "Each image is resized to fit this square. Default 400."},
+            "output_path": {"type": "string"},
+        },
+        "required": ["paths"],
+    }
+
+    def run(
+        self,
+        paths: list[str],
+        columns: int | None = None,
+        cell_size: int = 400,
+        output_path: str | None = None,
+    ) -> str:
+        if Image is None:
+            return _PILLOW_MISSING_MSG
+        if len(paths) < 2:
+            return "Need at least 2 images to make a collage."
+        missing = [p for p in paths if not Path(p).is_file()]
+        if missing:
+            return f"Not found: {', '.join(missing)}"
+
+        n = len(paths)
+        cols = columns or math.ceil(math.sqrt(n))
+        rows = math.ceil(n / cols)
+
+        collage = Image.new("RGB", (cols * cell_size, rows * cell_size), color="white")
+        for i, p in enumerate(paths):
+            thumb = Image.open(p).convert("RGB")
+            thumb.thumbnail((cell_size, cell_size))
+            x = (i % cols) * cell_size + (cell_size - thumb.width) // 2
+            y = (i // cols) * cell_size + (cell_size - thumb.height) // 2
+            collage.paste(thumb, (x, y))
+
+        out_path = _output_path(paths[0], "collage", output_path)
+        collage.save(out_path)
+        push_attachment(str(out_path))
+        return f"Created a {cols}x{rows} collage from {n} images, saved to {out_path}."

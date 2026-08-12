@@ -1,9 +1,11 @@
 import json
 
 import pytest
+from PIL import Image
 
 from core.store import Store
 from tools.website_tools import (
+    AddWebsiteImageTool,
     AddWebsitePageTool,
     CreateWebsiteTool,
     DeleteWebsitePageTool,
@@ -163,3 +165,41 @@ def test_website_and_document_names_share_a_namespace_and_warn_on_collision(stor
     result = CreateWebsiteTool(store).run(title="My Site", pages=_pages())
 
     assert "replaced an existing docx document" in result
+
+
+def test_add_website_image_copies_into_images_folder(store, tmp_path):
+    from pathlib import Path
+
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    image_path = tmp_path / "photo.png"
+    Image.new("RGB", (20, 20), color="red").save(image_path)
+
+    result = AddWebsiteImageTool(store).run(site_name="my-site", image_path=str(image_path))
+
+    assert "images/photo.png" in result
+    doc = store.get_document("my-site")
+    assert (Path(doc.path) / "images" / "photo.png").exists()
+
+
+def test_add_website_image_uses_custom_file_name(store, tmp_path):
+    from pathlib import Path
+
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    image_path = tmp_path / "source.png"
+    Image.new("RGB", (20, 20)).save(image_path)
+
+    AddWebsiteImageTool(store).run(site_name="my-site", image_path=str(image_path), file_name="hero.png")
+
+    doc = store.get_document("my-site")
+    assert (Path(doc.path) / "images" / "hero.png").exists()
+
+
+def test_add_website_image_missing_source(store):
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    result = AddWebsiteImageTool(store).run(site_name="my-site", image_path="nope.png")
+    assert "is not a file" in result
+
+
+def test_add_website_image_unknown_site(store):
+    result = AddWebsiteImageTool(store).run(site_name="ghost", image_path="nope.png")
+    assert "No website named" in result

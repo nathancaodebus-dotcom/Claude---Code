@@ -1,10 +1,20 @@
 import os
 
 import pytest
+from PIL import Image
 from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from core.store import Store
-from tools.pptx_tools import AddSlideTool, CreatePresentationTool, DeleteSlideTool, EditSlideTool, ListSlidesTool
+from tools.pptx_tools import (
+    AddImageToSlideTool,
+    AddSlideTool,
+    CreatePresentationTool,
+    DeleteSlideTool,
+    EditSlideTool,
+    ListSlidesTool,
+    SetSlideNotesTool,
+)
 
 
 @pytest.fixture
@@ -75,3 +85,52 @@ def test_create_presentation_warns_on_cross_kind_name_collision(store):
     store.register_document("xlsx", "budget", "/outputs/budget.xlsx")
     result = CreatePresentationTool(store).run(title="Budget", document_name="budget")
     assert "replaced an existing xlsx document" in result
+
+
+def test_add_image_to_slide(store, tmp_path):
+    CreatePresentationTool(store).run(title="My Deck", slides=[{"title": "Intro"}])
+    image_path = tmp_path / "photo.png"
+    Image.new("RGB", (40, 30), color="blue").save(image_path)
+
+    result = AddImageToSlideTool(store).run(
+        document_name="my-deck", slide_index=2, image_path=str(image_path)
+    )
+
+    assert "Added image" in result
+    doc = store.get_document("my-deck")
+    prs = Presentation(doc.path)
+    slide = prs.slides[1]
+    picture_shapes = [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert len(picture_shapes) == 1
+
+
+def test_add_image_to_slide_missing_file(store):
+    CreatePresentationTool(store).run(title="My Deck", slides=[{"title": "Intro"}])
+    result = AddImageToSlideTool(store).run(
+        document_name="my-deck", slide_index=2, image_path="nope.png"
+    )
+    assert "is not a file" in result
+
+
+def test_add_image_to_slide_invalid_index(store, tmp_path):
+    CreatePresentationTool(store).run(title="My Deck", slides=[{"title": "Intro"}])
+    image_path = tmp_path / "photo.png"
+    Image.new("RGB", (10, 10)).save(image_path)
+
+    result = AddImageToSlideTool(store).run(document_name="my-deck", slide_index=99, image_path=str(image_path))
+    assert "only has" in result
+
+
+def test_set_slide_notes(store):
+    CreatePresentationTool(store).run(title="My Deck", slides=[{"title": "Intro"}])
+    result = SetSlideNotesTool(store).run(document_name="my-deck", slide_index=2, notes="Remember to smile.")
+
+    assert "Set speaker notes" in result
+    doc = store.get_document("my-deck")
+    prs = Presentation(doc.path)
+    assert prs.slides[1].notes_slide.notes_text_frame.text == "Remember to smile."
+
+
+def test_set_slide_notes_unknown_document(store):
+    result = SetSlideNotesTool(store).run(document_name="ghost", slide_index=1, notes="x")
+    assert "No presentation" in result

@@ -79,3 +79,39 @@ def test_generate_image_handles_missing_predictions(monkeypatch, output_dir):
     result = GenerateImageTool().run(prompt="anything")
 
     assert "no image" in result
+
+
+def test_generate_image_count_saves_multiple_numbered_files(monkeypatch, output_dir):
+    monkeypatch.setattr(
+        "tools.image_gen_tools.httpx.post",
+        lambda *a, **kw: _FakeResponse(
+            200,
+            {
+                "predictions": [
+                    {"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()},
+                    {"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()},
+                    {"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()},
+                ]
+            },
+        ),
+    )
+
+    result = GenerateImageTool().run(prompt="a small red dot", count=3, file_name="dot")
+
+    assert "Generated 3 images" in result
+    saved = sorted(p.name for p in (output_dir / "outputs" / "images").glob("*.png"))
+    assert saved == ["dot-1.png", "dot-2.png", "dot-3.png"]
+
+
+def test_generate_image_count_is_clamped_to_valid_range(monkeypatch, output_dir):
+    captured = {}
+
+    def fake_post(url, params, json, timeout):
+        captured["sampleCount"] = json["parameters"]["sampleCount"]
+        return _FakeResponse(200, {"predictions": [{"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()}]})
+
+    monkeypatch.setattr("tools.image_gen_tools.httpx.post", fake_post)
+
+    GenerateImageTool().run(prompt="anything", count=99)
+
+    assert captured["sampleCount"] == 4

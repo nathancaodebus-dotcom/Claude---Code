@@ -193,6 +193,106 @@ class ConvertVideoFormatTool(Tool):
         return f"Converted '{path}' to {out_path}."
 
 
+class AddWatermarkToVideoTool(Tool):
+    name = "add_watermark_to_video"
+    description = "Overlay an image (a logo or watermark) onto a video, in a corner or centered."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "video_path": {"type": "string"},
+            "image_path": {"type": "string"},
+            "position": {
+                "type": "string",
+                "enum": ["top-left", "top-right", "bottom-left", "bottom-right", "center"],
+                "description": "Default 'bottom-right'.",
+            },
+            "output_path": {"type": "string"},
+        },
+        "required": ["video_path", "image_path"],
+    }
+
+    def run(self, video_path: str, image_path: str, position: str = "bottom-right", output_path: str | None = None) -> str:
+        if not Path(video_path).is_file():
+            return f"'{video_path}' is not a file."
+        if not Path(image_path).is_file():
+            return f"'{image_path}' is not a file."
+
+        positions = {
+            "top-left": "10:10",
+            "top-right": "W-w-10:10",
+            "bottom-left": "10:H-h-10",
+            "bottom-right": "W-w-10:H-h-10",
+            "center": "(W-w)/2:(H-h)/2",
+        }
+        out_path = _output_path(video_path, "watermarked", output_path)
+        error = _run_ffmpeg(
+            ["-i", video_path, "-i", image_path, "-filter_complex", f"overlay={positions[position]}", str(out_path)]
+        )
+        if error:
+            return error
+        push_attachment(str(out_path))
+        return f"Added watermark to '{video_path}', saved to {out_path}."
+
+
+class ChangeVideoSpeedTool(Tool):
+    name = "change_video_speed"
+    description = "Speed up or slow down a video (and its audio pitch stays natural), e.g. 2.0 for double speed, 0.5 for half speed."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "speed_factor": {
+                "type": "number",
+                "description": "Between 0.5 and 2.0. Values outside that range are clamped.",
+            },
+            "output_path": {"type": "string"},
+        },
+        "required": ["path", "speed_factor"],
+    }
+
+    def run(self, path: str, speed_factor: float, output_path: str | None = None) -> str:
+        if not Path(path).is_file():
+            return f"'{path}' is not a file."
+        speed_factor = max(0.5, min(speed_factor, 2.0))
+        out_path = _output_path(path, "speed", output_path)
+        error = _run_ffmpeg(
+            [
+                "-i", path,
+                "-filter_complex", f"[0:v]setpts={1 / speed_factor}*PTS[v];[0:a]atempo={speed_factor}[a]",
+                "-map", "[v]", "-map", "[a]",
+                str(out_path),
+            ]
+        )
+        if error:
+            return error
+        push_attachment(str(out_path))
+        return f"Changed the speed of '{path}' by {speed_factor}x, saved to {out_path}."
+
+
+class ExtractVideoFrameTool(Tool):
+    name = "extract_video_frame"
+    description = "Grab a single frame from a video as a still image (e.g. for a thumbnail)."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "at_seconds": {"type": "number", "description": "Timestamp to grab the frame from. Default 0."},
+            "output_path": {"type": "string"},
+        },
+        "required": ["path"],
+    }
+
+    def run(self, path: str, at_seconds: float = 0, output_path: str | None = None) -> str:
+        if not Path(path).is_file():
+            return f"'{path}' is not a file."
+        out_path = _output_path(path, "frame", output_path, extension="png")
+        error = _run_ffmpeg(["-ss", str(at_seconds), "-i", path, "-frames:v", "1", str(out_path)])
+        if error:
+            return error
+        push_attachment(str(out_path))
+        return f"Extracted the frame at {at_seconds}s from '{path}', saved to {out_path}."
+
+
 class AddCaptionToVideoTool(Tool):
     name = "add_caption_to_video"
     description = "Burn a text caption permanently onto a video (not a toggleable subtitle track)."

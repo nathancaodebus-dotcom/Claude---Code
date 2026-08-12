@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import html
 import json
+import shutil
 from pathlib import Path
 
 from core.attachments import push as push_attachment
@@ -358,6 +359,48 @@ class DeleteWebsitePageTool(Tool):
         _rebuild_all_pages(site_dir, manifest)
         self._store.touch_document(site_name)
         return f"Deleted page '{slug}' from '{site_name}' ({len(manifest['pages'])} pages left)."
+
+
+class AddWebsiteImageTool(Tool):
+    name = "add_website_image"
+    description = (
+        "Copy an image (e.g. one made with generate_image or edit_image) into a website's "
+        "'images' folder so it can be referenced from a page's content_html, e.g. "
+        "<img src=\"images/photo.png\">. Returns the relative path to use."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "site_name": {"type": "string"},
+            "image_path": {"type": "string", "description": "Path to the source image file."},
+            "file_name": {
+                "type": "string",
+                "description": "Optional name to save it as. Derived from the source file name if omitted.",
+            },
+        },
+        "required": ["site_name", "image_path"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(self, site_name: str, image_path: str, file_name: str | None = None) -> str:
+        doc = self._store.get_document(site_name)
+        if not doc or doc.kind != "website":
+            return f"No website named '{site_name}'. Use create_website first."
+
+        source = Path(image_path)
+        if not source.is_file():
+            return f"'{image_path}' is not a file."
+
+        images_dir = Path(doc.path) / "images"
+        images_dir.mkdir(exist_ok=True)
+        dest_name = file_name or source.name
+        dest = images_dir / dest_name
+        shutil.copyfile(source, dest)
+
+        self._store.touch_document(site_name)
+        return f"Copied '{image_path}' into '{site_name}' — reference it as images/{dest_name} in a page's content_html."
 
 
 class ListWebsitePagesTool(Tool):

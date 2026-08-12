@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+from openpyxl.styles import Font, PatternFill
 
 from core.attachments import push as push_attachment
 from core.store import Store
@@ -166,6 +167,95 @@ class AddSpreadsheetChartTool(Tool):
         self._store.touch_document(document_name)
         push_attachment(doc.path)
         return f"Added a {chart_type} chart to '{document_name}'."
+
+
+class FormatSpreadsheetCellsTool(Tool):
+    name = "format_spreadsheet_cells"
+    description = "Apply bold, a text color, a fill (background) color, and/or a number format to a range of cells."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "cell_range": {"type": "string", "description": "e.g. 'A1:C1' or a single cell like 'B2'."},
+            "bold": {"type": "boolean"},
+            "font_color": {"type": "string", "description": "Hex color without '#', e.g. 'FF0000'."},
+            "fill_color": {"type": "string", "description": "Hex color without '#', e.g. 'FFFF00'."},
+            "number_format": {
+                "type": "string",
+                "description": "Excel number format code, e.g. '0.00', '#,##0', '0%', '$#,##0.00'.",
+            },
+        },
+        "required": ["document_name", "cell_range"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(
+        self,
+        document_name: str,
+        cell_range: str,
+        bold: bool | None = None,
+        font_color: str | None = None,
+        fill_color: str | None = None,
+        number_format: str | None = None,
+    ) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "xlsx":
+            return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
+
+        wb = load_workbook(doc.path)
+        sheet = wb.active
+        target = sheet[cell_range]
+        rows = target if isinstance(target, tuple) else ((target,),)
+        for row in rows:
+            for cell in row:
+                if bold is not None or font_color is not None:
+                    cell.font = Font(bold=bool(bold), color=font_color)
+                if fill_color is not None:
+                    cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                if number_format is not None:
+                    cell.number_format = number_format
+
+        wb.save(doc.path)
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Formatted {cell_range} in '{document_name}'."
+
+
+class AddSpreadsheetSheetTool(Tool):
+    name = "add_spreadsheet_sheet"
+    description = "Add a new sheet (tab) to an existing spreadsheet, optionally with a header row."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "headers": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["document_name", "sheet_name"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(self, document_name: str, sheet_name: str, headers: list[str] | None = None) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "xlsx":
+            return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
+
+        wb = load_workbook(doc.path)
+        if sheet_name in wb.sheetnames:
+            return f"'{document_name}' already has a sheet named '{sheet_name}'."
+
+        sheet = wb.create_sheet(title=sheet_name[:31])
+        if headers:
+            sheet.append(headers)
+        wb.save(doc.path)
+
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Added sheet '{sheet_name}' to '{document_name}' (now {len(wb.sheetnames)} sheets)."
 
 
 class ListSpreadsheetsTool(Tool):

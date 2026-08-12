@@ -8,6 +8,8 @@ tool result so the model can refer back to it in later turns.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
@@ -230,6 +232,94 @@ class ListSlidesTool(Tool):
             title = slide.shapes.title.text if slide.shapes.title else "(no title)"
             lines.append(f"{i}. {title}")
         return "\n".join(lines) if lines else "This presentation has no slides."
+
+
+class AddImageToSlideTool(Tool):
+    name = "add_image_to_slide"
+    description = (
+        "Insert an image (e.g. one made with generate_image or edit_image) into an existing "
+        "slide, by its 1-based index. Scales to fit within the given width while preserving "
+        "aspect ratio."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "slide_index": {"type": "integer", "description": "1-based slide number."},
+            "image_path": {"type": "string"},
+            "left_inches": {"type": "number", "description": "Default 1.0."},
+            "top_inches": {"type": "number", "description": "Default 1.8 (below the title)."},
+            "width_inches": {"type": "number", "description": "Default 8.0."},
+        },
+        "required": ["document_name", "slide_index", "image_path"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(
+        self,
+        document_name: str,
+        slide_index: int,
+        image_path: str,
+        left_inches: float = 1.0,
+        top_inches: float = 1.8,
+        width_inches: float = 8.0,
+    ) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "pptx":
+            return f"No presentation named '{document_name}'."
+        if not Path(image_path).is_file():
+            return f"'{image_path}' is not a file."
+
+        prs = Presentation(doc.path)
+        slides = list(prs.slides)
+        if not (1 <= slide_index <= len(slides)):
+            return f"'{document_name}' only has {len(slides)} slides."
+
+        slide = slides[slide_index - 1]
+        slide.shapes.add_picture(
+            image_path, Inches(left_inches), Inches(top_inches), width=Inches(width_inches)
+        )
+
+        prs.save(doc.path)
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Added image '{image_path}' to slide {slide_index} of '{document_name}'."
+
+
+class SetSlideNotesTool(Tool):
+    name = "set_slide_notes"
+    description = "Set the speaker notes for a slide, by its 1-based index. Replaces any existing notes."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "document_name": {"type": "string"},
+            "slide_index": {"type": "integer"},
+            "notes": {"type": "string"},
+        },
+        "required": ["document_name", "slide_index", "notes"],
+    }
+
+    def __init__(self, store: Store):
+        self._store = store
+
+    def run(self, document_name: str, slide_index: int, notes: str) -> str:
+        doc = self._store.get_document(document_name)
+        if not doc or doc.kind != "pptx":
+            return f"No presentation named '{document_name}'."
+
+        prs = Presentation(doc.path)
+        slides = list(prs.slides)
+        if not (1 <= slide_index <= len(slides)):
+            return f"'{document_name}' only has {len(slides)} slides."
+
+        slides[slide_index - 1].notes_slide.notes_text_frame.text = notes
+
+        prs.save(doc.path)
+        self._store.touch_document(document_name)
+        push_attachment(doc.path)
+        return f"Set speaker notes for slide {slide_index} of '{document_name}'."
 
 
 class ListPresentationsTool(Tool):

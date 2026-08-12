@@ -25,6 +25,23 @@ _BASIC_MODEL = genanki.Model(
     ],
 )
 
+# genanki's model_type=1 marks this as a Cloze model, which Anki renders
+# differently: {{c1::text}} in Text becomes a blank on the front, revealed
+# on the back, rather than a plain question/answer pair.
+_CLOZE_MODEL = genanki.Model(
+    1607392320,
+    "Orion Cloze",
+    model_type=genanki.Model.CLOZE,
+    fields=[{"name": "Text"}, {"name": "Extra"}],
+    templates=[
+        {
+            "name": "Cloze",
+            "qfmt": "{{cloze:Text}}",
+            "afmt": "{{cloze:Text}}<br>{{Extra}}",
+        }
+    ],
+)
+
 
 class GenerateFlashcardsTool(Tool):
     name = "generate_flashcards"
@@ -61,6 +78,50 @@ class GenerateFlashcardsTool(Tool):
 
         push_attachment(str(path))
         return f"Generated {len(cards)} flashcards in deck '{deck_name}', saved to {path}. Import it into Anki."
+
+
+class GenerateClozeFlashcardsTool(Tool):
+    name = "generate_cloze_flashcards"
+    description = (
+        "Generate an Anki-importable cloze-deletion deck (.apkg) — cards where a blank is hidden "
+        "in a sentence and revealed on flip, better than question/answer cards for memorizing facts "
+        "embedded in context. Write each card's text with the blank(s) marked as {{c1::the answer}} "
+        "(use c2, c3... for multiple blanks in one card that reveal separately)."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "deck_name": {"type": "string"},
+            "cards": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "e.g. 'The capital of France is {{c1::Paris}}.'",
+                        },
+                        "extra": {"type": "string", "description": "Optional extra context shown on the back."},
+                    },
+                    "required": ["text"],
+                },
+            },
+        },
+        "required": ["deck_name", "cards"],
+    }
+
+    def run(self, deck_name: str, cards: list[dict]) -> str:
+        deck_id = random.randrange(1 << 30, 1 << 31)
+        deck = genanki.Deck(deck_id, deck_name)
+
+        for card in cards:
+            deck.add_note(genanki.Note(model=_CLOZE_MODEL, fields=[card["text"], card.get("extra", "")]))
+
+        path = resolve_path(slugify(deck_name), "apkg")
+        genanki.Package(deck).write_to_file(str(path))
+
+        push_attachment(str(path))
+        return f"Generated {len(cards)} cloze flashcards in deck '{deck_name}', saved to {path}. Import it into Anki."
 
 
 class GenerateQuizTool(Tool):

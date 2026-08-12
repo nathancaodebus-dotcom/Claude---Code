@@ -47,19 +47,19 @@ Around 90-130 tools depending on configuration, registered in
 | Outlook / Microsoft 365 *(needs Azure app registration, §15)* | same shape as the Google row above but for Outlook Mail/Calendar/Contacts via Microsoft Graph — search/read/draft mail (never auto-sends), archive/mark-read/count unread, list/create calendar events, search/add contacts |
 | Other calendars *(§9)* | list/create events on **any CalDAV calendar** — Outlook, iCloud, Nextcloud |
 | Task managers | built-in to-dos, or **Todoist** (§9) if that's where you already live |
-| Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown |
+| Notes | built-in notes, or straight into your **Obsidian vault** (§9) as markdown, with note listing/search by title |
 | Smart home *(needs Home Assistant, §3)* | list devices, control any light/switch/climate entity |
 | Productivity | to-dos, notes, shopping list, reminders & timers, project/milestone tracking, **meeting briefing dossiers** (prep on a person/company before a meeting) |
-| **Documents** | create/edit PowerPoint/Word/Excel (rows, formulas, charts) by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) |
-| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav) by voice or text, then **publish it live** to GitHub Pages for free, or to Infomaniak (paid, Swiss) over SFTP — local-only until you ask to publish |
-| **Images** *(§14)* | **generate** from a text prompt (needs `GEMINI_API_KEY`, paid, see the cost caveat there) or **edit** an existing file — resize/crop/rotate/filters/adjustments/text overlays, no API key needed |
-| **Video** *(§14)* | **edit** an existing file — trim, concatenate, extract/replace audio, convert format, burn in captions — via ffmpeg, no API key needed. Generating video from scratch isn't built yet, see §14 for why |
+| **Documents** | **PowerPoint** — slides, images, speaker notes; **Word** — paragraphs, headings, tables, images, page breaks; **Excel** — rows, formulas, charts, cell formatting (bold/color/number format), multiple sheets — all by voice or text; **read** existing PDF/Word/any text or code file; **interactive charts** (Plotly) — bar/line/scatter/pie/histogram, single or multi-series |
+| **Websites** *(§13)* | create/edit a static site (plain HTML/CSS, multi-page, consistent nav, embed images) by voice or text, then **publish it live** to GitHub Pages for free, or to Infomaniak (paid, Swiss) over SFTP — local-only until you ask to publish |
+| **Images** *(§14)* | **generate** from a text prompt, up to 4 variations per call (needs `GEMINI_API_KEY`, paid, see the cost caveat there) or **edit** an existing file — resize/crop/rotate/filters (grayscale/sepia/invert/blur/sharpen)/adjustments/text overlays/collages, no API key needed |
+| **Video** *(§14)* | **edit** an existing file — trim, concatenate, extract/replace audio, convert format, change speed, extract a frame, burn in captions or a watermark — via ffmpeg, no API key needed. Generating video from scratch isn't built yet, see §14 for why |
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
 | **Crypto trading** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order |
 | Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
-| Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files) |
+| Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files, basic question/answer or cloze-deletion cards) |
 | **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
 | System / files | CPU/temp/memory/disk/uptime, **top processes + priority control**, **disk health (SMART)**, find large/duplicate files, local backups, network speed test, failed-command log |
 | Automation | run short Python scripts on demand (Docker-isolated if available, else subprocess) — off by default |

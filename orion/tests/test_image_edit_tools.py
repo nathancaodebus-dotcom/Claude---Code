@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from tools.image_edit_tools import AddTextToImageTool, EditImageTool
+from tools.image_edit_tools import AddTextToImageTool, CreateImageCollageTool, EditImageTool
 
 
 @pytest.fixture
@@ -94,3 +94,70 @@ def test_add_text_to_image_missing_source(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = AddTextToImageTool().run(path="nope.png", text="Hello")
     assert "is not a file" in result
+
+
+def test_sepia(source_image):
+    result = EditImageTool().run(path=str(source_image), operation="sepia")
+    assert "Applied 'sepia'" in result
+    out_path = source_image.parent / "outputs" / "images" / "source-sepia.png"
+    img = Image.open(out_path)
+    r, g, b = img.convert("RGB").getpixel((0, 0))
+    assert r > b  # sepia is warm-toned: more red than blue
+
+
+def test_invert(source_image):
+    original = Image.open(source_image).convert("RGB").getpixel((0, 0))
+    result = EditImageTool().run(path=str(source_image), operation="invert")
+    assert "Applied 'invert'" in result
+    out_path = source_image.parent / "outputs" / "images" / "source-invert.png"
+    inverted = Image.open(out_path).convert("RGB").getpixel((0, 0))
+    assert inverted == tuple(255 - c for c in original)
+
+
+def test_invert_preserves_alpha(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "rgba.png"
+    Image.new("RGBA", (10, 10), color=(100, 150, 200, 128)).save(path)
+
+    EditImageTool().run(path=str(path), operation="invert")
+
+    out_path = tmp_path / "outputs" / "images" / "rgba-invert.png"
+    r, g, b, a = Image.open(out_path).getpixel((0, 0))
+    assert a == 128
+    assert (r, g, b) == (155, 105, 55)
+
+
+def test_create_image_collage(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    paths = []
+    for i, color in enumerate(["red", "green", "blue"]):
+        p = tmp_path / f"img{i}.png"
+        Image.new("RGB", (50, 50), color=color).save(p)
+        paths.append(str(p))
+
+    result = CreateImageCollageTool().run(paths=paths, cell_size=100)
+
+    assert "3 images" in result
+    out_files = list((tmp_path / "outputs" / "images").glob("*collage*"))
+    assert len(out_files) == 1
+    collage = Image.open(out_files[0])
+    assert collage.size[0] % 100 == 0
+    assert collage.size[1] % 100 == 0
+
+
+def test_create_image_collage_requires_at_least_two(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    p = tmp_path / "img.png"
+    Image.new("RGB", (10, 10)).save(p)
+
+    result = CreateImageCollageTool().run(paths=[str(p)])
+    assert "at least 2" in result
+
+
+def test_create_image_collage_missing_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    p = tmp_path / "img.png"
+    Image.new("RGB", (10, 10)).save(p)
+
+    result = CreateImageCollageTool().run(paths=[str(p), "nope.png"])
+    assert "Not found" in result

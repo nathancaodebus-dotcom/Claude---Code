@@ -4,7 +4,13 @@ import pytest
 from openpyxl import load_workbook
 
 from core.store import Store
-from tools.xlsx_tools import AddSpreadsheetRowTool, CreateSpreadsheetTool, ListSpreadsheetsTool
+from tools.xlsx_tools import (
+    AddSpreadsheetRowTool,
+    AddSpreadsheetSheetTool,
+    CreateSpreadsheetTool,
+    FormatSpreadsheetCellsTool,
+    ListSpreadsheetsTool,
+)
 
 
 @pytest.fixture
@@ -45,3 +51,52 @@ def test_list_spreadsheets(store):
     CreateSpreadsheetTool(store).run(title="Budget", headers=["A"])
     result = ListSpreadsheetsTool(store).run()
     assert "budget" in result
+
+
+def test_format_cells_range(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item", "Price"], rows=[["Bread", 2.5]])
+    result = FormatSpreadsheetCellsTool(store).run(
+        document_name="budget", cell_range="A1:B1", bold=True, fill_color="FFFF00"
+    )
+
+    assert "Formatted A1:B1" in result
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    header_cell = wb.active["A1"]
+    assert header_cell.font.bold is True
+    assert header_cell.fill.start_color.rgb == "00FFFF00"
+
+
+def test_format_single_cell(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item", "Price"], rows=[["Bread", 2.5]])
+    result = FormatSpreadsheetCellsTool(store).run(document_name="budget", cell_range="B2", number_format="0.00")
+
+    assert "Formatted B2" in result
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    assert wb.active["B2"].number_format == "0.00"
+
+
+def test_format_cells_unknown_document(store):
+    result = FormatSpreadsheetCellsTool(store).run(document_name="ghost", cell_range="A1", bold=True)
+    assert "No spreadsheet" in result
+
+
+def test_add_sheet(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item"])
+    result = AddSpreadsheetSheetTool(store).run(
+        document_name="budget", sheet_name="Q2", headers=["Item", "Q2 Price"]
+    )
+
+    assert "Added sheet 'Q2'" in result
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    assert "Q2" in wb.sheetnames
+    assert [c.value for c in wb["Q2"][1]] == ["Item", "Q2 Price"]
+
+
+def test_add_sheet_refuses_duplicate_name(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item"])
+    AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2")
+    result = AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2")
+    assert "already has a sheet" in result

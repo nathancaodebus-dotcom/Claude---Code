@@ -1,6 +1,6 @@
 import pytest
 
-from tools.obsidian_tools import AppendObsidianNoteTool, CreateObsidianNoteTool
+from tools.obsidian_tools import AppendObsidianNoteTool, CreateObsidianNoteTool, ListObsidianNotesTool
 
 
 @pytest.fixture(autouse=True)
@@ -42,3 +42,34 @@ def test_append_to_existing_note(vault):
 def test_append_to_missing_note_returns_friendly_error(vault):
     result = AppendObsidianNoteTool().run(title="Ghost", content="x")
     assert "No note named" in result
+
+
+def test_list_notes_empty_vault(vault):
+    result = ListObsidianNotesTool().run()
+    assert "no notes yet" in result
+
+
+def test_list_notes(vault):
+    CreateObsidianNoteTool().run(title="Journal", content="x")
+    CreateObsidianNoteTool().run(title="Meeting Notes", content="y")
+
+    result = ListObsidianNotesTool().run()
+
+    assert "- Journal" in result
+    assert "- Meeting Notes" in result
+
+
+def test_list_notes_filters_by_query(vault):
+    CreateObsidianNoteTool().run(title="Journal", content="x")
+    CreateObsidianNoteTool().run(title="Meeting Notes", content="y")
+
+    result = ListObsidianNotesTool().run(query="meeting")
+
+    assert "Meeting Notes" in result
+    assert "Journal" not in result
+
+
+def test_list_notes_no_match(vault):
+    CreateObsidianNoteTool().run(title="Journal", content="x")
+    result = ListObsidianNotesTool().run(query="nonexistent")
+    assert "No matching notes" in result

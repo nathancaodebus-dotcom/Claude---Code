@@ -335,10 +335,11 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         # tools/image_edit_tools.py itself degrades gracefully without
         # Pillow (can fail to build without system jpeg/zlib headers) —
         # this import always succeeds.
-        from tools.image_edit_tools import AddTextToImageTool, EditImageTool
+        from tools.image_edit_tools import AddTextToImageTool, CreateImageCollageTool, EditImageTool
 
         registry.register(EditImageTool())
         registry.register(AddTextToImageTool())
+        registry.register(CreateImageCollageTool())
 
     _register_safe(registry, "image editing", _image_edit)
 
@@ -346,9 +347,12 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         from tools.video_edit_tools import (
             AddAudioToVideoTool,
             AddCaptionToVideoTool,
+            AddWatermarkToVideoTool,
+            ChangeVideoSpeedTool,
             ConcatenateVideosTool,
             ConvertVideoFormatTool,
             ExtractAudioFromVideoTool,
+            ExtractVideoFrameTool,
             TrimVideoTool,
         )
 
@@ -358,25 +362,31 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(AddAudioToVideoTool())
         registry.register(ConvertVideoFormatTool())
         registry.register(AddCaptionToVideoTool())
+        registry.register(AddWatermarkToVideoTool())
+        registry.register(ChangeVideoSpeedTool())
+        registry.register(ExtractVideoFrameTool())
 
     _register_safe(registry, "video editing", _video_edit)
 
     def _flashcards() -> None:
-        from tools.flashcard_tool import GenerateFlashcardsTool, GenerateQuizTool
+        from tools.flashcard_tool import GenerateClozeFlashcardsTool, GenerateFlashcardsTool, GenerateQuizTool
 
         registry.register(GenerateFlashcardsTool())
+        registry.register(GenerateClozeFlashcardsTool())
         registry.register(GenerateQuizTool())
 
     _register_safe(registry, "flashcards/quiz", _flashcards)
 
     def _pptx() -> None:
         from tools.pptx_tools import (
+            AddImageToSlideTool,
             AddSlideTool,
             CreatePresentationTool,
             DeleteSlideTool,
             EditSlideTool,
             ListPresentationsTool,
             ListSlidesTool,
+            SetSlideNotesTool,
         )
 
         registry.register(CreatePresentationTool(store))
@@ -385,11 +395,14 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(DeleteSlideTool(store))
         registry.register(ListSlidesTool(store))
         registry.register(ListPresentationsTool(store))
+        registry.register(AddImageToSlideTool(store))
+        registry.register(SetSlideNotesTool(store))
 
     _register_safe(registry, "PowerPoint", _pptx)
 
     def _website() -> None:
         from tools.website_tools import (
+            AddWebsiteImageTool,
             AddWebsitePageTool,
             CreateWebsiteTool,
             DeleteWebsitePageTool,
@@ -404,6 +417,7 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(DeleteWebsitePageTool(store))
         registry.register(ListWebsitePagesTool(store))
         registry.register(ListWebsitesTool(store))
+        registry.register(AddWebsiteImageTool(store))
 
     _register_safe(registry, "website creation", _website)
 
@@ -427,11 +441,19 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         _register_safe(registry, "website publishing (Infomaniak)", _website_publish_infomaniak)
 
     def _docx() -> None:
-        from tools.docx_tools import AppendToWordDocumentTool, CreateWordDocumentTool, ListWordDocumentsTool
+        from tools.docx_tools import (
+            AddImageToWordDocumentTool,
+            AddTableToWordDocumentTool,
+            AppendToWordDocumentTool,
+            CreateWordDocumentTool,
+            ListWordDocumentsTool,
+        )
 
         registry.register(CreateWordDocumentTool(store))
         registry.register(AppendToWordDocumentTool(store))
         registry.register(ListWordDocumentsTool(store))
+        registry.register(AddTableToWordDocumentTool(store))
+        registry.register(AddImageToWordDocumentTool(store))
 
     _register_safe(registry, "Word", _docx)
 
@@ -439,7 +461,9 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         from tools.xlsx_tools import (
             AddSpreadsheetChartTool,
             AddSpreadsheetRowTool,
+            AddSpreadsheetSheetTool,
             CreateSpreadsheetTool,
+            FormatSpreadsheetCellsTool,
             ListSpreadsheetsTool,
             SetSpreadsheetFormulaTool,
         )
@@ -449,6 +473,8 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(SetSpreadsheetFormulaTool(store))
         registry.register(AddSpreadsheetChartTool(store))
         registry.register(ListSpreadsheetsTool(store))
+        registry.register(FormatSpreadsheetCellsTool(store))
+        registry.register(AddSpreadsheetSheetTool(store))
 
     _register_safe(registry, "Excel", _xlsx)
 
@@ -571,10 +597,11 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     if config.obsidian_vault_path:
         def _obsidian() -> None:
-            from tools.obsidian_tools import AppendObsidianNoteTool, CreateObsidianNoteTool
+            from tools.obsidian_tools import AppendObsidianNoteTool, CreateObsidianNoteTool, ListObsidianNotesTool
 
             registry.register(CreateObsidianNoteTool())
             registry.register(AppendObsidianNoteTool())
+            registry.register(ListObsidianNotesTool())
 
         _register_safe(registry, "Obsidian", _obsidian)
 

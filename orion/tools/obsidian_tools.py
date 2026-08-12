@@ -69,3 +69,23 @@ class AppendObsidianNoteTool(Tool):
         with path.open("a", encoding="utf-8") as f:
             f.write(f"\n{content}\n")
         return f"Appended to '{title}'."
+
+
+class ListObsidianNotesTool(Tool):
+    name = "list_obsidian_notes"
+    description = "List the note titles in the Obsidian vault, optionally filtered by a search term in the title."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Optional substring to filter titles by."},
+        },
+    }
+
+    def run(self, query: str | None = None) -> str:
+        vault = _vault_path()
+        titles = sorted(p.stem for p in vault.glob("*.md"))
+        if query:
+            titles = [t for t in titles if query.lower() in t.lower()]
+        if not titles:
+            return "No matching notes." if query else "The vault has no notes yet."
+        return "\n".join(f"- {t}" for t in titles)

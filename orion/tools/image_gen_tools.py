@@ -36,6 +36,11 @@ class GenerateImageTool(Tool):
                 "enum": ["1:1", "16:9", "9:16", "4:3", "3:4"],
                 "description": "Default '1:1'.",
             },
+            "count": {
+                "type": "integer",
+                "description": "How many variations to generate (default 1, max 4). Each one costs "
+                "separately — confirm with the user before requesting more than 1.",
+            },
             "file_name": {
                 "type": "string",
                 "description": "Optional stable name for the output file. Derived from the prompt if omitted.",
@@ -44,13 +49,16 @@ class GenerateImageTool(Tool):
         "required": ["prompt"],
     }
 
-    def run(self, prompt: str, aspect_ratio: str = "1:1", file_name: str | None = None) -> str:
+    def run(
+        self, prompt: str, aspect_ratio: str = "1:1", count: int = 1, file_name: str | None = None
+    ) -> str:
+        count = max(1, min(count, 4))
         response = httpx.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{config.gemini_image_model}:predict",
             params={"key": config.gemini_api_key},
             json={
                 "instances": [{"prompt": prompt}],
-                "parameters": {"sampleCount": 1, "aspectRatio": aspect_ratio},
+                "parameters": {"sampleCount": count, "aspectRatio": aspect_ratio},
             },
             timeout=60,
         )
@@ -62,9 +70,19 @@ class GenerateImageTool(Tool):
         if not predictions or "bytesBase64Encoded" not in predictions[0]:
             return f"Image generation returned no image: {str(data)[:300]}"
 
-        image_bytes = base64.b64decode(predictions[0]["bytesBase64Encoded"])
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        path = OUTPUT_DIR / f"{slugify(file_name or prompt)}.png"
-        path.write_bytes(image_bytes)
-        push_attachment(str(path))
-        return f"Generated image saved to {path}."
+        base_name = slugify(file_name or prompt)
+        paths = []
+        for i, prediction in enumerate(predictions):
+            if "bytesBase64Encoded" not in prediction:
+                continue
+            image_bytes = base64.b64decode(prediction["bytesBase64Encoded"])
+            suffix = "" if len(predictions) == 1 else f"-{i + 1}"
+            path = OUTPUT_DIR / f"{base_name}{suffix}.png"
+            path.write_bytes(image_bytes)
+            push_attachment(str(path))
+            paths.append(str(path))
+
+        if len(paths) == 1:
+            return f"Generated image saved to {paths[0]}."
+        return f"Generated {len(paths)} images: {', '.join(paths)}."
