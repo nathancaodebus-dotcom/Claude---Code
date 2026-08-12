@@ -54,6 +54,14 @@ class Config:
     # actionable error is raised at startup if nothing matches. See README §7.
     wake_word: str = field(default_factory=lambda: _get("WAKE_WORD", "hey_orion"))
     voice_language: str = field(default_factory=lambda: _get("VOICE_LANGUAGE", "fr"))
+    # faster-whisper model size — trades accuracy for latency on CPU-only
+    # machines (no CUDA config here; faster-whisper picks GPU automatically
+    # via ctranslate2 if a working CUDA/cuDNN setup is present, otherwise
+    # falls back to CPU). "small" is the most accurate that's still
+    # reasonably fast on a laptop CPU; try "base" or "tiny" if replies feel
+    # sluggish — each step down cuts transcription time roughly in half at
+    # some cost to recognizing less common words/names. See README §7.
+    whisper_model_size: str = field(default_factory=lambda: _get("WHISPER_MODEL_SIZE", "small"))
 
     spotify_client_id: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_ID"))
     spotify_client_secret: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_SECRET"))

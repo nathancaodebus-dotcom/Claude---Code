@@ -12,7 +12,7 @@ import types
 
 import pytest
 
-from core.tts import PiperSynthesizer
+from core.tts import PiperSynthesizer, _strip_markdown_for_speech
 
 
 class _FakeAudioChunk:
@@ -73,3 +73,55 @@ def test_sample_rate_comes_from_voice_config():
 def test_voice_loaded_from_given_path():
     synth = PiperSynthesizer("some/path/fr_FR-siwis-medium.onnx")
     assert synth._voice.loaded_from == "some/path/fr_FR-siwis-medium.onnx"
+
+
+def test_synthesize_skips_tts_entirely_for_pure_list_marker_fragment():
+    """A sentence-splitter fragment that's nothing but a list marker (e.g.
+    '1.' from a numbered list) strips down to empty — must not reach
+    PiperVoice.synthesize() at all, since that's what caused it to be
+    read aloud literally in the first place."""
+    synth = PiperSynthesizer("fake/model.onnx")
+
+    result = synth.synthesize("1.")
+
+    assert result == b""
+    assert synth._voice.synthesize_calls == []
+
+
+# --- _strip_markdown_for_speech ---
+
+
+def test_strips_numbered_list_markers():
+    assert _strip_markdown_for_speech("1. Buy milk") == "Buy milk"
+
+
+def test_strips_bullet_markers():
+    assert _strip_markdown_for_speech("- Buy milk") == "Buy milk"
+    assert _strip_markdown_for_speech("* Buy milk") == "Buy milk"
+
+
+def test_strips_bold():
+    assert _strip_markdown_for_speech("This is **important**.") == "This is important."
+
+
+def test_strips_italic_without_breaking_bold():
+    assert _strip_markdown_for_speech("This is *important*.") == "This is important."
+    assert _strip_markdown_for_speech("**Bold** and *italic*.") == "Bold and italic."
+
+
+def test_strips_inline_code():
+    assert _strip_markdown_for_speech("Run `pip install`.") == "Run pip install."
+
+
+def test_strips_markdown_headers():
+    assert _strip_markdown_for_speech("## Summary") == "Summary"
+
+
+def test_pure_list_marker_fragment_becomes_empty():
+    assert _strip_markdown_for_speech("1.") == ""
+    assert _strip_markdown_for_speech("2)") == ""
+
+
+def test_leaves_plain_prose_untouched():
+    text = "Bonjour ! Comment puis-je t'aider aujourd'hui ?"
+    assert _strip_markdown_for_speech(text) == text

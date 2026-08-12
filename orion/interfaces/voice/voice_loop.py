@@ -85,7 +85,7 @@ class VoiceLoop:
         store = Store()
         self._agent = Agent(memory, build_registry(memory, store))
         self._wake_model = self._load_wake_model(WakeWordModel)
-        self._stt = WhisperModel("small", device="cpu", compute_type="int8")
+        self._stt = WhisperModel(config.whisper_model_size, device="cpu", compute_type="int8")
         # Uses ElevenLabs if ELEVENLABS_API_KEY is set (expressive, cloud), else
         # local Piper — expects a voice model matching config.voice_language, e.g.
         # ~/.local/share/piper/fr_FR-siwis-medium.onnx — see README for setup.
@@ -165,6 +165,10 @@ class VoiceLoop:
         enough, for long enough, to count as barging in — playback was cut
         short in that case rather than played to completion."""
         raw = self._tts.synthesize(text, urgent=urgent)
+        if not raw:
+            # e.g. a fragment that was pure markdown/list-marker punctuation
+            # ('1.') and stripped down to nothing — nothing to play.
+            return False
         audio = np.frombuffer(raw, dtype=np.int16)
         self._drain_queue()
         sd.play(audio, samplerate=self._tts.sample_rate)

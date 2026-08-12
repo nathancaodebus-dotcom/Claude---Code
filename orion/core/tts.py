@@ -13,10 +13,35 @@ convert with np.frombuffer(..., dtype=np.int16) on their own end.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Protocol
 
 from core.config import config
+
+_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_LIST_MARKER_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])(?:\s+|$)", re.MULTILINE)
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_ITALIC_RE = re.compile(r"(?<!\*)\*(.+?)\*(?!\*)")
+_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+
+
+def _strip_markdown_for_speech(text: str) -> str:
+    """Replies are written once and reused across every interface — plain
+    text for CLI, markdown-rendering for Telegram, and spoken for voice —
+    so nothing upstream avoids markdown. Left alone, a numbered list item
+    like '1. Buy milk' gets treated by the sentence-splitter in
+    core/agent.py as its own complete "sentence" ('1.'), which a TTS engine
+    then dutifully pronounces literally; **bold**/`code` markers get read
+    as literal asterisks/backticks too. Strips that formatting immediately
+    before either TTS backend touches the text, without changing what
+    other interfaces receive."""
+    text = _HEADER_RE.sub("", text)
+    text = _LIST_MARKER_RE.sub("", text)
+    text = _BOLD_RE.sub(r"\1", text)
+    text = _ITALIC_RE.sub(r"\1", text)
+    text = _INLINE_CODE_RE.sub(r"\1", text)
+    return text.strip()
 
 
 class Synthesizer(Protocol):
@@ -33,6 +58,9 @@ class PiperSynthesizer:
         self.sample_rate = self._voice.config.sample_rate
 
     def synthesize(self, text: str, urgent: bool = False) -> bytes:
+        text = _strip_markdown_for_speech(text)
+        if not text:
+            return b""
         # piper-tts >=1.4 replaced synthesize_stream_raw() (removed) with
         # synthesize(), which yields one AudioChunk per sentence instead of
         # raw bytes directly — audio_int16_bytes gets back to the same flat
@@ -54,6 +82,9 @@ class ElevenLabsSynthesizer:
         self._voice_id = voice_id
 
     def synthesize(self, text: str, urgent: bool = False) -> bytes:
+        text = _strip_markdown_for_speech(text)
+        if not text:
+            return b""
         voice_settings = (
             {"stability": 0.25, "similarity_boost": 0.8, "style": 0.6}
             if urgent

@@ -340,6 +340,15 @@ check on the same mic (no real echo cancellation), a speaker and mic
 crammed close together may occasionally misfire; move them apart a bit if
 that happens.
 
+**If replies feel slow to start**, the biggest lever on a CPU-only laptop
+is the transcription model: `WHISPER_MODEL_SIZE` in `.env` defaults to
+`small` (the most accurate that's still reasonably fast); try `base` or
+even `tiny` — each step down roughly halves transcription time, at some
+cost to recognizing uncommon words/names. There's no local GPU
+acceleration wired in here — faster-whisper always runs on CPU
+(`device="cpu"` in `interfaces/voice/voice_loop.py`) regardless of what
+hardware is available, so this is the main knob until that changes.
+
 ## 8. Running as background services
 
 **On Linux** (Raspberry Pi or otherwise):
