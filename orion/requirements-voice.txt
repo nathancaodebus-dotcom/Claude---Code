@@ -2,7 +2,10 @@
 # Install alongside requirements.txt: pip install -r requirements.txt -r requirements-voice.txt
 openwakeword>=0.6.0
 faster-whisper>=1.0.0
-piper-tts>=1.2.0
+# >=1.6.0: older piper-tts exposed synthesize_stream_raw() returning raw
+# bytes directly; 1.6.0's synthesize() yields AudioChunk objects instead
+# (see core/tts.py's PiperSynthesizer, which targets this newer shape).
+piper-tts>=1.6.0
 sounddevice>=0.4.6
 # numpy is already in requirements.txt (also used by generate_ambient_sound)
 

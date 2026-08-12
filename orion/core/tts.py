@@ -33,7 +33,11 @@ class PiperSynthesizer:
         self.sample_rate = self._voice.config.sample_rate
 
     def synthesize(self, text: str, urgent: bool = False) -> bytes:
-        return b"".join(self._voice.synthesize_stream_raw(text))
+        # piper-tts >=1.4 replaced synthesize_stream_raw() (removed) with
+        # synthesize(), which yields one AudioChunk per sentence instead of
+        # raw bytes directly — audio_int16_bytes gets back to the same flat
+        # 16-bit PCM format the rest of this module (and its callers) expect.
+        return b"".join(chunk.audio_int16_bytes for chunk in self._voice.synthesize(text))
 
 
 class ElevenLabsSynthesizer:
