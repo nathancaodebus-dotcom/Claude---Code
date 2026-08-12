@@ -37,7 +37,7 @@ registering it in `tools/registry_builder.py` — nothing else changes.
 
 ## What Orion can do out of the box
 
-Around 90-155 tools depending on configuration, registered in
+Around 90-160 tools depending on configuration, registered in
 `tools/registry_builder.py`:
 
 | Category | Tools |
@@ -58,7 +58,7 @@ Around 90-155 tools depending on configuration, registered in
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
-| **Crypto trading** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order |
+| **Crypto trading & quant research** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order; **quantitative signal backtesting** (Rank IC against real historical stock prices, run in the sandbox) |
 | Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
 | Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files, basic question/answer or cloze-deletion cards) |
 | **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
@@ -496,6 +496,28 @@ If you build or wire up real exchange execution yourself on top of this,
 treat the paper-tracking numbers here as informative, not validated —
 they've never been tested against real capital, slippage, fees, or a live
 order book.
+
+**Quantitative signal research** (`tools/quant_signal_tools.py`, no setup
+required): the same idea as NVIDIA's Quantitative Signal Discovery Agent
+blueprint — propose a formula, test whether it actually predicted future
+returns, keep the ones that work — built without the GPU/NIM stack that
+blueprint needs, since the "idea generation" step is just Claude reasoning
+in conversation.
+
+- `backtest_quant_signal` — give it a ticker and a signal written as
+  Python (`def signal(bars): ...`, stdlib only, no pandas/numpy), and it
+  fetches real historical prices (stooq.com, the same free source
+  `get_stock_price` uses), runs the signal **inside the existing sandbox**
+  (§10 — a model-authored formula is untrusted input, same as a
+  user-authored script), and reports its **Rank IC** (Spearman correlation
+  between the signal and the N-day-forward return) — the standard measure
+  of a signal's predictive power. Raw number only, no verdict — same
+  philosophy as the technical indicators above.
+- `save_quant_signal` / `list_quant_signals` — keep the formulas that
+  backtested well, ranked by IC, for later reuse.
+
+Pure research: nothing here places a trade, same as everything else in
+this section.
 
 ## 13. Website creation
 

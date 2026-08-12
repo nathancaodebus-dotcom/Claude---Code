@@ -110,6 +110,22 @@ CREATE TABLE IF NOT EXISTS crypto_trade_proposals (
     created_at REAL NOT NULL,
     resolved_at REAL
 );
+
+-- Quantitative signals Claude has proposed and backtested (see
+-- tools/quant_signal_tools.py) that were good enough to keep. Purely a
+-- research notebook, not a live-trading table — nothing here ever places
+-- an order; saving a signal just means "remember this idea and how it
+-- scored" for later reuse or refinement.
+CREATE TABLE IF NOT EXISTS quant_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    code TEXT NOT NULL,
+    ic_score REAL NOT NULL,
+    forward_days INTEGER NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -177,6 +193,18 @@ class CryptoTradeProposal:
     price_usd: float
     reasoning: str
     status: str
+    created_at: float
+
+
+@dataclass
+class QuantSignal:
+    id: int
+    name: str
+    ticker: str
+    code: str
+    ic_score: float
+    forward_days: int
+    notes: str
     created_at: float
 
 
@@ -550,5 +578,34 @@ class Store:
         rows = self._conn.execute(query, params).fetchall()
         return [
             CryptoHolding(id=r[0], portfolio=r[1], coin=r[2], quantity=r[3], avg_buy_price_usd=r[4])
+            for r in rows
+        ]
+
+    # --- quant signals ---
+
+    def save_quant_signal(
+        self, name: str, ticker: str, code: str, ic_score: float, forward_days: int, notes: str = ""
+    ) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO quant_signals (name, ticker, code, ic_score, forward_days, notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, ticker.upper(), code, ic_score, forward_days, notes, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def list_quant_signals(self, ticker: str | None = None) -> list[QuantSignal]:
+        query = "SELECT id, name, ticker, code, ic_score, forward_days, notes, created_at FROM quant_signals"
+        params: tuple = ()
+        if ticker:
+            query += " WHERE ticker = ?"
+            params = (ticker.upper(),)
+        query += " ORDER BY ic_score DESC"
+        rows = self._conn.execute(query, params).fetchall()
+        return [
+            QuantSignal(
+                id=r[0], name=r[1], ticker=r[2], code=r[3], ic_score=r[4],
+                forward_days=r[5], notes=r[6], created_at=r[7],
+            )
             for r in rows
         ]

@@ -132,6 +132,15 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     _register_safe(registry, "crypto trading (research + paper portfolio)", _crypto_trading)
 
+    def _quant_signals() -> None:
+        from tools.quant_signal_tools import BacktestQuantSignalTool, ListQuantSignalsTool, SaveQuantSignalTool
+
+        registry.register(BacktestQuantSignalTool())
+        registry.register(SaveQuantSignalTool(store))
+        registry.register(ListQuantSignalsTool(store))
+
+    _register_safe(registry, "quantitative signal research", _quant_signals)
+
     def _rss_reddit() -> None:
         from tools.rss_reddit_tools import ReadRssFeedTool, RedditTopPostsTool
 
