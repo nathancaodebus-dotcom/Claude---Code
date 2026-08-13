@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import threading
 import time
 from pathlib import Path
 
@@ -95,6 +96,88 @@ def _rms(chunk: np.ndarray) -> float:
     return float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
 
 
+class _StreamingSpeech:
+    """Lets a reply's text generation, TTS synthesis, and audio playback
+    all overlap instead of running strictly one sentence at a time —
+    without this, on_sentence(text) synthesized *and played* each
+    sentence before returning, which paused Claude's own streaming
+    generation for that whole duration (nothing was being read off the
+    response stream while blocked) on top of the synthesis+playback time
+    itself. Every sentence boundary was dead air at least as long as that
+    sentence's synthesis took — worse with a network TTS backend like
+    Edge TTS — which is what choppy, stop-start ("saccadé") playback
+    actually was, not an audio quality problem.
+
+    Two background threads (synthesis, playback) each keep working ahead
+    while the other stages proceed: on_sentence() just queues text and
+    returns immediately, so generation is never blocked; synthesis for
+    sentence N+1 starts as soon as its text arrives, usually while
+    sentence N is still playing; playback starts on each sentence the
+    moment its audio is ready rather than waiting for the whole reply."""
+
+    def __init__(self, voice_loop: "VoiceLoop") -> None:
+        self._voice_loop = voice_loop
+        self._sentences: queue.Queue[str | None] = queue.Queue()
+        self._audio: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._barged_in = False
+        self._synth_thread = threading.Thread(target=self._synthesize_loop, daemon=True)
+        self._playback_thread = threading.Thread(target=self._playback_loop, daemon=True)
+        self._synth_thread.start()
+        self._playback_thread.start()
+
+    def _synthesize_loop(self) -> None:
+        while True:
+            text = self._sentences.get()
+            if text is None:
+                self._audio.put(None)  # tell the playback loop there's nothing more coming
+                return
+            if self._barged_in:
+                # respond_streaming doesn't know a barge-in happened and
+                # keeps calling on_sentence for the rest of its reply
+                # regardless — keep draining those (so on_sentence never
+                # backs up) but stop paying for synthesis on sentences that
+                # will just be discarded unplayed, so finish() isn't stuck
+                # waiting on pointless work before it can hand control back
+                # to listening for what the user actually barged in to say.
+                continue
+            try:
+                audio = self._voice_loop._synthesize_audio(text)
+            except Exception:
+                # One sentence's TTS backend hiccup (e.g. a network blip on
+                # Edge TTS) must not silently deadlock finish() below,
+                # which waits for this thread to eventually send the None
+                # sentinel — skip the sentence and keep going instead.
+                logger.exception("TTS synthesis failed for a queued sentence; skipping it.")
+                continue
+            if audio is not None:
+                self._audio.put(audio)
+
+    def _playback_loop(self) -> None:
+        while True:
+            audio = self._audio.get()
+            if audio is None:
+                return
+            if self._barged_in:
+                continue  # drain the rest of the reply without playing it
+            try:
+                if self._voice_loop._play_audio(audio):
+                    self._barged_in = True
+            except Exception:
+                logger.exception("Audio playback failed for a queued sentence; skipping it.")
+
+    def on_sentence(self, text: str) -> None:
+        self._sentences.put(text)
+
+    def finish(self) -> bool:
+        """Call once the reply's full text is done generating. Blocks
+        until every queued sentence has played (or a barge-in cuts the
+        rest short), then returns whether that happened."""
+        self._sentences.put(None)
+        self._synth_thread.join()
+        self._playback_thread.join()
+        return self._barged_in
+
+
 class VoiceLoop:
     def __init__(self) -> None:
         from faster_whisper import WhisperModel
@@ -170,15 +253,29 @@ class VoiceLoop:
         self._audio_queue.put(indata.copy())
 
     def _speak(self, text: str, urgent: bool = False) -> bool:
-        """Plays text as speech. Returns True if the user talked loudly
-        enough, for long enough, to count as barging in — playback was cut
-        short in that case rather than played to completion."""
+        """Synthesizes and plays one utterance, blocking until done (or
+        until barged in). Used as-is for output with nothing to pipeline
+        against — reminders, health alerts, the stop-phrase goodbye; a
+        full conversation turn's multiple sentences go through
+        _StreamingSpeech instead (see _converse), which uses the same two
+        pieces below without blocking generation/synthesis on playback."""
+        audio = self._synthesize_audio(text, urgent=urgent)
+        if audio is None:
+            return False
+        return self._play_audio(audio)
+
+    def _synthesize_audio(self, text: str, urgent: bool = False) -> np.ndarray | None:
         raw = self._tts.synthesize(text, urgent=urgent)
         if not raw:
             # e.g. a fragment that was pure markdown/list-marker punctuation
             # ('1.') and stripped down to nothing — nothing to play.
-            return False
-        audio = np.frombuffer(raw, dtype=np.int16)
+            return None
+        return np.frombuffer(raw, dtype=np.int16)
+
+    def _play_audio(self, audio: np.ndarray) -> bool:
+        """Blocks until playback finishes. Returns True if the user talked
+        loudly enough, for long enough, to count as barging in — playback
+        was cut short in that case rather than played to completion."""
         self._drain_queue()
         sd.play(audio, samplerate=self._tts.sample_rate)
 
@@ -275,7 +372,22 @@ class VoiceLoop:
                 self._speak("Goodbye.")
                 break
 
-            reply = self._agent.respond_streaming(SESSION_ID, text, on_sentence=self._speak)
+            # _StreamingSpeech overlaps this reply's generation, TTS
+            # synthesis, and playback instead of running them strictly one
+            # sentence at a time (see its docstring) — on_sentence here
+            # only queues text, so respond_streaming's own generation is
+            # never blocked waiting on synthesis or playback.
+            speech = _StreamingSpeech(self)
+            try:
+                reply = self._agent.respond_streaming(SESSION_ID, text, on_sentence=speech.on_sentence)
+            finally:
+                # Always sends the sentinel that lets the two background
+                # threads finish and exit, even if respond_streaming raised
+                # partway through — otherwise a failed turn leaks both
+                # threads (blocked forever on their queues) for the rest of
+                # this long-running process's life instead of just ending
+                # cleanly, same as every other turn.
+                speech.finish()
             print(f"{config.assistant_name}> {reply}")
 
             saved_files = attachments.drain()
