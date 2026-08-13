@@ -155,6 +155,35 @@ def test_respond_streaming_flushes_trailing_text_without_terminal_punctuation():
     assert seen == ["No punctuation at the end"]
 
 
+def test_remembered_fact_reaches_the_next_turns_system_prompt_end_to_end():
+    """Regression test for a real bug reported against a comparable project
+    (OpenJarvis #721): auto-captured facts were written successfully but
+    never actually reached the prompt-injection path, so recall silently
+    didn't work despite the write appearing to succeed. Exercises the real
+    path start to finish — dispatching remember_fact through the registry
+    exactly as Claude's tool_use block would, not calling memory.remember_fact()
+    directly — then checks the *next* turn's system block actually contains it."""
+    from tools.memory_tool import RememberFactTool
+
+    registry = ToolRegistry()
+    memory = Memory(db_path=":memory:")
+    registry.register(RememberFactTool(memory))
+
+    remember_round = _FakeMessage(
+        [_ToolUseBlock("call_1", "remember_fact", {"key": "dog_name", "value": "Rex"})], "tool_use"
+    )
+    ack_round = _FakeMessage([_TextBlock("Got it, I'll remember that.")], "end_turn")
+    agent = Agent(memory, registry)
+    agent._client = _FakeClient([([], remember_round), (["Got it, I'll remember that."], ack_round)])
+
+    agent.respond("s1", "My dog's name is Rex.")
+
+    next_turn_system_blocks = agent._system_blocks("s1")
+    dynamic_block_text = "\n\n".join(b["text"] for b in next_turn_system_blocks if "cache_control" not in b)
+    assert "dog_name" in dynamic_block_text
+    assert "Rex" in dynamic_block_text
+
+
 def test_respond_dispatches_tool_use_round_then_returns_final_answer():
     tool = _EchoTool()
     registry = ToolRegistry()
@@ -173,6 +202,33 @@ def test_respond_dispatches_tool_use_round_then_returns_final_answer():
     assert tool.calls == ["ping"]
     assert reply == "Done: echoed: ping"
     assert len(agent._client.messages.stream_calls) == 2
+
+
+def test_tool_call_survives_alongside_streamed_text_in_the_same_turn():
+    """Regression test for a real bug reported against a comparable project
+    (OpenJarvis #707): function calls got dropped specifically when text was
+    also being streamed in the same response. core/agent.py extracts both
+    text *and* tool_use blocks from the fully-assembled get_final_message()
+    result, never from the incremental .text_stream deltas, so a tool call
+    should never be at risk of being lost just because prose was streamed
+    alongside it in the same turn — this locks that in."""
+    tool = _EchoTool()
+    registry = ToolRegistry()
+    registry.register(tool)
+
+    mixed_round = _FakeMessage(
+        [_TextBlock("Let me check that for you."), _ToolUseBlock("call_1", "echo", {"text": "ping"})],
+        "tool_use",
+    )
+    final_round = _FakeMessage([_TextBlock("Done: echoed: ping")], "end_turn")
+    agent, _ = _make_agent(
+        [(["Let me check ", "that for you."], mixed_round), (["Done: echoed: ping"], final_round)], registry
+    )
+
+    reply = agent.respond("s1", "please echo ping")
+
+    assert tool.calls == ["ping"], "the tool_use block alongside streamed text was dropped"
+    assert reply == "Done: echoed: ping"
 
 
 def test_system_blocks_mark_static_instructions_as_cacheable():
