@@ -29,12 +29,12 @@ from core import attachments
 from core.agent import Agent
 from core.config import config
 from core.health_monitor import pending_alerts
+from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.store import Store
 from core.tts import Synthesizer, get_synthesizer_if_available
 from tools.registry_builder import build_registry
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orion.telegram")
 
 SESSION_ID = "telegram"
@@ -169,6 +169,7 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
 
 
 def main() -> None:
+    configure_logging()
     if not config.anthropic_api_key:
         raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
     if not config.telegram_bot_token:

@@ -39,6 +39,11 @@ class Config:
     )
     assistant_name: str = field(default_factory=lambda: _get("ORION_NAME", "Orion"))
     db_path: str = field(default_factory=lambda: _get("ORION_DB_PATH", "./orion.db"))
+    # core/logging_setup.py: a rotating file log alongside console output, so
+    # a headless/backgrounded run (systemd, a Task Scheduler job, ...) leaves
+    # a trail to diagnose after the fact instead of only whatever was left in
+    # a terminal that's since closed.
+    log_path: str = field(default_factory=lambda: _get("ORION_LOG_PATH", "./orion.log"))
 
     telegram_bot_token: str | None = field(default_factory=lambda: _get("TELEGRAM_BOT_TOKEN"))
     telegram_allowed_user_id: str | None = field(

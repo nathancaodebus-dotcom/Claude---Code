@@ -60,7 +60,11 @@ class ToolResultCache:
             return None
         expires_at, result = entry
         if time.time() >= expires_at:
-            del self._entries[key]
+            # pop(key, None) rather than del: core/agent.py now dispatches a
+            # turn's independent tool calls concurrently, so two threads can
+            # race to expire the same key here — del would raise KeyError for
+            # whichever thread loses that race.
+            self._entries.pop(key, None)
             return None
         logger.debug("Cache hit for '%s' %r", tool_name, kwargs)
         return result

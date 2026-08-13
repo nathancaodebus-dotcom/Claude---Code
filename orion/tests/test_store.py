@@ -3,6 +3,18 @@ import time
 from core.store import Store
 
 
+def test_uses_wal_journal_mode_for_safer_concurrent_access(tmp_path):
+    """Store is hit from several threads at once (scheduler, health monitor,
+    background consolidation, and now agent.py's concurrent tool dispatch) —
+    WAL mode lets readers and a writer proceed together instead of the
+    default rollback-journal mode locking the whole file per writer."""
+    store = Store(db_path=str(tmp_path / "test.db"))
+
+    mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert mode.lower() == "wal"
+
+
 def test_todo_crud(tmp_path):
     store = Store(db_path=str(tmp_path / "test.db"))
     todo_id = store.add_todo("buy milk")

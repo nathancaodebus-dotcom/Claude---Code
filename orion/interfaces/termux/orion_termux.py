@@ -31,6 +31,7 @@ import subprocess
 
 from core.agent import Agent
 from core.config import config
+from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.store import Store
 from tools.registry_builder import build_registry
@@ -96,6 +97,7 @@ def run_conversation(agent: Agent) -> None:
 
 
 def main() -> None:
+    configure_logging()
     if not config.anthropic_api_key:
         raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
 

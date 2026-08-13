@@ -72,6 +72,10 @@ class VectorMemory:
         path = db_path or config.db_path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(path, check_same_thread=False)
+        # See core/memory.py's __init__ for why: this file is shared across
+        # several SQLite connections used from several threads at once.
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
         self._model = SentenceTransformer(_MODEL_NAME)

@@ -925,6 +925,37 @@ already done to close that gap as much as it can be:
   you've finished speaking dropped from 1.2s to 0.7s, now that it's backed
   by real ambient-noise calibration instead of a fixed threshold that
   needed the extra margin to avoid false cutoffs in a noisy room.
+- **Parallel tool calls**: when a single turn needs several independent
+  tools (e.g. weather and a crypto price), they used to run one after
+  another, paying every tool's latency in sequence. `core/agent.py` now
+  dispatches a turn's tool calls concurrently (a thread pool), so the turn
+  only costs as long as its slowest tool — not their sum.
+
+## Reliability
+
+- **WAL mode on every SQLite store**: `core/memory.py`, `core/store.py`,
+  and `core/vector_memory.py` share one `orion.db` file across several
+  connections, hit from several threads at once (the scheduler, the health
+  monitor, background consolidation, and now concurrent tool dispatch
+  above). The default rollback-journal mode locks the whole file per
+  writer; WAL lets a writer and readers proceed together instead, with
+  `busy_timeout` making real contention wait and retry rather than
+  immediately erroring with "database is locked".
+- **Background loops survive a bad poll**: `ReminderScheduler` and
+  `HealthMonitor` each run their own always-on thread. Previously, the one
+  call that actually reads from the store (`due_reminders()` /
+  `pending_alerts()`) wasn't wrapped in a try/except — a single transient
+  error there (lock contention, a disk hiccup) would kill that thread
+  permanently, silently ending reminders or health alerts for the rest of
+  the process's life with no signal to the user. Both loops now catch and
+  log that failure and keep polling, the same way a failed *notification*
+  was already handled.
+- **Persistent logging**: every interface now calls
+  `core/logging_setup.py`'s `configure_logging()` at startup, which adds a
+  rotating log file (`ORION_LOG_PATH`, default `./orion.log`, ~5MB × 4
+  files kept) alongside the existing console output. Diagnosing a headless
+  or backgrounded run (§8, a systemd service, a Task Scheduler job) no
+  longer depends on a terminal that's since closed.
 
 The single biggest remaining cost is **tool calls**: the *first* time a
 question needs live information (weather, web search, "what's the news

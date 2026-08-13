@@ -231,6 +231,67 @@ def test_tool_call_survives_alongside_streamed_text_in_the_same_turn():
     assert reply == "Done: echoed: ping"
 
 
+def test_multiple_tool_calls_in_one_turn_all_dispatch_with_correct_results():
+    tool = _EchoTool()
+    registry = ToolRegistry()
+    registry.register(tool)
+
+    tool_round = _FakeMessage(
+        [
+            _ToolUseBlock("call_1", "echo", {"text": "first"}),
+            _ToolUseBlock("call_2", "echo", {"text": "second"}),
+        ],
+        "tool_use",
+    )
+    final_round = _FakeMessage([_TextBlock("Done.")], "end_turn")
+    agent, _ = _make_agent([([], tool_round), (["Done."], final_round)], registry)
+
+    agent.respond("s1", "echo both")
+
+    assert sorted(tool.calls) == ["first", "second"]
+    # The second stream() call's messages must carry both tool results,
+    # each paired with the tool_use_id it actually answers.
+    second_call_messages = agent._client.messages.stream_calls[1]["messages"]
+    tool_result_message = second_call_messages[-1]
+    results_by_id = {r["tool_use_id"]: r["content"] for r in tool_result_message["content"]}
+    assert results_by_id == {"call_1": "echoed: first", "call_2": "echoed: second"}
+
+
+def test_multiple_tool_calls_in_one_turn_run_concurrently_not_sequentially():
+    """Before this, a turn asking for N independent tools paid N tools'
+    worth of latency in sequence. Two tools that each block for ~0.3s
+    should now finish in well under their combined 0.6s if they're
+    actually running on separate threads at once."""
+
+    class _SlowTool(Tool):
+        name = "slow"
+        description = "Sleeps briefly then returns."
+        input_schema = {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}
+
+        def run(self, id: str) -> str:  # noqa: A002
+            time.sleep(0.3)
+            return f"done: {id}"
+
+    registry = ToolRegistry()
+    registry.register(_SlowTool())
+
+    tool_round = _FakeMessage(
+        [
+            _ToolUseBlock("call_1", "slow", {"id": "a"}),
+            _ToolUseBlock("call_2", "slow", {"id": "b"}),
+        ],
+        "tool_use",
+    )
+    final_round = _FakeMessage([_TextBlock("Done.")], "end_turn")
+    agent, _ = _make_agent([([], tool_round), (["Done."], final_round)], registry)
+
+    start = time.perf_counter()
+    agent.respond("s1", "run both slow tools")
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.5, f"tool calls took {elapsed:.2f}s — looks sequential, not parallel"
+
+
 def test_system_blocks_mark_static_instructions_as_cacheable():
     agent, _ = _make_agent([])
 

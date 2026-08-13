@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 import anthropic
@@ -222,18 +223,23 @@ class Agent:
 
             messages.append({"role": "assistant", "content": response.content})
 
-            tool_results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
-                result = self._tools.dispatch(block.name, block.input)
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result,
-                    }
+            tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+            # A turn asking for several independent tools (weather + crypto
+            # price, say) used to dispatch them one after another, paying
+            # every tool's latency in sequence even though nothing here
+            # depends on another tool's result within the same turn — a
+            # thread pool runs them concurrently instead, so the turn only
+            # costs as long as its slowest tool call. executor.map preserves
+            # input order, so results still line up with tool_use_blocks by
+            # index for pairing with the right tool_use_id below.
+            with ThreadPoolExecutor(max_workers=max(1, len(tool_use_blocks))) as executor:
+                results = list(
+                    executor.map(lambda b: self._tools.dispatch(b.name, b.input), tool_use_blocks)
                 )
+            tool_results = [
+                {"type": "tool_result", "tool_use_id": block.id, "content": result}
+                for block, result in zip(tool_use_blocks, results)
+            ]
             messages.append({"role": "user", "content": tool_results})
 
         return final_text

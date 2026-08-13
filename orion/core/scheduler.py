@@ -7,6 +7,7 @@ out loud, just print it.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Callable
@@ -14,6 +15,8 @@ from typing import Callable
 from core.store import Store
 
 Notifier = Callable[[str], None]
+
+logger = logging.getLogger("orion.scheduler")
 
 
 class ReminderScheduler:
@@ -26,7 +29,19 @@ class ReminderScheduler:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
-            for reminder in self._store.due_reminders():
+            try:
+                reminders = self._store.due_reminders()
+            except Exception:
+                # Unlike a failed notify (retried next poll, see below), an
+                # uncaught exception here would kill this whole background
+                # thread permanently — reminders silently stop firing for
+                # the rest of the process's life, with nothing telling the
+                # user. A transient DB hiccup (lock contention, disk hiccup)
+                # must not end the thread; log it and try again next poll.
+                logger.exception("Failed to fetch due reminders; will retry next poll.")
+                self._stop_event.wait(self._poll_interval_s)
+                continue
+            for reminder in reminders:
                 try:
                     self._notify(f"⏰ Reminder: {reminder.text}")
                 except Exception:

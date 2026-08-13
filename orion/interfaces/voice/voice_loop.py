@@ -20,6 +20,7 @@ from core import attachments
 from core.agent import Agent
 from core.config import config
 from core.health_monitor import HealthMonitor
+from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.scheduler import ReminderScheduler
 from core.store import Store
@@ -281,6 +282,7 @@ class VoiceLoop:
 
 
 def main() -> None:
+    configure_logging()
     if not config.anthropic_api_key:
         raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
     VoiceLoop().run()

@@ -1,6 +1,14 @@
 from core.memory import Memory
 
 
+def test_uses_wal_journal_mode_for_safer_concurrent_access(tmp_path):
+    memory = Memory(db_path=str(tmp_path / "test.db"))
+
+    mode = memory._conn.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert mode.lower() == "wal"
+
+
 def test_append_and_history_roundtrip(tmp_path):
     memory = Memory(db_path=str(tmp_path / "test.db"))
     memory.append("s1", "user", "hello")

@@ -17,6 +17,7 @@ loop the same way.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Callable
@@ -24,6 +25,8 @@ from typing import Callable
 from core.store import Store
 
 Notifier = Callable[[str], None]
+
+logger = logging.getLogger("orion.health_monitor")
 
 # A handful of one-off errors (a flaky network blip) shouldn't interrupt the
 # user — only a sustained problem (an expired token, a dead service) should.
@@ -69,7 +72,17 @@ class HealthMonitor:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
-            for tool_name, message in pending_alerts(self._store):
+            try:
+                alerts = pending_alerts(self._store)
+            except Exception:
+                # Same reasoning as ReminderScheduler._loop: an uncaught
+                # exception here would kill this thread permanently, so
+                # health monitoring itself would silently stop watching for
+                # failures — log it and keep the loop alive instead.
+                logger.exception("Failed to compute pending health alerts; will retry next poll.")
+                self._stop_event.wait(self._poll_interval_s)
+                continue
+            for tool_name, message in alerts:
                 try:
                     self._notify(message)
                 except Exception:

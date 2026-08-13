@@ -109,3 +109,35 @@ def test_health_monitor_thread_delivers_alerts_and_marks_only_on_success(tmp_pat
 
     assert calls["count"] >= 2  # first delivery failed, thread retried on next poll
     assert store.last_health_alert("search_emails") is not None  # eventually marked once it succeeded
+
+
+def test_pending_alerts_failure_does_not_kill_the_loop(tmp_path):
+    """Regression test: pending_alerts(store) itself used to be uncaught in
+    _loop, so a single transient error (DB lock, disk hiccup) computing it
+    would crash the thread permanently — health monitoring would silently
+    stop watching for failures for the rest of the process's life."""
+    store = Store(db_path=str(tmp_path / "test.db"))
+    _fail(store, "search_emails", 3)
+
+    real_recent_failure_counts = store.recent_failure_counts
+    state = {"failures_left": 2}
+
+    def flaky_recent_failure_counts(window_s: float):
+        if state["failures_left"] > 0:
+            state["failures_left"] -= 1
+            raise RuntimeError("simulated transient DB error")
+        return real_recent_failure_counts(window_s)
+
+    store.recent_failure_counts = flaky_recent_failure_counts
+
+    delivered = []
+    monitor = HealthMonitor(store, notify=delivered.append, poll_interval_s=0.05)
+    monitor.start()
+    try:
+        deadline = time.time() + 2
+        while not delivered and time.time() < deadline:
+            time.sleep(0.02)
+    finally:
+        monitor.stop()
+
+    assert delivered, "loop never recovered from the flaky fetch — thread likely died"

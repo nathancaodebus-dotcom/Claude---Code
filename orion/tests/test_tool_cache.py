@@ -1,3 +1,4 @@
+import threading
 import time
 
 from core.tool_cache import ToolResultCache
@@ -39,6 +40,35 @@ def test_entry_expires_after_its_ttl(monkeypatch):
 
     monkeypatch.setattr(time, "time", lambda: now + 301)  # web_search TTL is 300s
     assert cache.get("web_search", {"query": "Orion"}) is None
+
+
+def test_concurrent_get_on_an_expired_entry_does_not_raise(monkeypatch):
+    """Regression test: core/agent.py now dispatches a turn's independent
+    tool calls concurrently (ThreadPoolExecutor), so two threads can race to
+    expire the same cache key at once. get() used to `del` the expired entry
+    directly — whichever thread lost that race would hit a KeyError on an
+    already-deleted key."""
+    cache = ToolResultCache()
+    now = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now)
+    cache.set("web_search", {"query": "Orion"}, "stale result")
+    monkeypatch.setattr(time, "time", lambda: now + 301)  # past web_search's TTL
+
+    errors: list[Exception] = []
+
+    def get_expired():
+        try:
+            cache.get("web_search", {"query": "Orion"})
+        except Exception as exc:  # noqa: BLE001 - the whole point is to catch what get() used to raise
+            errors.append(exc)
+
+    threads = [threading.Thread(target=get_expired) for _ in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
 
 
 def test_unhashable_argument_does_not_crash_get_or_set():

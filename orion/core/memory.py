@@ -55,6 +55,16 @@ class Memory:
         path = db_path or config.db_path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(path, check_same_thread=False)
+        # WAL mode: this file is shared with core/store.py and
+        # core/vector_memory.py, each on its own connection, hit from
+        # several threads at once (scheduler, health monitor, background
+        # consolidation, and now agent.py's concurrent tool dispatch).
+        # Default rollback-journal mode locks the whole file per writer;
+        # WAL lets readers and a writer proceed together instead. busy_timeout
+        # makes a connection that does hit real contention wait and retry
+        # rather than immediately raising "database is locked".
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 

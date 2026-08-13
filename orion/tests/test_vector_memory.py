@@ -4,6 +4,9 @@ _top_k_matches, is pure numpy over plain rows and needs neither that model
 nor a database, so it's tested directly here."""
 from __future__ import annotations
 
+import sys
+import types
+
 import numpy as np
 
 from core.vector_memory import MemoryMatch, _top_k_matches
@@ -11,6 +14,28 @@ from core.vector_memory import MemoryMatch, _top_k_matches
 
 def _row(text: str, vec: list[float]) -> tuple[str, str, bytes]:
     return (text, "test", np.array(vec, dtype=np.float32).tobytes())
+
+
+def test_uses_wal_journal_mode_for_safer_concurrent_access(tmp_path, monkeypatch):
+    """VectorMemory shares its db file with Memory/Store — see their tests
+    of the same name for why this matters. sentence-transformers is a heavy
+    optional dependency not needed to check this, so it's faked."""
+
+    class _FakeSentenceTransformer:
+        def __init__(self, model_name):
+            pass
+
+    fake_module = types.ModuleType("sentence_transformers")
+    fake_module.SentenceTransformer = _FakeSentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
+
+    from core.vector_memory import VectorMemory
+
+    memory = VectorMemory(db_path=str(tmp_path / "test.db"))
+
+    mode = memory._conn.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert mode.lower() == "wal"
 
 
 def test_returns_empty_list_for_no_rows():
