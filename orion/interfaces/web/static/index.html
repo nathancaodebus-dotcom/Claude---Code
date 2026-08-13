@@ -32,29 +32,33 @@
 
 <main class="stage">
   <section class="hero" id="hero">
-    <div class="core-hero" id="core-hero">
-      <div class="nebula">
-        <span class="nebula-blob nebula-blob--teal"></span>
-        <span class="nebula-blob nebula-blob--violet"></span>
-        <span class="nebula-blob nebula-blob--blue"></span>
+    <div class="core-hero-wrap">
+      <!-- Radial equalizer: bars around the circle's rim react while Orion
+           is replying, instead of a visible transcript of what's said —
+           see app.js's Visualizer. Sized larger than .core-hero and
+           z-indexed behind it so the bars extend outward past the rings,
+           into the "back" of the circle. -->
+      <canvas id="visualizer" class="visualizer" width="600" height="600"></canvas>
+      <div class="core-hero" id="core-hero">
+        <div class="nebula">
+          <span class="nebula-blob nebula-blob--teal"></span>
+          <span class="nebula-blob nebula-blob--violet"></span>
+          <span class="nebula-blob nebula-blob--blue"></span>
+        </div>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--1"><circle cx="200" cy="200" r="188" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--2"><circle cx="200" cy="200" r="156" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--3"><circle cx="200" cy="200" r="124" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ticks"><circle cx="200" cy="200" r="188" /></svg>
+        <canvas id="particles" width="400" height="400"></canvas>
+        <div class="hero-glow"></div>
+        <!-- The user's own generated artwork, used as-is rather than a
+             code-drawn approximation. mix-blend-mode:screen in style.css
+             drops its pure-black background into the page's own dark
+             background/nebula instead of showing as a visible rectangle. -->
+        <img class="hero-figure-img" src="/assets/orion-figure.png" alt="ORION" />
       </div>
-      <svg viewBox="0 0 400 400" class="hero-ring hero-ring--1"><circle cx="200" cy="200" r="188" /></svg>
-      <svg viewBox="0 0 400 400" class="hero-ring hero-ring--2"><circle cx="200" cy="200" r="156" /></svg>
-      <svg viewBox="0 0 400 400" class="hero-ring hero-ring--3"><circle cx="200" cy="200" r="124" /></svg>
-      <svg viewBox="0 0 400 400" class="hero-ticks"><circle cx="200" cy="200" r="188" /></svg>
-      <canvas id="particles" width="400" height="400"></canvas>
-      <div class="hero-glow"></div>
-      <!-- The user's own generated artwork, used as-is rather than a
-           code-drawn approximation. mix-blend-mode:screen in style.css
-           drops its pure-black background into the page's own dark
-           background/nebula instead of showing as a visible rectangle. -->
-      <img class="hero-figure-img" src="/assets/orion-figure.png" alt="ORION" />
     </div>
     <p class="hero-hint" id="hero-hint">WAITING FOR COMMAND</p>
-  </section>
-
-  <section class="chat" id="chat" hidden>
-    <div class="chat-log" id="chat-log"></div>
   </section>
 </main>
 

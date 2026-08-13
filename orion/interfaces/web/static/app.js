@@ -1,9 +1,6 @@
 (() => {
   "use strict";
 
-  const heroEl = document.getElementById("hero");
-  const chatEl = document.getElementById("chat");
-  const chatLogEl = document.getElementById("chat-log");
   const coreHeroEl = document.getElementById("core-hero");
   const coreMiniEl = document.getElementById("core-mini");
   const heroHintEl = document.getElementById("hero-hint");
@@ -15,9 +12,6 @@
   const modelReadoutEl = document.getElementById("readout-model");
   const statusLineEl = document.getElementById("status-line");
   const brandNameEl = document.getElementById("brand-name");
-
-  let chatStarted = false;
-  let orionMessageEl = null;
 
   // --- clock ---
 
@@ -45,13 +39,14 @@
       statusLineEl.textContent = "BACKEND UNREACHABLE";
     });
 
-  // --- state (idle / thinking / speaking) driving the core emblem's animation speed ---
+  // --- state (idle / thinking / speaking) driving the core emblem + equalizer ---
 
   function setState(state) {
     for (const el of [coreHeroEl, coreMiniEl]) {
       el.classList.remove("state-thinking", "state-speaking");
       if (state) el.classList.add(`state-${state}`);
     }
+    visualizer.setMode(state || "idle");
   }
 
   // --- particles: a slow drifting ring of dots inside the hero emblem ---
@@ -102,61 +97,152 @@
   }
   initParticles();
 
-  // --- chat rendering ---
+  // --- equalizer: a ring of radial bars around the circle that reacts
+  // while Orion is thinking/replying, standing in for a visible transcript
+  // (per the user's request: keep the input bar, lose the written
+  // back-and-forth). There's no real audio here — levels are synthetic,
+  // randomly re-targeted and eased every frame, the same trick a lot of
+  // "audio reactive" UIs use when there's no actual mic/waveform to read. ---
 
-  function scrollToBottom() {
-    chatLogEl.scrollTop = chatLogEl.scrollHeight;
-  }
+  const visualizer = (() => {
+    const canvas = document.getElementById("visualizer");
+    const ctx = canvas.getContext("2d");
+    const BAR_COUNT = 72;
+    const bars = Array.from({ length: BAR_COUNT }, () => ({ level: 0, target: 0 }));
+    let mode = "idle";
+    let lastKick = 0;
 
-  function startChatIfNeeded() {
-    if (chatStarted) return;
-    chatStarted = true;
-    heroEl.style.opacity = "0";
-    heroEl.style.transform = "scale(0.92)";
-    setTimeout(() => {
-      heroEl.hidden = true;
-      chatEl.hidden = false;
-    }, 350);
-  }
+    function kick(intensity, coverage) {
+      for (const bar of bars) {
+        if (Math.random() < coverage) {
+          bar.target = Math.random() * intensity;
+        }
+      }
+    }
 
-  function appendMessage(role, text) {
+    function setMode(next) {
+      mode = next;
+      if (mode === "idle") {
+        for (const bar of bars) bar.target = 0.04 + Math.random() * 0.03;
+      }
+    }
+
+    function lerpChannel(a, b, t) {
+      return Math.round(a + (b - a) * Math.min(1, Math.max(0, t)));
+    }
+
+    function barColor(i, level) {
+      // Sweep teal -> icy blue -> violet across the ring, matching the
+      // nebula palette; brighter/more opaque the higher the level.
+      const t = i / BAR_COUNT;
+      const stops = [
+        [33, 201, 184],
+        [124, 147, 255],
+        [155, 107, 255],
+      ];
+      const segment = t * (stops.length - 1);
+      const idx = Math.min(stops.length - 2, Math.floor(segment));
+      const localT = segment - idx;
+      const [r1, g1, b1] = stops[idx];
+      const [r2, g2, b2] = stops[idx + 1];
+      const r = lerpChannel(r1, r2, localT);
+      const g = lerpChannel(g1, g2, localT);
+      const b = lerpChannel(b1, b2, localT);
+      const alpha = 0.3 + level * 0.6;
+      return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+    }
+
+    function frame(ts) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (w > 0 && h > 0 && (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr))) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      if (w > 0 && h > 0) {
+        const cx = w / 2;
+        const cy = h / 2;
+        const innerR = Math.min(w, h) * 0.335;
+        const maxBarLen = Math.min(w, h) * 0.13;
+
+        if (mode === "speaking" && ts - lastKick > 90) {
+          kick(1, 0.65);
+          lastKick = ts;
+        } else if (mode === "thinking" && ts - lastKick > 220) {
+          kick(0.4, 0.4);
+          lastKick = ts;
+        }
+
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const bar = bars[i];
+          bar.level += (bar.target - bar.level) * 0.18;
+          const angle = (i / BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
+          const len = 3 + bar.level * maxBarLen;
+          const x1 = cx + Math.cos(angle) * innerR;
+          const y1 = cy + Math.sin(angle) * innerR;
+          const x2 = cx + Math.cos(angle) * (innerR + len);
+          const y2 = cy + Math.sin(angle) * (innerR + len);
+
+          ctx.strokeStyle = barColor(i, bar.level);
+          ctx.lineWidth = 2.2;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+      }
+
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+    return { setMode };
+  })();
+
+  // --- notifications: proactive pushes (reminders/alerts), errors, and
+  // generated attachments all surface here as brief toasts — this is
+  // deliberately the *only* visible record of what Orion says or does,
+  // no scrolling transcript. ---
+
+  function showNotification(text, { isError = false } = {}) {
     const el = document.createElement("div");
-    el.className = `msg ${role}`;
-    const label = document.createElement("span");
-    label.className = "msg-label";
-    label.textContent = role === "user" ? "VOUS" : role === "error" ? "ERREUR" : "ORION";
-    const body = document.createElement("span");
-    body.className = "msg-body";
-    body.textContent = text;
-    el.appendChild(label);
-    el.appendChild(body);
-    chatLogEl.appendChild(el);
-    scrollToBottom();
+    el.className = isError ? "notification error" : "notification";
+    el.textContent = text;
+    notificationsEl.appendChild(el);
+    setTimeout(() => el.remove(), 12000);
     return el;
   }
 
-  function appendAttachments(container, paths) {
+  function showAttachments(paths) {
     for (const path of paths || []) {
-      const url = `/${path}`;
+      const el = document.createElement("div");
+      el.className = "notification";
       if (/\.(png|jpe?g|gif|webp|svg)$/i.test(path)) {
         const img = document.createElement("img");
-        img.className = "attachment";
-        img.src = url;
+        img.className = "attachment-thumb";
+        img.src = `/${path}`;
         img.alt = path;
-        container.appendChild(img);
+        el.appendChild(img);
       } else {
         const link = document.createElement("a");
         link.className = "attachment-link";
-        link.href = url;
+        link.href = `/${path}`;
         link.textContent = `📎 ${path.split("/").pop()}`;
         link.target = "_blank";
         link.rel = "noopener";
-        container.appendChild(link);
+        el.appendChild(link);
       }
+      notificationsEl.appendChild(el);
+      setTimeout(() => el.remove(), 20000);
     }
   }
 
-  // --- sending a message, streaming the SSE reply ---
+  // --- sending a message, streaming the SSE reply into the equalizer only ---
 
   async function sendMessage() {
     const text = inputEl.value.trim();
@@ -165,13 +251,8 @@
     inputEl.disabled = true;
     sendEl.disabled = true;
 
-    startChatIfNeeded();
-    appendMessage("user", text);
     setState("thinking");
     heroHintEl.textContent = "PROCESSING…";
-
-    let bodyEl = null;
-    let bodyText = "";
 
     try {
       const response = await fetch("/api/chat", {
@@ -195,24 +276,15 @@
 
           if (event.type === "sentence") {
             setState("speaking");
-            if (!bodyEl) {
-              bodyEl = appendMessage("orion", "");
-            }
-            bodyText += (bodyText ? " " : "") + event.text;
-            bodyEl.querySelector(".msg-body").textContent = bodyText;
-            scrollToBottom();
           } else if (event.type === "done") {
-            if (!bodyEl) {
-              bodyEl = appendMessage("orion", event.text || "");
-            }
-            appendAttachments(bodyEl, event.attachments);
+            showAttachments(event.attachments);
           } else if (event.type === "error") {
-            appendMessage("error", event.text || "Une erreur est survenue.");
+            showNotification(event.text || "Une erreur est survenue.", { isError: true });
           }
         }
       }
     } catch (err) {
-      appendMessage("error", `Connexion perdue avec le backend (${err}).`);
+      showNotification(`Connexion perdue avec le backend (${err}).`, { isError: true });
     } finally {
       setState(null);
       heroHintEl.textContent = "WAITING FOR COMMAND";
@@ -229,14 +301,6 @@
   inputEl.focus();
 
   // --- proactive notifications (reminders, health alerts) ---
-
-  function showNotification(text) {
-    const el = document.createElement("div");
-    el.className = "notification";
-    el.textContent = text;
-    notificationsEl.appendChild(el);
-    setTimeout(() => el.remove(), 12000);
-  }
 
   try {
     const events = new EventSource("/api/events");

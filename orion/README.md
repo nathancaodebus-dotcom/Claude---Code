@@ -831,12 +831,15 @@ python -m interfaces.web.app
 ```
 
 Then open **http://127.0.0.1:8420** (port configurable via
-`ORION_WEB_PORT`). Type a message and it streams back sentence by
-sentence, the same responsiveness the voice interfaces get — the central
-emblem's glow speeds up while Orion is thinking, then pulses while it
-replies. Reminders and health alerts (§9/§10) pop up as HUD notifications
-the moment they fire, without needing to ask. Anything a tool generates
-(an image, a QR code, a document) shows up inline in the chat.
+`ORION_WEB_PORT`). Deliberately no visible transcript — type a message and
+there's no scrolling back-and-forth text log; instead a radial equalizer
+around the circle reacts while Orion replies, the same idea as a
+microphone app's level meter, and the central emblem's glow speeds up
+while thinking and pulses while replying. Reminders, health alerts
+(§9/§10), errors, and anything a tool generates (an image, a QR code, a
+document) all surface as brief HUD notification toasts instead — the
+input bar is still there for typing, just nothing renders the
+conversation itself on screen.
 
 Single-user, single-session, same as the CLI — two browser tabs open at
 once share one conversation, the same as running the CLI twice would with
