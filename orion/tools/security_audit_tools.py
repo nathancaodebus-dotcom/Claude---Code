@@ -9,6 +9,7 @@ import sys
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 
@@ -67,7 +68,7 @@ class CheckDependencyVulnerabilitiesTool(Tool):
     }
 
     def run(self, package_name: str, version: str, ecosystem: str = "PyPI") -> str:
-        response = httpx.post(
+        response = client.post(
             "https://api.osv.dev/v1/query",
             json={"package": {"name": package_name, "ecosystem": ecosystem}, "version": version},
             timeout=15,

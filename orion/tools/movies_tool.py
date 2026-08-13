@@ -4,6 +4,7 @@ from __future__ import annotations
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -16,7 +17,7 @@ class UpcomingMoviesTool(Tool):
     }
 
     def run(self, max_results: int = 10) -> str:
-        response = httpx.get(
+        response = client.get(
             "https://api.themoviedb.org/3/movie/upcoming",
             params={"api_key": config.tmdb_api_key},
             timeout=10,
@@ -38,7 +39,7 @@ class SearchMovieTool(Tool):
     }
 
     def run(self, query: str) -> str:
-        response = httpx.get(
+        response = client.get(
             "https://api.themoviedb.org/3/search/movie",
             params={"api_key": config.tmdb_api_key, "query": query},
             timeout=10,

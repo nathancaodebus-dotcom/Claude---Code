@@ -7,6 +7,7 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 
+from core.http import client
 from tools.base import Tool
 
 _USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
@@ -25,7 +26,7 @@ class WebSearchTool(Tool):
     }
 
     def run(self, query: str, max_results: int = 5) -> str:
-        response = httpx.get(
+        response = client.get(
             "https://html.duckduckgo.com/html/",
             params={"q": query},
             headers={"User-Agent": _USER_AGENT},
@@ -63,7 +64,7 @@ class FetchWebpageTool(Tool):
     }
 
     def run(self, url: str, max_chars: int = 4000) -> str:
-        response = httpx.get(
+        response = client.get(
             url, headers={"User-Agent": _USER_AGENT}, timeout=15, follow_redirects=True
         )
         response.raise_for_status()
@@ -86,7 +87,7 @@ class ShortenUrlTool(Tool):
     }
 
     def run(self, url: str) -> str:
-        response = httpx.get(
+        response = client.get(
             "https://tinyurl.com/api-create.php", params={"url": url}, timeout=10
         )
         response.raise_for_status()
@@ -99,5 +100,5 @@ class PublicIpTool(Tool):
     input_schema = {"type": "object", "properties": {}}
 
     def run(self) -> str:
-        response = httpx.get("https://api.ipify.org", params={"format": "json"}, timeout=10)
+        response = client.get("https://api.ipify.org", params={"format": "json"}, timeout=10)
         return response.json()["ip"]

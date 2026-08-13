@@ -5,6 +5,7 @@ from __future__ import annotations
 import feedparser
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 _USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
@@ -52,7 +53,7 @@ class RedditTopPostsTool(Tool):
     }
 
     def run(self, subreddit: str, time_range: str = "day", max_results: int = 10) -> str:
-        response = httpx.get(
+        response = client.get(
             f"https://www.reddit.com/r/{subreddit}/top.json",
             params={"t": time_range, "limit": max_results},
             headers={"User-Agent": _USER_AGENT},

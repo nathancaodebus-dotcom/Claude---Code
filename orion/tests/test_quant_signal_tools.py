@@ -32,13 +32,13 @@ def store(tmp_path):
 @pytest.fixture(autouse=True)
 def mock_stooq(monkeypatch):
     monkeypatch.setattr(
-        "tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse(_STOOQ_CSV)
+        "tools.quant_signal_tools.client.get", lambda *a, **kw: _FakeResponse(_STOOQ_CSV)
     )
 
 
 def test_fetch_stooq_history_parses_csv_and_sorts_ascending(monkeypatch):
     unsorted_csv = "Date,Open,High,Low,Close,Volume\n2024-01-02,101,102,100,101,900\n2024-01-01,100,101,99,100,1000\n"
-    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse(unsorted_csv))
+    monkeypatch.setattr("tools.quant_signal_tools.client.get", lambda *a, **kw: _FakeResponse(unsorted_csv))
 
     bars = _fetch_stooq_history("aapl", 30)
 
@@ -47,13 +47,13 @@ def test_fetch_stooq_history_parses_csv_and_sorts_ascending(monkeypatch):
 
 
 def test_fetch_stooq_history_handles_no_data_response(monkeypatch):
-    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse("No data"))
+    monkeypatch.setattr("tools.quant_signal_tools.client.get", lambda *a, **kw: _FakeResponse("No data"))
     assert _fetch_stooq_history("ghost", 30) == []
 
 
 def test_backtest_not_enough_history(monkeypatch):
     monkeypatch.setattr(
-        "tools.quant_signal_tools.httpx.get",
+        "tools.quant_signal_tools.client.get",
         lambda *a, **kw: _FakeResponse("Date,Open,High,Low,Close,Volume\n2024-01-01,100,101,99,100,1000\n"),
     )
     result = BacktestQuantSignalTool().run(ticker="AAPL", signal_code="def signal(bars):\n    return [1] * len(bars)\n")
@@ -89,7 +89,7 @@ def test_backtest_reports_standard_strategy_metrics(monkeypatch):
     for i in range(120):
         price *= 1 + rng.uniform(-0.02, 0.022)
         rows.append(f"2024-01-{i + 1:02d},{price},{price * 1.01},{price * 0.99},{price},1000")
-    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse("\n".join(rows)))
+    monkeypatch.setattr("tools.quant_signal_tools.client.get", lambda *a, **kw: _FakeResponse("\n".join(rows)))
 
     signal_code = (
         "def signal(bars):\n"
@@ -116,7 +116,7 @@ def test_backtest_falls_back_to_strategy_note_with_too_few_above_median_trades(m
         ["Date,Open,High,Low,Close,Volume"]
         + [f"2024-01-{i + 1:02d},100,101,99,100,1000" for i in range(40)]
     )
-    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse(csv))
+    monkeypatch.setattr("tools.quant_signal_tools.client.get", lambda *a, **kw: _FakeResponse(csv))
 
     signal_code = (
         "def signal(bars):\n"

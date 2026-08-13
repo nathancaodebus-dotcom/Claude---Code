@@ -22,7 +22,7 @@ def fake_token(monkeypatch):
 
 
 def test_search_returns_no_matches_message(monkeypatch):
-    monkeypatch.setattr(outlook_tool.httpx, "get", lambda *a, **kw: _FakeResponse({"value": []}))
+    monkeypatch.setattr(outlook_tool.client, "get", lambda *a, **kw: _FakeResponse({"value": []}))
     result = outlook_tool.OutlookSearchTool().run()
     assert result == "No matching emails found."
 
@@ -34,7 +34,7 @@ def test_search_defaults_to_unread_filter(monkeypatch):
         captured["params"] = params
         return _FakeResponse({"value": []})
 
-    monkeypatch.setattr(outlook_tool.httpx, "get", fake_get)
+    monkeypatch.setattr(outlook_tool.client, "get", fake_get)
 
     outlook_tool.OutlookSearchTool().run()
 
@@ -48,7 +48,7 @@ def test_search_with_query_uses_search_param(monkeypatch):
         captured["params"] = params
         return _FakeResponse({"value": []})
 
-    monkeypatch.setattr(outlook_tool.httpx, "get", fake_get)
+    monkeypatch.setattr(outlook_tool.client, "get", fake_get)
 
     outlook_tool.OutlookSearchTool().run(query="invoice")
 
@@ -68,7 +68,7 @@ def test_search_formats_results(monkeypatch):
             }
         ]
     }
-    monkeypatch.setattr(outlook_tool.httpx, "get", lambda *a, **kw: _FakeResponse(messages))
+    monkeypatch.setattr(outlook_tool.client, "get", lambda *a, **kw: _FakeResponse(messages))
 
     result = outlook_tool.OutlookSearchTool().run()
 
@@ -84,7 +84,7 @@ def test_read_email_returns_body(monkeypatch):
         "receivedDateTime": "2026-08-01T10:00:00Z",
         "body": {"content": "the body text"},
     }
-    monkeypatch.setattr(outlook_tool.httpx, "get", lambda *a, **kw: _FakeResponse(msg))
+    monkeypatch.setattr(outlook_tool.client, "get", lambda *a, **kw: _FakeResponse(msg))
 
     result = outlook_tool.OutlookReadTool().run(message_id="abc")
 
@@ -93,7 +93,7 @@ def test_read_email_returns_body(monkeypatch):
 
 
 def test_create_draft_does_not_send(monkeypatch):
-    monkeypatch.setattr(outlook_tool.httpx, "post", lambda *a, **kw: _FakeResponse({"id": "draft1"}))
+    monkeypatch.setattr(outlook_tool.client, "post", lambda *a, **kw: _FakeResponse({"id": "draft1"}))
 
     result = outlook_tool.OutlookCreateDraftTool().run(to="a@b.com", subject="Sub", body="Body")
 
@@ -109,7 +109,7 @@ def test_archive_moves_to_archive_folder(monkeypatch):
         captured["json"] = json
         return _FakeResponse({})
 
-    monkeypatch.setattr(outlook_tool.httpx, "post", fake_post)
+    monkeypatch.setattr(outlook_tool.client, "post", fake_post)
 
     result = outlook_tool.OutlookArchiveTool().run(message_id="abc")
 
@@ -125,7 +125,7 @@ def test_mark_read_patches_is_read(monkeypatch):
         captured["json"] = json
         return _FakeResponse({})
 
-    monkeypatch.setattr(outlook_tool.httpx, "patch", fake_patch)
+    monkeypatch.setattr(outlook_tool.client, "patch", fake_patch)
 
     result = outlook_tool.OutlookMarkReadTool().run(message_id="abc")
 
@@ -134,7 +134,7 @@ def test_mark_read_patches_is_read(monkeypatch):
 
 
 def test_unread_count(monkeypatch):
-    monkeypatch.setattr(outlook_tool.httpx, "get", lambda *a, **kw: _FakeResponse({"unreadItemCount": 7}))
+    monkeypatch.setattr(outlook_tool.client, "get", lambda *a, **kw: _FakeResponse({"unreadItemCount": 7}))
 
     result = outlook_tool.OutlookUnreadCountTool().run()
 

@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from core.http import client
 from core.store import Store
 from tools.base import Tool
 
@@ -28,7 +29,7 @@ def _fetch_prices(coin_ids: list[str], vs_currency: str = "usd") -> dict[str, di
     """One batched CoinGecko call for however many coins are needed, rather
     than one call per coin — used by every tool below that needs a live
     price. Returns {coin_id: {"price": ..., "change_24h_pct": ..., ...}}."""
-    response = httpx.get(
+    response = client.get(
         f"{_COINGECKO_BASE}/simple/price",
         params={
             "ids": ",".join(sorted(set(c.lower() for c in coin_ids))),
@@ -160,7 +161,7 @@ class GetCryptoTechnicalIndicatorsTool(Tool):
 
     def run(self, coin: str, days: int = 30, vs_currency: str = "usd") -> str:
         days = min(days, 90)
-        response = httpx.get(
+        response = client.get(
             f"{_COINGECKO_BASE}/coins/{coin.lower()}/market_chart",
             params={"vs_currency": vs_currency.lower(), "days": days, "interval": "daily"},
             headers={"User-Agent": _USER_AGENT},

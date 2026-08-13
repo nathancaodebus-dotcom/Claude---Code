@@ -6,6 +6,7 @@ import datetime as dt
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 from tools.microsoft_auth import get_access_token
 
@@ -29,7 +30,7 @@ class ListOutlookEventsTool(Tool):
     def run(self, days_ahead: int = 7) -> str:
         now = dt.datetime.utcnow()
         end = now + dt.timedelta(days=days_ahead)
-        response = httpx.get(
+        response = client.get(
             f"{_GRAPH}/me/calendarview",
             headers={**_headers(), "Prefer": 'outlook.timezone="UTC"'},
             params={
@@ -83,7 +84,7 @@ class CreateOutlookEventTool(Tool):
             "start": {"dateTime": start_iso, "timeZone": "UTC"},
             "end": {"dateTime": end_iso, "timeZone": "UTC"},
         }
-        response = httpx.post(f"{_GRAPH}/me/events", headers=_headers(), json=payload, timeout=15)
+        response = client.post(f"{_GRAPH}/me/events", headers=_headers(), json=payload, timeout=15)
         response.raise_for_status()
         created = response.json()
         return f"Event created: {created.get('subject')} at {start_iso} (id={created.get('id')})"

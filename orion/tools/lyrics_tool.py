@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 
@@ -17,7 +18,7 @@ class GetLyricsTool(Tool):
     }
 
     def run(self, artist: str, title: str) -> str:
-        response = httpx.get(f"https://api.lyrics.ovh/v1/{artist}/{title}", timeout=10)
+        response = client.get(f"https://api.lyrics.ovh/v1/{artist}/{title}", timeout=10)
         if response.status_code != 200:
             return f"No lyrics found for '{title}' by {artist}."
         return response.json().get("lyrics", "No lyrics found.").strip()

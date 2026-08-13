@@ -998,6 +998,16 @@ already done to close that gap as much as it can be:
   in one burst, rather than one per tool — more tools in a turn than that
   is more likely to trip a provider's rate limit than to finish faster,
   since most of them are I/O-bound on the same handful of external APIs.
+- **Pooled HTTP connections**: every tool that calls an external API (~20
+  files, Shopify/Microsoft Graph/CoinGecko/GitHub/weather/... — everything
+  except `core/offline_agent.py`'s local Ollama calls) used to go through
+  httpx's module-level `httpx.get`/`httpx.post`/etc., which by design opens
+  a brand new connection — a full TCP handshake, then a TLS handshake for
+  every `https://` call — and tears it down again after each single
+  request. They now share one persistent `httpx.Client` (`core/http.py`),
+  so a repeat call to a host already used this session (Shopify's API
+  during one longer store-management conversation, say) reuses an existing
+  connection instead of paying that handshake again.
 - **Telegram replies no longer block reminders/health alerts**: the bot's
   reply generation, voice transcription, and TTS encoding are blocking
   calls, often several seconds long — running them directly inside an

@@ -22,14 +22,14 @@ def fake_token(monkeypatch):
 
 
 def test_list_events_no_upcoming(monkeypatch):
-    monkeypatch.setattr(cal.httpx, "get", lambda *a, **kw: _FakeResponse({"value": []}))
+    monkeypatch.setattr(cal.client, "get", lambda *a, **kw: _FakeResponse({"value": []}))
     result = cal.ListOutlookEventsTool().run()
     assert result == "No upcoming events."
 
 
 def test_list_events_formats_results(monkeypatch):
     events = {"value": [{"id": "e1", "subject": "Standup", "start": {"dateTime": "2026-08-12T09:00:00"}}]}
-    monkeypatch.setattr(cal.httpx, "get", lambda *a, **kw: _FakeResponse(events))
+    monkeypatch.setattr(cal.client, "get", lambda *a, **kw: _FakeResponse(events))
 
     result = cal.ListOutlookEventsTool().run()
 
@@ -44,7 +44,7 @@ def test_create_event_defaults_end_time(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"subject": "Meeting", "id": "e2"})
 
-    monkeypatch.setattr(cal.httpx, "post", fake_post)
+    monkeypatch.setattr(cal.client, "post", fake_post)
 
     result = cal.CreateOutlookEventTool().run(summary="Meeting", start_iso="2026-08-12T14:00:00")
 
@@ -60,7 +60,7 @@ def test_create_event_uses_explicit_end_time(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"subject": "Meeting", "id": "e2"})
 
-    monkeypatch.setattr(cal.httpx, "post", fake_post)
+    monkeypatch.setattr(cal.client, "post", fake_post)
 
     cal.CreateOutlookEventTool().run(
         summary="Meeting", start_iso="2026-08-12T14:00:00", end_iso="2026-08-12T16:00:00"

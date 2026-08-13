@@ -35,7 +35,7 @@ def test_headers_include_access_token():
 
 
 def test_list_orders_no_matches(monkeypatch):
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
     result = shopify_tools.ListShopifyOrdersTool().run()
     assert result == "No matching orders."
 
@@ -55,7 +55,7 @@ def test_list_orders_formats_results(monkeypatch):
             }
         ]
     }
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse(orders))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(orders))
 
     result = shopify_tools.ListShopifyOrdersTool().run()
 
@@ -71,7 +71,7 @@ def test_list_orders_passes_filters(monkeypatch):
         captured["params"] = params
         return _FakeResponse({"orders": []})
 
-    monkeypatch.setattr(shopify_tools.httpx, "get", fake_get)
+    monkeypatch.setattr(shopify_tools.client, "get", fake_get)
     shopify_tools.ListShopifyOrdersTool().run(fulfillment_status="unfulfilled", financial_status="paid", limit=5)
 
     assert captured["params"]["fulfillment_status"] == "unfulfilled"
@@ -93,7 +93,7 @@ def test_get_order_formats_details(monkeypatch):
             "line_items": [{"quantity": 2, "title": "T-Shirt", "sku": "TS-1", "price": "20.00"}],
         }
     }
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse(order))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(order))
 
     result = shopify_tools.GetShopifyOrderTool().run(order_id=1)
 
@@ -104,7 +104,7 @@ def test_get_order_formats_details(monkeypatch):
 
 def test_fulfill_order_no_open_fulfillment_orders(monkeypatch):
     monkeypatch.setattr(
-        shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse({"fulfillment_orders": []})
+        shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"fulfillment_orders": []})
     )
     result = shopify_tools.FulfillShopifyOrderTool().run(order_id=1)
     assert "no open fulfillment orders" in result
@@ -112,7 +112,7 @@ def test_fulfill_order_no_open_fulfillment_orders(monkeypatch):
 
 def test_fulfill_order_success_with_tracking(monkeypatch):
     monkeypatch.setattr(
-        shopify_tools.httpx,
+        shopify_tools.client,
         "get",
         lambda *a, **kw: _FakeResponse({"fulfillment_orders": [{"id": 55, "status": "open"}]}),
     )
@@ -122,7 +122,7 @@ def test_fulfill_order_success_with_tracking(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"fulfillment": {"id": 99}})
 
-    monkeypatch.setattr(shopify_tools.httpx, "post", fake_post)
+    monkeypatch.setattr(shopify_tools.client, "post", fake_post)
 
     result = shopify_tools.FulfillShopifyOrderTool().run(
         order_id=1, tracking_number="ABC123", tracking_company="La Poste"
@@ -136,7 +136,7 @@ def test_fulfill_order_success_with_tracking(monkeypatch):
 
 
 def test_sales_summary_no_orders(monkeypatch):
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
     result = shopify_tools.GetShopifySalesSummaryTool().run(days=7)
     assert "No orders" in result
 
@@ -148,7 +148,7 @@ def test_sales_summary_computes_totals(monkeypatch):
             {"total_price": "30.00", "currency": "CHF"},
         ]
     }
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse(orders))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(orders))
 
     result = shopify_tools.GetShopifySalesSummaryTool().run(days=7)
 
@@ -168,7 +168,7 @@ def test_list_products_formats_results(monkeypatch):
             }
         ]
     }
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse(products))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(products))
 
     result = shopify_tools.ListShopifyProductsTool().run()
 
@@ -184,7 +184,7 @@ def test_create_product_success(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"product": {"id": 42}})
 
-    monkeypatch.setattr(shopify_tools.httpx, "post", fake_post)
+    monkeypatch.setattr(shopify_tools.client, "post", fake_post)
 
     result = shopify_tools.CreateShopifyProductTool().run(title="New Item", price="19.99", sku="NI-1")
 
@@ -200,7 +200,7 @@ def test_update_product_title_and_status(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"product": {"id": 1}})
 
-    monkeypatch.setattr(shopify_tools.httpx, "put", fake_put)
+    monkeypatch.setattr(shopify_tools.client, "put", fake_put)
 
     result = shopify_tools.UpdateShopifyProductTool().run(product_id=1, title="New Title", status="active")
 
@@ -220,8 +220,8 @@ def test_update_product_price_fetches_variant_first(monkeypatch):
         captured["json"] = json
         return _FakeResponse({"variant": {"id": 77}})
 
-    monkeypatch.setattr(shopify_tools.httpx, "get", fake_get)
-    monkeypatch.setattr(shopify_tools.httpx, "put", fake_put)
+    monkeypatch.setattr(shopify_tools.client, "get", fake_get)
+    monkeypatch.setattr(shopify_tools.client, "put", fake_put)
 
     result = shopify_tools.UpdateShopifyProductTool().run(product_id=1, price="25.00")
 
@@ -247,8 +247,8 @@ def test_update_inventory_by_product_id(monkeypatch):
         captured["json"] = json
         return _FakeResponse({})
 
-    monkeypatch.setattr(shopify_tools.httpx, "get", fake_get)
-    monkeypatch.setattr(shopify_tools.httpx, "post", fake_post)
+    monkeypatch.setattr(shopify_tools.client, "get", fake_get)
+    monkeypatch.setattr(shopify_tools.client, "post", fake_post)
 
     result = shopify_tools.UpdateShopifyInventoryTool().run(product_id=1, quantity=42)
 
@@ -264,7 +264,7 @@ def test_update_inventory_requires_product_or_variant_id():
 
 
 def test_search_customers_no_matches(monkeypatch):
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse({"customers": []}))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"customers": []}))
     result = shopify_tools.SearchShopifyCustomersTool().run(query="ghost")
     assert "No customers found" in result
 
@@ -282,7 +282,7 @@ def test_search_customers_formats_results(monkeypatch):
             }
         ]
     }
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse(customers))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(customers))
 
     result = shopify_tools.SearchShopifyCustomersTool().run(query="Nathan")
 
@@ -292,7 +292,7 @@ def test_search_customers_formats_results(monkeypatch):
 
 
 def test_get_customer_orders_none(monkeypatch):
-    monkeypatch.setattr(shopify_tools.httpx, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
     result = shopify_tools.GetShopifyCustomerOrdersTool().run(customer_id=5)
     assert "no orders" in result
 
@@ -306,7 +306,7 @@ def test_create_discount_percentage(monkeypatch):
             return _FakeResponse({"price_rule": {"id": 99}})
         return _FakeResponse({"discount_code": {"code": "SUMMER10"}})
 
-    monkeypatch.setattr(shopify_tools.httpx, "post", fake_post)
+    monkeypatch.setattr(shopify_tools.client, "post", fake_post)
 
     result = shopify_tools.CreateShopifyDiscountTool().run(code="SUMMER10", discount_type="percentage", value=10)
 

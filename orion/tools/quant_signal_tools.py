@@ -27,6 +27,7 @@ import json
 
 import httpx
 
+from core.http import client
 from core.store import Store
 from tools.base import Tool
 from tools.sandbox_tools import _docker_client, _run_in_docker, _run_in_subprocess
@@ -168,7 +169,7 @@ print(json.dumps(result))
 def _fetch_stooq_history(ticker: str, lookback_days: int) -> list[dict]:
     end = dt.date.today()
     start = end - dt.timedelta(days=lookback_days)
-    response = httpx.get(
+    response = client.get(
         "https://stooq.com/q/d/l/",
         params={"s": f"{ticker.lower()}.us", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d"), "i": "d"},
         timeout=15,

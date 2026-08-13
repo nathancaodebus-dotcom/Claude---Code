@@ -62,7 +62,7 @@ def test_volatility_none_without_enough_points():
 
 def _mock_price_response(monkeypatch, data: dict):
     monkeypatch.setattr(
-        "tools.crypto_tools.httpx.get", lambda *a, **kw: _FakeResponse(data)
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse(data)
     )
 
 
@@ -99,7 +99,7 @@ def test_compare_crypto_assets_lists_each_coin(monkeypatch):
 def test_technical_indicators_reports_computed_values(monkeypatch):
     prices = [[i, 100.0 + i] for i in range(30)]  # steadily rising
     monkeypatch.setattr(
-        "tools.crypto_tools.httpx.get", lambda *a, **kw: _FakeResponse({"prices": prices})
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": prices})
     )
     result = GetCryptoTechnicalIndicatorsTool().run(coin="bitcoin", days=30)
     assert "SMA7" in result
@@ -109,7 +109,7 @@ def test_technical_indicators_reports_computed_values(monkeypatch):
 
 def test_technical_indicators_handles_missing_coin(monkeypatch):
     monkeypatch.setattr(
-        "tools.crypto_tools.httpx.get", lambda *a, **kw: _FakeResponse({"prices": []})
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": []})
     )
     result = GetCryptoTechnicalIndicatorsTool().run(coin="not-a-coin")
     assert "No historical data" in result

@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -25,7 +26,7 @@ class LatestGithubReleaseTool(Tool):
     }
 
     def run(self, owner: str, repo: str) -> str:
-        response = httpx.get(
+        response = client.get(
             f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
             headers=_headers(),
             timeout=10,
@@ -51,7 +52,7 @@ class RecentGithubCommitsTool(Tool):
     }
 
     def run(self, owner: str, repo: str, max_results: int = 5) -> str:
-        response = httpx.get(
+        response = client.get(
             f"https://api.github.com/repos/{owner}/{repo}/commits",
             params={"per_page": max_results},
             headers=_headers(),

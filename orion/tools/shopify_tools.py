@@ -21,6 +21,7 @@ import datetime as dt
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -38,7 +39,7 @@ def _first_variant(product: dict) -> dict | None:
 
 
 def _first_location_id() -> int:
-    response = httpx.get(f"{_base_url()}/locations.json", headers=_headers(), timeout=15)
+    response = client.get(f"{_base_url()}/locations.json", headers=_headers(), timeout=15)
     response.raise_for_status()
     locations = response.json().get("locations", [])
     if not locations:
@@ -73,7 +74,7 @@ class ListShopifyOrdersTool(Tool):
         if financial_status:
             params["financial_status"] = financial_status
 
-        response = httpx.get(f"{_base_url()}/orders.json", headers=_headers(), params=params, timeout=20)
+        response = client.get(f"{_base_url()}/orders.json", headers=_headers(), params=params, timeout=20)
         response.raise_for_status()
         orders = response.json().get("orders", [])
         if not orders:
@@ -100,7 +101,7 @@ class GetShopifyOrderTool(Tool):
     }
 
     def run(self, order_id: int) -> str:
-        response = httpx.get(f"{_base_url()}/orders/{order_id}.json", headers=_headers(), timeout=15)
+        response = client.get(f"{_base_url()}/orders/{order_id}.json", headers=_headers(), timeout=15)
         response.raise_for_status()
         order = response.json()["order"]
 
@@ -140,7 +141,7 @@ class FulfillShopifyOrderTool(Tool):
         tracking_company: str | None = None,
         notify_customer: bool = True,
     ) -> str:
-        fo_response = httpx.get(
+        fo_response = client.get(
             f"{_base_url()}/orders/{order_id}/fulfillment_orders.json", headers=_headers(), timeout=15
         )
         fo_response.raise_for_status()
@@ -161,7 +162,7 @@ class FulfillShopifyOrderTool(Tool):
                 "company": tracking_company or "",
             }
 
-        response = httpx.post(f"{_base_url()}/fulfillments.json", headers=_headers(), json=payload, timeout=20)
+        response = client.post(f"{_base_url()}/fulfillments.json", headers=_headers(), json=payload, timeout=20)
         response.raise_for_status()
         return f"Fulfilled order {order_id}" + (f" with tracking {tracking_number}." if tracking_number else ".")
 
@@ -176,7 +177,7 @@ class GetShopifySalesSummaryTool(Tool):
 
     def run(self, days: int = 7) -> str:
         since = (dt.datetime.utcnow() - dt.timedelta(days=days)).isoformat() + "Z"
-        response = httpx.get(
+        response = client.get(
             f"{_base_url()}/orders.json",
             headers=_headers(),
             params={"status": "any", "created_at_min": since, "limit": 250},
@@ -212,7 +213,7 @@ class ListShopifyProductsTool(Tool):
         if status:
             params["status"] = status
 
-        response = httpx.get(f"{_base_url()}/products.json", headers=_headers(), params=params, timeout=20)
+        response = client.get(f"{_base_url()}/products.json", headers=_headers(), params=params, timeout=20)
         response.raise_for_status()
         products = response.json().get("products", [])
         if not products:
@@ -238,7 +239,7 @@ class GetShopifyProductTool(Tool):
     }
 
     def run(self, product_id: int) -> str:
-        response = httpx.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
+        response = client.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
         response.raise_for_status()
         p = response.json()["product"]
 
@@ -287,7 +288,7 @@ class CreateShopifyProductTool(Tool):
                 "variants": [{"price": price, "sku": sku, "inventory_quantity": inventory_quantity}],
             }
         }
-        response = httpx.post(f"{_base_url()}/products.json", headers=_headers(), json=payload, timeout=20)
+        response = client.post(f"{_base_url()}/products.json", headers=_headers(), json=payload, timeout=20)
         response.raise_for_status()
         product = response.json()["product"]
         return f"Created product '{title}' (id={product['id']}, status={status})."
@@ -329,7 +330,7 @@ class UpdateShopifyProductTool(Tool):
             changed.append("status")
 
         if product_fields:
-            response = httpx.put(
+            response = client.put(
                 f"{_base_url()}/products/{product_id}.json",
                 headers=_headers(),
                 json={"product": {"id": product_id, **product_fields}},
@@ -338,12 +339,12 @@ class UpdateShopifyProductTool(Tool):
             response.raise_for_status()
 
         if price is not None:
-            get_response = httpx.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
+            get_response = client.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
             get_response.raise_for_status()
             variant = _first_variant(get_response.json()["product"])
             if variant is None:
                 return f"Product {product_id} has no variants to price."
-            variant_response = httpx.put(
+            variant_response = client.put(
                 f"{_base_url()}/variants/{variant['id']}.json",
                 headers=_headers(),
                 json={"variant": {"id": variant["id"], "price": price}},
@@ -374,7 +375,7 @@ class UpdateShopifyInventoryTool(Tool):
         if variant_id is None:
             if product_id is None:
                 return "Pass either product_id or variant_id."
-            get_response = httpx.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
+            get_response = client.get(f"{_base_url()}/products/{product_id}.json", headers=_headers(), timeout=15)
             get_response.raise_for_status()
             variant = _first_variant(get_response.json()["product"])
             if variant is None:
@@ -382,12 +383,12 @@ class UpdateShopifyInventoryTool(Tool):
             variant_id = variant["id"]
             inventory_item_id = variant["inventory_item_id"]
         else:
-            variant_response = httpx.get(f"{_base_url()}/variants/{variant_id}.json", headers=_headers(), timeout=15)
+            variant_response = client.get(f"{_base_url()}/variants/{variant_id}.json", headers=_headers(), timeout=15)
             variant_response.raise_for_status()
             inventory_item_id = variant_response.json()["variant"]["inventory_item_id"]
 
         location_id = _first_location_id()
-        response = httpx.post(
+        response = client.post(
             f"{_base_url()}/inventory_levels/set.json",
             headers=_headers(),
             json={"location_id": location_id, "inventory_item_id": inventory_item_id, "available": quantity},
@@ -407,7 +408,7 @@ class SearchShopifyCustomersTool(Tool):
     }
 
     def run(self, query: str) -> str:
-        response = httpx.get(
+        response = client.get(
             f"{_base_url()}/customers/search.json", headers=_headers(), params={"query": query}, timeout=15
         )
         response.raise_for_status()
@@ -435,7 +436,7 @@ class GetShopifyCustomerOrdersTool(Tool):
     }
 
     def run(self, customer_id: int) -> str:
-        response = httpx.get(
+        response = client.get(
             f"{_base_url()}/customers/{customer_id}/orders.json",
             headers=_headers(),
             params={"status": "any"},
@@ -492,13 +493,13 @@ class CreateShopifyDiscountTool(Tool):
         if expires_in_days is not None:
             price_rule["ends_at"] = (now + dt.timedelta(days=expires_in_days)).isoformat() + "Z"
 
-        rule_response = httpx.post(
+        rule_response = client.post(
             f"{_base_url()}/price_rules.json", headers=_headers(), json={"price_rule": price_rule}, timeout=20
         )
         rule_response.raise_for_status()
         rule_id = rule_response.json()["price_rule"]["id"]
 
-        code_response = httpx.post(
+        code_response = client.post(
             f"{_base_url()}/price_rules/{rule_id}/discount_codes.json",
             headers=_headers(),
             json={"discount_code": {"code": code}},

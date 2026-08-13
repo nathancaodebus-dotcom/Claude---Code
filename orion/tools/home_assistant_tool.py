@@ -10,6 +10,7 @@ from __future__ import annotations
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -39,7 +40,7 @@ class ListDevicesTool(Tool):
 
     def run(self, domain: str | None = None) -> str:
         url = f"{config.home_assistant_url}/api/states"
-        response = httpx.get(url, headers=_headers(), timeout=10)
+        response = client.get(url, headers=_headers(), timeout=10)
         response.raise_for_status()
         states = response.json()
 
@@ -78,6 +79,6 @@ class CallServiceTool(Tool):
     def run(self, domain: str, service: str, entity_id: str, extra_params: dict | None = None) -> str:
         url = f"{config.home_assistant_url}/api/services/{domain}/{service}"
         payload = {"entity_id": entity_id, **(extra_params or {})}
-        response = httpx.post(url, headers=_headers(), json=payload, timeout=10)
+        response = client.post(url, headers=_headers(), json=payload, timeout=10)
         response.raise_for_status()
         return f"Called {domain}.{service} on {entity_id}."

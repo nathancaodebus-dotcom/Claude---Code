@@ -6,6 +6,7 @@ from __future__ import annotations
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 _BASE_URL = "https://api.todoist.com/rest/v2"
@@ -34,13 +35,13 @@ class AddTodoistTaskTool(Tool):
             payload["due_string"] = due_string
 
         if project_name:
-            projects = httpx.get(f"{_BASE_URL}/projects", headers=_headers(), timeout=10).json()
+            projects = client.get(f"{_BASE_URL}/projects", headers=_headers(), timeout=10).json()
             match = next((p for p in projects if p["name"].lower() == project_name.lower()), None)
             if not match:
                 return f"No Todoist project named '{project_name}'."
             payload["project_id"] = match["id"]
 
-        response = httpx.post(f"{_BASE_URL}/tasks", headers=_headers(), json=payload, timeout=10)
+        response = client.post(f"{_BASE_URL}/tasks", headers=_headers(), json=payload, timeout=10)
         response.raise_for_status()
         return f"Added Todoist task: {content}"
 
@@ -54,10 +55,10 @@ class ListTodoistTasksTool(Tool):
     }
 
     def run(self, project_name: str | None = None) -> str:
-        tasks = httpx.get(f"{_BASE_URL}/tasks", headers=_headers(), timeout=10).json()
+        tasks = client.get(f"{_BASE_URL}/tasks", headers=_headers(), timeout=10).json()
 
         if project_name:
-            projects = httpx.get(f"{_BASE_URL}/projects", headers=_headers(), timeout=10).json()
+            projects = client.get(f"{_BASE_URL}/projects", headers=_headers(), timeout=10).json()
             match = next((p for p in projects if p["name"].lower() == project_name.lower()), None)
             if not match:
                 return f"No Todoist project named '{project_name}'."
@@ -78,7 +79,7 @@ class CompleteTodoistTaskTool(Tool):
     }
 
     def run(self, task_id: str) -> str:
-        response = httpx.post(f"{_BASE_URL}/tasks/{task_id}/close", headers=_headers(), timeout=10)
+        response = client.post(f"{_BASE_URL}/tasks/{task_id}/close", headers=_headers(), timeout=10)
         if response.status_code == 204:
             return f"Completed Todoist task {task_id}."
         return f"Could not complete task {task_id} (status {response.status_code})."

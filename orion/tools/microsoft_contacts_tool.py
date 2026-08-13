@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 from tools.microsoft_auth import get_access_token
 
@@ -26,7 +27,7 @@ class SearchOutlookContactsTool(Tool):
 
     def run(self, query: str) -> str:
         escaped = query.replace("'", "''")
-        response = httpx.get(
+        response = client.get(
             f"{_GRAPH}/me/contacts",
             headers=_headers(),
             params={
@@ -71,6 +72,6 @@ class AddOutlookContactTool(Tool):
         if phone:
             payload["mobilePhone"] = phone
 
-        response = httpx.post(f"{_GRAPH}/me/contacts", headers=_headers(), json=payload, timeout=15)
+        response = client.post(f"{_GRAPH}/me/contacts", headers=_headers(), json=payload, timeout=15)
         response.raise_for_status()
         return f"Added contact: {name}"

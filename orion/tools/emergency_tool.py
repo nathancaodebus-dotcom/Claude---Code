@@ -7,6 +7,7 @@ from __future__ import annotations
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -36,7 +37,7 @@ class EmergencyAlertTool(Tool):
 
         sent = []
         for chat_id in chat_ids:
-            response = httpx.post(
+            response = client.post(
                 f"https://api.telegram.org/bot{config.telegram_bot_token}/sendMessage",
                 json={"chat_id": chat_id, "text": text},
                 timeout=10,
@@ -44,7 +45,7 @@ class EmergencyAlertTool(Tool):
             if response.status_code == 200:
                 sent.append(chat_id)
                 if latitude is not None and longitude is not None:
-                    httpx.post(
+                    client.post(
                         f"https://api.telegram.org/bot{config.telegram_bot_token}/sendLocation",
                         json={"chat_id": chat_id, "latitude": latitude, "longitude": longitude},
                         timeout=10,

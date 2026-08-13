@@ -29,7 +29,7 @@ def output_dir(tmp_path, monkeypatch):
 
 def test_generate_image_saves_the_decoded_png(monkeypatch, output_dir):
     monkeypatch.setattr(
-        "tools.image_gen_tools.httpx.post",
+        "tools.image_gen_tools.client.post",
         lambda *a, **kw: _FakeResponse(
             200,
             {"predictions": [{"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()}]},
@@ -46,7 +46,7 @@ def test_generate_image_saves_the_decoded_png(monkeypatch, output_dir):
 
 def test_generate_image_uses_file_name_when_given(monkeypatch, output_dir):
     monkeypatch.setattr(
-        "tools.image_gen_tools.httpx.post",
+        "tools.image_gen_tools.client.post",
         lambda *a, **kw: _FakeResponse(
             200,
             {"predictions": [{"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()}]},
@@ -60,7 +60,7 @@ def test_generate_image_uses_file_name_when_given(monkeypatch, output_dir):
 
 def test_generate_image_reports_http_errors(monkeypatch, output_dir):
     monkeypatch.setattr(
-        "tools.image_gen_tools.httpx.post",
+        "tools.image_gen_tools.client.post",
         lambda *a, **kw: _FakeResponse(429, text="quota exceeded"),
     )
 
@@ -73,7 +73,7 @@ def test_generate_image_reports_http_errors(monkeypatch, output_dir):
 
 def test_generate_image_handles_missing_predictions(monkeypatch, output_dir):
     monkeypatch.setattr(
-        "tools.image_gen_tools.httpx.post", lambda *a, **kw: _FakeResponse(200, {"predictions": []})
+        "tools.image_gen_tools.client.post", lambda *a, **kw: _FakeResponse(200, {"predictions": []})
     )
 
     result = GenerateImageTool().run(prompt="anything")
@@ -83,7 +83,7 @@ def test_generate_image_handles_missing_predictions(monkeypatch, output_dir):
 
 def test_generate_image_count_saves_multiple_numbered_files(monkeypatch, output_dir):
     monkeypatch.setattr(
-        "tools.image_gen_tools.httpx.post",
+        "tools.image_gen_tools.client.post",
         lambda *a, **kw: _FakeResponse(
             200,
             {
@@ -110,7 +110,7 @@ def test_generate_image_count_is_clamped_to_valid_range(monkeypatch, output_dir)
         captured["sampleCount"] = json["parameters"]["sampleCount"]
         return _FakeResponse(200, {"predictions": [{"bytesBase64Encoded": base64.b64encode(_TINY_PNG).decode()}]})
 
-    monkeypatch.setattr("tools.image_gen_tools.httpx.post", fake_post)
+    monkeypatch.setattr("tools.image_gen_tools.client.post", fake_post)
 
     GenerateImageTool().run(prompt="anything", count=99)
 

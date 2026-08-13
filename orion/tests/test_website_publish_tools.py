@@ -59,9 +59,9 @@ def _install_fake_github(monkeypatch, *, repo_exists, contents_exist, pages_stat
         calls["put"].append(url)
         return _FakeResponse(201)
 
-    monkeypatch.setattr("tools.website_publish_tools.httpx.get", fake_get)
-    monkeypatch.setattr("tools.website_publish_tools.httpx.post", fake_post)
-    monkeypatch.setattr("tools.website_publish_tools.httpx.put", fake_put)
+    monkeypatch.setattr("tools.website_publish_tools.client.get", fake_get)
+    monkeypatch.setattr("tools.website_publish_tools.client.post", fake_post)
+    monkeypatch.setattr("tools.website_publish_tools.client.put", fake_put)
     return calls
 
 
@@ -106,8 +106,8 @@ def test_publish_reports_repo_creation_failure(store, monkeypatch):
             return _FakeResponse(422, text="name already taken")
         raise AssertionError
 
-    monkeypatch.setattr("tools.website_publish_tools.httpx.get", fake_get)
-    monkeypatch.setattr("tools.website_publish_tools.httpx.post", fake_post)
+    monkeypatch.setattr("tools.website_publish_tools.client.get", fake_get)
+    monkeypatch.setattr("tools.website_publish_tools.client.post", fake_post)
 
     result = PublishWebsiteToGithubPagesTool(store).run(site_name="my-site")
 
@@ -123,8 +123,8 @@ def test_publish_reports_upload_failure(store, monkeypatch):
     def fake_put(url, **kwargs):
         return _FakeResponse(403, text="forbidden")
 
-    monkeypatch.setattr("tools.website_publish_tools.httpx.get", fake_get)
-    monkeypatch.setattr("tools.website_publish_tools.httpx.put", fake_put)
+    monkeypatch.setattr("tools.website_publish_tools.client.get", fake_get)
+    monkeypatch.setattr("tools.website_publish_tools.client.put", fake_put)
 
     result = PublishWebsiteToGithubPagesTool(store).run(site_name="my-site")
 

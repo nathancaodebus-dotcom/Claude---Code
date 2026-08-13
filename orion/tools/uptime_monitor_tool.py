@@ -5,6 +5,7 @@ import time
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 
@@ -20,7 +21,7 @@ class CheckUptimeTool(Tool):
     def run(self, url: str) -> str:
         start = time.monotonic()
         try:
-            response = httpx.get(url, timeout=10, follow_redirects=True)
+            response = client.get(url, timeout=10, follow_redirects=True)
         except httpx.RequestError as exc:
             return f"{url} is DOWN ({exc.__class__.__name__}: {exc})"
 

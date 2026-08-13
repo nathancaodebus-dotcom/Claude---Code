@@ -9,6 +9,7 @@ import hashlib
 import httpx
 
 from core.config import config
+from core.http import client
 from tools.base import Tool
 
 
@@ -28,7 +29,7 @@ class CheckPasswordLeakedTool(Tool):
         sha1 = hashlib.sha1(password.encode()).hexdigest().upper()
         prefix, suffix = sha1[:5], sha1[5:]
 
-        response = httpx.get(f"https://api.pwnedpasswords.com/range/{prefix}", timeout=10)
+        response = client.get(f"https://api.pwnedpasswords.com/range/{prefix}", timeout=10)
         response.raise_for_status()
 
         for line in response.text.splitlines():
@@ -51,7 +52,7 @@ class CheckEmailBreachedTool(Tool):
         if not config.hibp_api_key:
             return "Email breach checking needs a paid HIBP_API_KEY (haveibeenpwned.com/API/Key)."
 
-        response = httpx.get(
+        response = client.get(
             f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}",
             headers={"hibp-api-key": config.hibp_api_key, "User-Agent": "OrionAssistant"},
             timeout=10,

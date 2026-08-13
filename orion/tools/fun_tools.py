@@ -6,6 +6,7 @@ import random
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 _EIGHT_BALL_ANSWERS = [
@@ -86,7 +87,7 @@ class JokeTool(Tool):
 
     def run(self) -> str:
         try:
-            response = httpx.get("https://official-joke-api.appspot.com/random_joke", timeout=10)
+            response = client.get("https://official-joke-api.appspot.com/random_joke", timeout=10)
             response.raise_for_status()
             data = response.json()
             return f"{data['setup']} ... {data['punchline']}"

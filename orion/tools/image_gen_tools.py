@@ -14,6 +14,7 @@ import httpx
 
 from core.attachments import push as push_attachment
 from core.config import config
+from core.http import client
 from tools.base import Tool
 from tools.document_utils import slugify
 
@@ -53,7 +54,7 @@ class GenerateImageTool(Tool):
         self, prompt: str, aspect_ratio: str = "1:1", count: int = 1, file_name: str | None = None
     ) -> str:
         count = max(1, min(count, 4))
-        response = httpx.post(
+        response = client.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{config.gemini_image_model}:predict",
             params={"key": config.gemini_api_key},
             json={

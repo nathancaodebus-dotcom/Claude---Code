@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 from tools.microsoft_auth import get_access_token
 
@@ -51,7 +52,7 @@ class OutlookSearchTool(Tool):
             params["$filter"] = "isRead eq false"
             params["$orderby"] = "receivedDateTime desc"
 
-        response = httpx.get(f"{_GRAPH}/me/messages", headers=_headers(), params=params, timeout=15)
+        response = client.get(f"{_GRAPH}/me/messages", headers=_headers(), params=params, timeout=15)
         response.raise_for_status()
         messages = response.json().get("value", [])
         if not messages:
@@ -77,7 +78,7 @@ class OutlookReadTool(Tool):
     }
 
     def run(self, message_id: str) -> str:
-        response = httpx.get(
+        response = client.get(
             f"{_GRAPH}/me/messages/{message_id}",
             headers=_headers({"Prefer": 'outlook.body-content-type="text"'}),
             params={"$select": "subject,from,receivedDateTime,body"},
@@ -119,7 +120,7 @@ class OutlookCreateDraftTool(Tool):
         }
         # POST /me/messages saves a draft — sending requires a separate,
         # never-called /send request, same boundary as Gmail's draft tool.
-        response = httpx.post(f"{_GRAPH}/me/messages", headers=_headers(), json=payload, timeout=15)
+        response = client.post(f"{_GRAPH}/me/messages", headers=_headers(), json=payload, timeout=15)
         response.raise_for_status()
         draft = response.json()
         return f"Draft created (id={draft['id']}) to {to}: \"{subject}\". Not sent — review it in Outlook."
@@ -135,7 +136,7 @@ class OutlookArchiveTool(Tool):
     }
 
     def run(self, message_id: str) -> str:
-        response = httpx.post(
+        response = client.post(
             f"{_GRAPH}/me/messages/{message_id}/move",
             headers=_headers(),
             json={"destinationId": "archive"},
@@ -155,7 +156,7 @@ class OutlookMarkReadTool(Tool):
     }
 
     def run(self, message_id: str) -> str:
-        response = httpx.patch(
+        response = client.patch(
             f"{_GRAPH}/me/messages/{message_id}", headers=_headers(), json={"isRead": True}, timeout=15
         )
         response.raise_for_status()
@@ -168,7 +169,7 @@ class OutlookUnreadCountTool(Tool):
     input_schema = {"type": "object", "properties": {}}
 
     def run(self) -> str:
-        response = httpx.get(
+        response = client.get(
             f"{_GRAPH}/me/mailFolders/inbox",
             headers=_headers(),
             params={"$select": "unreadItemCount"},

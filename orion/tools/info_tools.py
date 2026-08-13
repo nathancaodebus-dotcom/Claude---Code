@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
+from core.http import client
 from tools.base import Tool
 
 
@@ -22,7 +23,7 @@ class WeatherTool(Tool):
     }
 
     def run(self, city: str) -> str:
-        geo = httpx.get(
+        geo = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": city, "count": 1},
             timeout=10,
@@ -32,7 +33,7 @@ class WeatherTool(Tool):
             return f"Could not find a location named '{city}'."
         place = results[0]
 
-        weather = httpx.get(
+        weather = client.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
                 "latitude": place["latitude"],
@@ -64,7 +65,7 @@ class SunTimesTool(Tool):
     }
 
     def run(self, city: str) -> str:
-        geo = httpx.get(
+        geo = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": city, "count": 1},
             timeout=10,
@@ -74,7 +75,7 @@ class SunTimesTool(Tool):
             return f"Could not find a location named '{city}'."
         place = results[0]
 
-        data = httpx.get(
+        data = client.get(
             "https://api.sunrise-sunset.org/json",
             params={"lat": place["latitude"], "lng": place["longitude"], "formatted": 0},
             timeout=10,
@@ -92,7 +93,7 @@ class WikipediaSummaryTool(Tool):
     }
 
     def run(self, topic: str) -> str:
-        response = httpx.get(
+        response = client.get(
             f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(topic)}",
             timeout=10,
             follow_redirects=True,
@@ -117,7 +118,7 @@ class CurrencyConversionTool(Tool):
     }
 
     def run(self, amount: float, from_currency: str, to_currency: str) -> str:
-        data = httpx.get(
+        data = client.get(
             "https://api.frankfurter.app/latest",
             params={"amount": amount, "from": from_currency.upper(), "to": to_currency.upper()},
             timeout=10,
@@ -138,7 +139,7 @@ class StockPriceTool(Tool):
     }
 
     def run(self, ticker: str) -> str:
-        response = httpx.get(
+        response = client.get(
             "https://stooq.com/q/l/",
             params={"s": f"{ticker.lower()}.us", "f": "sd2t2ohlcv", "h": "", "e": "csv"},
             timeout=10,
@@ -166,7 +167,7 @@ class CryptoPriceTool(Tool):
     }
 
     def run(self, coin: str, vs_currency: str = "usd") -> str:
-        response = httpx.get(
+        response = client.get(
             "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": coin.lower(), "vs_currencies": vs_currency.lower()},
             timeout=10,
@@ -188,7 +189,7 @@ class DictionaryTool(Tool):
     }
 
     def run(self, word: str) -> str:
-        response = httpx.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}", timeout=10)
+        response = client.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}", timeout=10)
         if response.status_code != 200:
             return f"No definition found for '{word}'."
 
@@ -215,7 +216,7 @@ class HistoricalWeatherTool(Tool):
     }
 
     def run(self, city: str, years_back: int = 3) -> str:
-        geo = httpx.get(
+        geo = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": city, "count": 1},
             timeout=10,
@@ -229,7 +230,7 @@ class HistoricalWeatherTool(Tool):
         lines = []
         for years in range(1, years_back + 1):
             past_date = today.replace(year=today.year - years)
-            data = httpx.get(
+            data = client.get(
                 "https://archive-api.open-meteo.com/v1/archive",
                 params={
                     "latitude": place["latitude"],
@@ -263,7 +264,7 @@ class NewsHeadlinesTool(Tool):
 
     def run(self, topic: str | None = None, max_results: int = 8) -> str:
         query = topic or ""
-        response = httpx.get(
+        response = client.get(
             "https://news.google.com/rss/search" if query else "https://news.google.com/rss",
             params={"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"} if query else None,
             timeout=10,

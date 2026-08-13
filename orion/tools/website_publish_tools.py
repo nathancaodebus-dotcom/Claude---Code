@@ -23,6 +23,7 @@ from pathlib import Path
 import httpx
 
 from core.config import config
+from core.http import client
 from core.store import Store
 from tools.base import Tool
 
@@ -79,9 +80,9 @@ class PublishWebsiteToGithubPagesTool(Tool):
         owner = config.github_pages_owner
         repo = site_name
 
-        repo_response = httpx.get(f"{_GITHUB_API}/repos/{owner}/{repo}", headers=_github_headers(), timeout=15)
+        repo_response = client.get(f"{_GITHUB_API}/repos/{owner}/{repo}", headers=_github_headers(), timeout=15)
         if repo_response.status_code == 404:
-            create_response = httpx.post(
+            create_response = client.post(
                 f"{_GITHUB_API}/user/repos",
                 headers=_github_headers(),
                 json={
@@ -100,7 +101,7 @@ class PublishWebsiteToGithubPagesTool(Tool):
             relative = file_path.relative_to(site_dir).as_posix()
             content_b64 = base64.b64encode(file_path.read_bytes()).decode()
 
-            existing = httpx.get(
+            existing = client.get(
                 f"{_GITHUB_API}/repos/{owner}/{repo}/contents/{relative}",
                 headers=_github_headers(),
                 timeout=15,
@@ -109,7 +110,7 @@ class PublishWebsiteToGithubPagesTool(Tool):
             if existing.status_code == 200:
                 body["sha"] = existing.json()["sha"]
 
-            put_response = httpx.put(
+            put_response = client.put(
                 f"{_GITHUB_API}/repos/{owner}/{repo}/contents/{relative}",
                 headers=_github_headers(),
                 json=body,
@@ -118,7 +119,7 @@ class PublishWebsiteToGithubPagesTool(Tool):
             if put_response.status_code >= 300:
                 return f"Failed to upload '{relative}': {put_response.text[:300]}"
 
-        pages_response = httpx.post(
+        pages_response = client.post(
             f"{_GITHUB_API}/repos/{owner}/{repo}/pages",
             headers=_github_headers(),
             json={"source": {"branch": "main", "path": "/"}},

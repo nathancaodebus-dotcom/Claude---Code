@@ -22,7 +22,7 @@ def fake_token(monkeypatch):
 
 
 def test_search_no_matches(monkeypatch):
-    monkeypatch.setattr(contacts.httpx, "get", lambda *a, **kw: _FakeResponse({"value": []}))
+    monkeypatch.setattr(contacts.client, "get", lambda *a, **kw: _FakeResponse({"value": []}))
     result = contacts.SearchOutlookContactsTool().run(query="Nathan")
     assert "No contacts found" in result
 
@@ -38,7 +38,7 @@ def test_search_formats_results(monkeypatch):
             }
         ]
     }
-    monkeypatch.setattr(contacts.httpx, "get", lambda *a, **kw: _FakeResponse(data))
+    monkeypatch.setattr(contacts.client, "get", lambda *a, **kw: _FakeResponse(data))
 
     result = contacts.SearchOutlookContactsTool().run(query="Nathan")
 
@@ -55,7 +55,7 @@ def test_search_escapes_single_quotes_in_filter(monkeypatch):
         captured["params"] = params
         return _FakeResponse({"value": []})
 
-    monkeypatch.setattr(contacts.httpx, "get", fake_get)
+    monkeypatch.setattr(contacts.client, "get", fake_get)
 
     contacts.SearchOutlookContactsTool().run(query="O'Brien")
 
@@ -69,7 +69,7 @@ def test_add_contact_minimal(monkeypatch):
         captured["json"] = json
         return _FakeResponse({})
 
-    monkeypatch.setattr(contacts.httpx, "post", fake_post)
+    monkeypatch.setattr(contacts.client, "post", fake_post)
 
     result = contacts.AddOutlookContactTool().run(name="Nathan")
 
@@ -84,7 +84,7 @@ def test_add_contact_with_email_and_phone(monkeypatch):
         captured["json"] = json
         return _FakeResponse({})
 
-    monkeypatch.setattr(contacts.httpx, "post", fake_post)
+    monkeypatch.setattr(contacts.client, "post", fake_post)
 
     contacts.AddOutlookContactTool().run(name="Nathan", email="n@example.com", phone="0798765432")
 
