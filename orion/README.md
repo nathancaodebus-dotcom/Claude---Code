@@ -387,6 +387,28 @@ acceleration wired in here — faster-whisper always runs on CPU
 (`device="cpu"` in `interfaces/voice/voice_loop.py`) regardless of what
 hardware is available, so this is the main knob until that changes.
 
+**If Orion keeps cutting you off after under a second, or answers with
+something bizarre like "sous-titres" or "thanks for watching!"** that you
+never said, two related things are going on. The console prints your
+mic's calibrated level on every start (`Ambient noise level: X — silence
+threshold set to Y`) — if `X` is very low (single digits), your
+microphone's input volume is probably turned down at the OS level, not
+too quiet to matter: on Windows, Settings → System → Sound → Input →
+pick the right device → raise Volume, and check Device Properties →
+Levels → "Microphone Boost" too (often 0 dB by default on laptops). A
+mic that's too quiet cuts recording short before you've really started
+talking, which starves faster-whisper of real audio to work with — and
+Whisper's known failure mode on near-silent/too-short clips isn't an
+empty result, it's confidently hallucinating plausible-sounding
+boilerplate it saw a lot of during training (subtitle-credit phrases
+like "Sous-titres réalisés par la communauté d'Amara.org" are extremely
+common examples, in French specifically). `core/stt.py` filters these
+out using Whisper's own per-segment `no_speech_prob` rather than a
+hardcoded phrase list, so a bad recording now correctly comes back as
+"nothing understood" instead of confidently wrong text — but raising
+your mic's input level is still the real fix for the short-recording
+problem underneath it.
+
 ## 8. Running as background services
 
 **On Linux** (Raspberry Pi or otherwise):

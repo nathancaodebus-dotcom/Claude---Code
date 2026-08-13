@@ -25,6 +25,7 @@ from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
+from core.stt import join_confident_segments
 from core.store import Store
 from core.tts import find_local_piper_model, get_synthesizer
 from tools.registry_builder import build_registry
@@ -236,7 +237,7 @@ class VoiceLoop:
         segments, _ = self._stt.transcribe(
             utterance.astype(np.float32) / 32768.0, language=config.voice_language
         )
-        return " ".join(s.text for s in segments).strip()
+        return join_confident_segments(segments)
 
     def _converse(self, stream: sd.InputStream) -> None:
         """Runs a full back-and-forth once the wake word has fired: keeps

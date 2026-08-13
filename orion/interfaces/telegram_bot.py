@@ -33,6 +33,7 @@ from core.health_monitor import pending_alerts
 from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.outputs_cleanup import purge_old_outputs
+from core.stt import join_confident_segments
 from core.store import Store
 from core.tts import Synthesizer, get_synthesizer_if_available
 from tools.registry_builder import build_registry
@@ -61,7 +62,7 @@ def _transcribe(audio_path: Path) -> str | None:
 
     model = WhisperModel("small", device="cpu", compute_type="int8")
     segments, _ = model.transcribe(str(audio_path), language=config.voice_language)
-    return " ".join(segment.text for segment in segments).strip()
+    return join_confident_segments(segments)
 
 
 def _synthesize_to_ogg_opus(synthesizer: Synthesizer, text: str, urgent: bool = False) -> bytes | None:
@@ -133,11 +134,21 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
             # freezing concern as agent.respond() above.
             transcript = await asyncio.to_thread(_transcribe, audio_path)
 
-        if not transcript:
+        if transcript is None:
+            # _transcribe returns None specifically for "faster-whisper isn't
+            # installed" (ImportError) — distinct from "" below, which means
+            # it ran fine but didn't hear anything it was confident was real
+            # speech (near-silence, background noise). Conflating the two
+            # used to tell someone with working STT to go install a package
+            # they already have, right after Whisper's own hallucination
+            # filter (core/stt.py) correctly caught a bad recording.
             await update.message.reply_text(
                 "I can't transcribe voice messages yet — install requirements-voice.txt "
                 "(faster-whisper) to enable it, or send text for now."
             )
+            return
+        if not transcript:
+            await update.message.reply_text("Didn't catch that — could you send it again?")
             return
 
         reply = await asyncio.to_thread(agent.respond, SESSION_ID, transcript)

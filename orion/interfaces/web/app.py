@@ -37,6 +37,7 @@ from core.logging_setup import configure_logging
 from core.memory import Memory
 from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
+from core.stt import join_confident_segments
 from core.store import Store
 from core.tts import get_synthesizer_if_available
 from tools.registry_builder import build_registry
@@ -234,7 +235,7 @@ def transcribe(audio: bytes = File(...)) -> dict:
         tmp.write(audio)
         tmp.flush()
         segments, _ = model.transcribe(tmp.name, language=config.voice_language)
-        text = " ".join(segment.text for segment in segments).strip()
+        text = join_confident_segments(segments)
 
     if not text:
         return {"error": "Didn't catch that — could you repeat?"}

@@ -257,13 +257,14 @@ def test_outputs_mount_404s_for_a_missing_file(client):
 
 
 class _FakeSegment:
-    def __init__(self, text: str):
+    def __init__(self, text: str, no_speech_prob: float = 0.05):
         self.text = text
+        self.no_speech_prob = no_speech_prob
 
 
 class _FakeWhisperModel:
-    def __init__(self, segments: list[str]):
-        self._segments = [_FakeSegment(s) for s in segments]
+    def __init__(self, segments: list[str] | list[_FakeSegment]):
+        self._segments = [s if isinstance(s, _FakeSegment) else _FakeSegment(s) for s in segments]
         self.calls: list[tuple[str, str]] = []
 
     def transcribe(self, path: str, language: str | None = None):
@@ -306,6 +307,24 @@ def test_transcribe_rejects_empty_audio(client, monkeypatch):
 
 def test_transcribe_reports_when_nothing_was_understood(client, monkeypatch):
     fake_model = _FakeWhisperModel([])  # no segments -- silence, or unintelligible audio
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: fake_model)
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
+
+    assert response.status_code == 200
+    assert "Didn't catch that" in response.json()["error"]
+
+
+def test_transcribe_drops_hallucinated_segments_from_near_silent_audio(client, monkeypatch):
+    """Regression test: a too-short/near-silent clip used to come back as
+    whatever boilerplate Whisper hallucinated on it (classically "Sous-titres
+    réalisés par la communauté d'Amara.org", seen live on the user's actual
+    laptop) instead of an honest "didn't catch that" — core/stt.py's
+    no_speech_prob filter (wired in here via join_confident_segments) is
+    what's supposed to catch this."""
+    fake_model = _FakeWhisperModel(
+        [_FakeSegment("Sous-titres réalisés par la communauté d'Amara.org", no_speech_prob=0.93)]
+    )
     monkeypatch.setattr(app_module, "_get_whisper_model", lambda: fake_model)
 
     response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
