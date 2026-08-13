@@ -131,6 +131,35 @@ def test_publish_reports_upload_failure(store, monkeypatch):
     assert "Failed to upload" in result
 
 
+def test_publish_reports_how_many_files_already_uploaded_before_a_failure(store, monkeypatch):
+    """Regression test: a mid-publish failure leaves whatever uploaded
+    before it live on GitHub (no rollback/retry) — the message used to
+    only name the file that failed, giving the caller no way to tell which
+    files (if any) already went out, leaving the resulting repo's state
+    ambiguous."""
+    put_calls = []
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/repos/nathan/my-site"):
+            return _FakeResponse(200)
+        return _FakeResponse(404)
+
+    def fake_put(url, **kwargs):
+        put_calls.append(url)
+        if len(put_calls) == 2:
+            return _FakeResponse(403, text="forbidden")
+        return _FakeResponse(201)
+
+    monkeypatch.setattr("tools.website_publish_tools.client.get", fake_get)
+    monkeypatch.setattr("tools.website_publish_tools.client.put", fake_put)
+
+    result = PublishWebsiteToGithubPagesTool(store).run(site_name="my-site")
+
+    assert "Failed to upload" in result
+    assert "1/" in result  # exactly one file succeeded before the second one failed
+    assert len(put_calls) == 2  # stopped immediately rather than continuing past the failure
+
+
 def test_publish_reports_pages_enable_failure(store, monkeypatch):
     _install_fake_github(monkeypatch, repo_exists=True, contents_exist=True, pages_status=500)
 

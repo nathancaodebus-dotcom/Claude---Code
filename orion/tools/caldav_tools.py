@@ -41,18 +41,24 @@ class ListCaldavEventsTool(Tool):
     }
 
     def run(self, days_ahead: int = 7) -> str:
-        client = _client()
-        principal = client.principal()
-        now = dt.datetime.now()
-        end = now + dt.timedelta(days=days_ahead)
+        # A fresh DAVClient (its own requests.Session/connection pool) is
+        # constructed on every single call and, unlike the Google/Microsoft/
+        # Shopify tools' shared core/http.py client, was never closed —
+        # a long-running Orion process making repeated CalDAV calls leaked
+        # a socket per call. DAVClient supports the context-manager
+        # protocol, so `with` is enough to fix it.
+        with _client() as client:
+            principal = client.principal()
+            now = dt.datetime.now()
+            end = now + dt.timedelta(days=days_ahead)
 
-        lines = []
-        for calendar in principal.calendars():
-            for event in calendar.search(start=now, end=end, event=True, expand=True):
-                component = event.icalendar_component
-                summary = str(component.get("summary", "(no title)"))
-                start = component.get("dtstart").dt
-                lines.append(f"- [{calendar.name}] {start}: {summary}")
+            lines = []
+            for calendar in principal.calendars():
+                for event in calendar.search(start=now, end=end, event=True, expand=True):
+                    component = event.icalendar_component
+                    summary = str(component.get("summary", "(no title)"))
+                    start = component.get("dtstart").dt
+                    lines.append(f"- [{calendar.name}] {start}: {summary}")
 
         return "\n".join(lines) if lines else "No upcoming CalDAV events."
 
@@ -75,21 +81,21 @@ class CreateCaldavEventTool(Tool):
     }
 
     def run(self, summary: str, start_iso: str, end_iso: str | None = None, calendar_name: str | None = None) -> str:
-        client = _client()
-        principal = client.principal()
-        calendars = principal.calendars()
-        if not calendars:
-            return "No CalDAV calendars found for this account."
+        with _client() as client:
+            principal = client.principal()
+            calendars = principal.calendars()
+            if not calendars:
+                return "No CalDAV calendars found for this account."
 
-        target = calendars[0]
-        if calendar_name:
-            matches = [c for c in calendars if c.name and c.name.lower() == calendar_name.lower()]
-            if not matches:
-                return f"No calendar named '{calendar_name}'. Available: {[c.name for c in calendars]}"
-            target = matches[0]
+            target = calendars[0]
+            if calendar_name:
+                matches = [c for c in calendars if c.name and c.name.lower() == calendar_name.lower()]
+                if not matches:
+                    return f"No calendar named '{calendar_name}'. Available: {[c.name for c in calendars]}"
+                target = matches[0]
 
-        start = dt.datetime.fromisoformat(start_iso)
-        end = dt.datetime.fromisoformat(end_iso) if end_iso else start + dt.timedelta(hours=1)
+            start = dt.datetime.fromisoformat(start_iso)
+            end = dt.datetime.fromisoformat(end_iso) if end_iso else start + dt.timedelta(hours=1)
 
-        target.save_event(dtstart=start, dtend=end, summary=summary)
+            target.save_event(dtstart=start, dtend=end, summary=summary)
         return f"Created '{summary}' on '{target.name}' at {start_iso}."

@@ -76,10 +76,24 @@ class GenerateChartTool(Tool):
         elif series:
             if chart_type not in ("bar", "line", "scatter"):
                 return "Multiple series are only supported for bar, line, or scatter charts."
+            if not labels:
+                return "Need 'labels' (shared category labels) when passing 'series'."
+            # Every series is plotted against the same `labels` — a series
+            # with a different number of values than labels used to render
+            # misaligned/silently truncated points instead of erroring, so
+            # each point could plot against the wrong category.
+            mismatched = [s["name"] for s in series if len(s["values"]) != len(labels)]
+            if mismatched:
+                return (
+                    f"Series {mismatched} have a different number of values than 'labels' "
+                    f"({len(labels)}) — each series needs exactly one value per label."
+                )
             traces = [_CHART_BUILDERS[chart_type](labels, s["values"], s["name"]) for s in series]
         else:
             if not labels or values is None:
                 return "Need both 'labels' and 'values' (or 'series') for this chart type."
+            if len(labels) != len(values):
+                return f"'labels' ({len(labels)}) and 'values' ({len(values)}) must be the same length."
             traces = [_CHART_BUILDERS[chart_type](labels, values, series_name)]
 
         fig = go.Figure(data=traces)

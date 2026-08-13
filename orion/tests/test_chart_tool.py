@@ -61,6 +61,36 @@ def test_multi_series_chart(chart_type):
     assert "2025" in content
 
 
+def test_labels_and_values_length_mismatch_returns_friendly_error():
+    """Regression test: mismatched-length labels/values used to render
+    misaligned/silently truncated points instead of erroring."""
+    result = GenerateChartTool().run(
+        title="Test Chart", chart_type="bar", labels=["A", "B", "C"], values=[1, 2]
+    )
+    assert "must be the same length" in result
+
+
+def test_series_with_wrong_length_returns_friendly_error():
+    """Regression test: every series is plotted against the same shared
+    `labels` — a series with a different number of values than labels
+    used to plot each point against the wrong category with no error."""
+    result = GenerateChartTool().run(
+        title="Comparison",
+        chart_type="bar",
+        labels=["Jan", "Feb", "Mar"],
+        series=[{"name": "2024", "values": [10, 20]}],
+    )
+    assert "2024" in result
+    assert "different number of values" in result
+
+
+def test_series_requires_labels():
+    result = GenerateChartTool().run(
+        title="Comparison", chart_type="bar", series=[{"name": "2024", "values": [10, 20]}]
+    )
+    assert "Need 'labels'" in result
+
+
 def test_multi_series_rejected_for_pie():
     result = GenerateChartTool().run(
         title="Comparison",

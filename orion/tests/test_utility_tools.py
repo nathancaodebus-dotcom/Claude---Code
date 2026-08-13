@@ -2,7 +2,13 @@ import math
 
 import pytest
 
-from tools.utility_tools import CalculatorTool, GeneratePasswordTool, UnitConversionTool, safe_eval
+from tools.utility_tools import (
+    CalculatorTool,
+    GeneratePasswordTool,
+    GenerateQrCodeTool,
+    UnitConversionTool,
+    safe_eval,
+)
 
 
 def test_safe_eval_arithmetic():
@@ -18,6 +24,24 @@ def test_safe_eval_rejects_arbitrary_code():
         safe_eval("__import__('os').system('echo hi')")
     with pytest.raises(Exception):
         safe_eval("open('/etc/passwd')")
+
+
+def test_generate_qr_code_uses_a_collision_resistant_filename(tmp_path, monkeypatch):
+    """Regression test: filenames used to be derived from
+    abs(hash(text)) % 100000 — a 100k-bucket space where two different
+    texts collide fairly easily (birthday-paradox odds cross 50% at only
+    ~370 QR codes generated in one process), silently overwriting each
+    other's saved file. Generating several distinct QR codes should never
+    reuse a filename."""
+    monkeypatch.chdir(tmp_path)
+    tool = GenerateQrCodeTool()
+
+    paths = []
+    for i in range(20):
+        result = tool.run(text=f"https://example.com/{i}")
+        paths.append(result.split("saved to ")[1].rstrip("."))
+
+    assert len(set(paths)) == 20
 
 
 def test_calculator_tool():

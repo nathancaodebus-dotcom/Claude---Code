@@ -152,7 +152,13 @@ class GenerateQrCodeTool(Tool):
             return "qrcode/Pillow is not installed — QR code generation isn't available here."
         output_dir = Path("outputs")
         output_dir.mkdir(exist_ok=True)
-        path = output_dir / f"qr_{abs(hash(text)) % 100000}.png"
+        # abs(hash(text)) % 100000 used to collide fairly easily (100k
+        # buckets, birthday-paradox odds cross 50% at only ~370 QR codes
+        # generated in one process) — two different texts landing on the
+        # same filename silently overwrote each other's saved file.
+        # secrets.token_hex is cryptographically random, not merely
+        # unlikely to collide.
+        path = output_dir / f"qr_{secrets.token_hex(5)}.png"
 
         img = qrcode.make(text)
         img.save(path)

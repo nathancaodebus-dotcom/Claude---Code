@@ -3,6 +3,7 @@ look up the Pi's public IP. No API keys required."""
 from __future__ import annotations
 
 import re
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -11,6 +12,29 @@ from core.http import client
 from tools.base import Tool
 
 _USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
+
+
+def _extract_result_url(link_el) -> str:
+    """.result__url's *text* is DuckDuckGo's human-readable display string
+    (domain + path, e.g. 'en.wikipedia.org/wiki/Something') with no
+    scheme — not the real destination URL. The element's href is a DDG
+    redirect wrapper (//duckduckgo.com/l/?uddg=<url-encoded-real-url>&...),
+    not a directly fetchable link either. If the model takes the display
+    text and passes it straight to fetch_webpage, httpx rejects it as an
+    unsupported/invalid URL — the search tool's own "url" field wasn't
+    actually usable for the obvious follow-up action. Decoding the real
+    URL out of the redirect wrapper's uddg parameter fixes that; falling
+    back to the (still human-readable, if not fetchable) display text if
+    the wrapper's shape ever changes rather than erroring."""
+    if link_el is None:
+        return ""
+    href = link_el.get("href", "")
+    if href:
+        parsed = urlparse(href if "://" in href else f"https:{href}")
+        query = parse_qs(parsed.query)
+        if query.get("uddg"):
+            return unquote(query["uddg"][0])
+    return link_el.get_text(strip=True)
 
 
 class WebSearchTool(Tool):
@@ -41,7 +65,7 @@ class WebSearchTool(Tool):
             if not title_el:
                 continue
             title = title_el.get_text(strip=True)
-            url = link_el.get_text(strip=True) if link_el else ""
+            url = _extract_result_url(link_el)
             snippet = snippet_el.get_text(strip=True) if snippet_el else ""
             results.append(f"- {title} ({url})\n  {snippet}")
 

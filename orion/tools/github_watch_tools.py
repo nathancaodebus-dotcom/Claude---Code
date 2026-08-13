@@ -65,7 +65,13 @@ class RecentGithubCommitsTool(Tool):
 
         lines = []
         for c in commits:
-            message = c["commit"]["message"].splitlines()[0]
+            # An empty commit message (git commit --allow-empty-message,
+            # some merge/revert bots) makes splitlines() return [] — [0] on
+            # that used to raise IndexError and abort the *entire* listing
+            # over one commit, rather than just showing that one with no
+            # message.
+            message_lines = c["commit"]["message"].splitlines()
+            message = message_lines[0] if message_lines else "(empty commit message)"
             author = c["commit"]["author"]["name"]
             lines.append(f"- {c['sha'][:7]} {message} — {author}")
         return "\n".join(lines)

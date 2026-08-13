@@ -97,7 +97,8 @@ class PublishWebsiteToGithubPagesTool(Tool):
         elif repo_response.status_code >= 300:
             return f"Could not look up repo '{owner}/{repo}': {repo_response.text[:300]}"
 
-        for file_path in _site_files(site_dir):
+        site_files = _site_files(site_dir)
+        for uploaded_count, file_path in enumerate(site_files):
             relative = file_path.relative_to(site_dir).as_posix()
             content_b64 = base64.b64encode(file_path.read_bytes()).decode()
 
@@ -117,7 +118,17 @@ class PublishWebsiteToGithubPagesTool(Tool):
                 timeout=30,
             )
             if put_response.status_code >= 300:
-                return f"Failed to upload '{relative}': {put_response.text[:300]}"
+                # Whatever uploaded before this file failed is already live
+                # on GitHub — the PUT loop has no rollback/retry, so the
+                # repo is left mixing old and new content. The message
+                # used to only name the failing file, leaving the caller
+                # with no way to tell which files (if any) already went
+                # out — now it says how many did, matching the Infomaniak
+                # publisher's "failed partway through" honesty below.
+                return (
+                    f"Failed to upload '{relative}' ({uploaded_count}/{len(site_files)} files already "
+                    f"uploaded before this failure): {put_response.text[:300]}"
+                )
 
         pages_response = client.post(
             f"{_GITHUB_API}/repos/{owner}/{repo}/pages",
