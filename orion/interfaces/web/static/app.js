@@ -346,12 +346,97 @@
   });
   inputEl.focus();
 
-  // --- mic input: push-to-talk, not always-listening like the Raspberry
-  // Pi voice loop (a browser tab can't keep a mic open unattended with a
-  // wake word) — click to record, click again to stop, the clip goes to
-  // /api/transcribe (faster-whisper server-side, same model the Pi/
-  // Telegram use) and the resulting text is sent exactly like typing it
-  // in would be. ---
+  // --- mic input: click once to start, then just talk — recording stops
+  // itself once you go quiet (same idea as interfaces/voice/voice_loop.py's
+  // silence detection, reimplemented here in the Web Audio API since
+  // there's no way to reuse that server-side Python against a live browser
+  // mic stream). Not always-listening like the Raspberry Pi voice loop
+  // (a browser tab can't keep a mic open unattended with a wake word) —
+  // still needs the initial click, just not a second one to end it. A
+  // manual click while recording still stops it early as a fallback/
+  // override. Clip goes to /api/transcribe (faster-whisper server-side,
+  // same model the Pi/Telegram use) and the resulting text is sent
+  // exactly like typing it in would be. ---
+
+  const SILENCE_CALIBRATION_MS = 400; // brief ambient-level sample before judging silence, mirrors voice_loop.py's calibration
+  const SILENCE_MARGIN_MULTIPLIER = 2.5; // threshold = ambient RMS * this
+  const MIN_SILENCE_RMS = 0.015; // floor, in case the room is closer to silent than any mic's noise floor
+  const TRAILING_SILENCE_MS = 1200; // how long you can pause before it decides you're done
+  const MAX_INITIAL_SILENCE_MS = 6000; // give up if nothing is said at all
+  const MAX_RECORDING_MS = 20000; // hard cap regardless of silence detection
+
+  let audioContext = null;
+  let silenceCheckInterval = null;
+
+  function computeRms(analyser, buffer) {
+    analyser.getByteTimeDomainData(buffer);
+    let sumSquares = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const normalized = (buffer[i] - 128) / 128;
+      sumSquares += normalized * normalized;
+    }
+    return Math.sqrt(sumSquares / buffer.length);
+  }
+
+  function startSilenceDetection(stream) {
+    const AudioContextCls = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCls) return; // no Web Audio API here -- degrades to manual click-to-stop only
+
+    audioContext = new AudioContextCls();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    const buffer = new Uint8Array(analyser.fftSize);
+
+    const calibrationSamples = [];
+    const calibrationStart = Date.now();
+    const recordingStart = calibrationStart;
+    let silenceThreshold = MIN_SILENCE_RMS;
+    let calibrated = false;
+    let speechDetected = false;
+    let silenceStart = null;
+
+    silenceCheckInterval = setInterval(() => {
+      const rms = computeRms(analyser, buffer);
+      const now = Date.now();
+
+      if (!calibrated) {
+        calibrationSamples.push(rms);
+        if (now - calibrationStart >= SILENCE_CALIBRATION_MS) {
+          const ambient = calibrationSamples.reduce((a, b) => a + b, 0) / calibrationSamples.length;
+          silenceThreshold = Math.max(MIN_SILENCE_RMS, ambient * SILENCE_MARGIN_MULTIPLIER);
+          calibrated = true;
+        }
+        return;
+      }
+
+      if (rms > silenceThreshold) {
+        speechDetected = true;
+        silenceStart = null;
+      } else {
+        if (silenceStart === null) silenceStart = now;
+        const limit = speechDetected ? TRAILING_SILENCE_MS : MAX_INITIAL_SILENCE_MS;
+        if (now - silenceStart > limit) {
+          stopRecording();
+          return;
+        }
+      }
+
+      if (now - recordingStart > MAX_RECORDING_MS) stopRecording();
+    }, 100);
+  }
+
+  function stopSilenceDetection() {
+    if (silenceCheckInterval) {
+      clearInterval(silenceCheckInterval);
+      silenceCheckInterval = null;
+    }
+    if (audioContext) {
+      audioContext.close().catch(() => {});
+      audioContext = null;
+    }
+  }
 
   let mediaRecorder = null;
   let recordedChunks = [];
@@ -414,9 +499,11 @@
       if (e.data.size > 0) recordedChunks.push(e.data);
     });
     mediaRecorder.addEventListener("stop", () => {
+      stopSilenceDetection();
       stream.getTracks().forEach((track) => track.stop());
       micEl.classList.remove("recording");
       micEl.textContent = "🎤";
+      heroHintEl.textContent = "WAITING FOR COMMAND";
       micBusy = false;
       if (recordedChunks.length === 0) {
         showNotification("Rien n'a été enregistré — réessaie.", { isError: true });
@@ -431,7 +518,9 @@
 
     mediaRecorder.start();
     micEl.classList.add("recording");
-    micEl.textContent = "■"; // ■ stop
+    micEl.textContent = "■"; // ■ — still clickable to stop early manually
+    heroHintEl.textContent = "LISTENING…";
+    startSilenceDetection(stream);
   }
 
   function stopRecording() {

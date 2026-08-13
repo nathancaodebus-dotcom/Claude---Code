@@ -67,11 +67,12 @@
 <footer class="hud-input">
   <span class="prompt-caret">&gt;</span>
   <input id="input" type="text" autocomplete="off" placeholder="Entrez une commande…" />
-  <!-- Push-to-talk: click to start recording, click again to stop and
-       transcribe (app.js) — not always-listening/wake-word like the
-       Raspberry Pi voice loop, since that needs a mic held open
-       continuously, which a browser tab can't do unattended. -->
-  <button id="mic" type="button" title="Parler à Orion">🎤</button>
+  <!-- Click once, talk, recording stops itself on silence (app.js) — a
+       manual click while recording still stops it early too. Not always-
+       listening/wake-word like the Raspberry Pi voice loop, since that
+       needs a mic held open continuously, which a browser tab can't do
+       unattended. -->
+  <button id="mic" type="button" title="Parler à Orion — s'arrête tout seul quand tu as fini">🎤</button>
   <button id="send" type="button">ENVOYER</button>
 </footer>
 
