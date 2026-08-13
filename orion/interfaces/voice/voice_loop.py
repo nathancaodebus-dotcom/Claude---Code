@@ -407,6 +407,12 @@ class VoiceLoop:
 
     def run(self) -> None:
         print(f"{config.assistant_name} voice loop running. Say '{config.wake_word}' to start.")
+        # Printed explicitly rather than left to be inferred from behavior —
+        # "barge-in doesn't work" is otherwise indistinguishable between
+        # "VOICE_BARGE_IN_ENABLED isn't actually set" (this line says False)
+        # and "it's on but the wake-word model isn't catching it" (this line
+        # says True), which need completely different fixes.
+        print(f"Barge-in (say '{config.wake_word}' again to interrupt): {config.voice_barge_in_enabled}")
         self._scheduler.start()
         self._health_monitor.start()
 
