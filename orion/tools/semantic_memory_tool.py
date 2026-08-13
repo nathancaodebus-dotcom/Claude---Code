@@ -53,6 +53,14 @@ class SearchMemoryTool(Tool):
         self._memory = vector_memory
 
     def run(self, query: str, max_results: int = 5) -> str:
+        # core/vector_memory.py's _top_k_matches has no lower bound of its
+        # own: max_results=0 used to silently return zero matches (read as
+        # "nothing relevant" rather than "you asked for zero"), and a
+        # negative value could raise a raw numpy internals error
+        # (np.argpartition with an out-of-bounds kth) instead of a clean
+        # message.
+        if max_results < 1:
+            return "max_results must be at least 1."
         matches = self._memory.search(query, top_k=max_results)
         if not matches:
             return "No related memories found."

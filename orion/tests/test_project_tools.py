@@ -11,7 +11,34 @@ from tools.project_tools import (
 def test_create_project_tool(tmp_path):
     store = Store(db_path=str(tmp_path / "test.db"))
     result = CreateProjectTool(store).run(name="Website Redesign")
-    assert "Website Redesign" in result
+    assert "Created project 'Website Redesign'" in result
+
+
+def test_create_project_tool_reports_already_existing_instead_of_claiming_created(tmp_path):
+    """Regression test: create_project is an upsert that always 'succeeds',
+    so the tool used to unconditionally say 'Created' even when the
+    project already existed and nothing actually changed."""
+    store = Store(db_path=str(tmp_path / "test.db"))
+    CreateProjectTool(store).run(name="Website Redesign")
+
+    result = CreateProjectTool(store).run(name="Website Redesign")
+
+    assert "already exists" in result
+    assert len(store.list_projects()) == 1
+
+
+def test_add_milestone_attaches_to_existing_project_regardless_of_case(tmp_path):
+    """Regression test: exact-match-only project lookup used to silently
+    fork a second, differently-cased project instead of attaching to the
+    one created earlier."""
+    store = Store(db_path=str(tmp_path / "test.db"))
+    CreateProjectTool(store).run(name="Website Redesign")
+
+    AddMilestoneTool(store).run(project_name="website redesign", text="Kickoff")
+
+    assert len(store.list_projects()) == 1
+    project = store.get_project("Website Redesign")
+    assert len(store.list_milestones(project.id)) == 1
 
 
 def test_add_milestone_creates_project_if_missing(tmp_path):

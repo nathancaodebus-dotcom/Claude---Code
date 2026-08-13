@@ -251,6 +251,15 @@ class BacktestQuantSignalTool(Tool):
         forward_days: int = 5,
         lookback_days: int = _DEFAULT_LOOKBACK_DAYS,
     ) -> str:
+        if forward_days < 1:
+            # The harness indexes bars[i + forward_days] to find each day's
+            # forward return — with no lower-bound check, a negative value
+            # doesn't raise, it silently wraps via Python's negative-index
+            # semantics into bars *near the end of the whole history*
+            # instead, computing a nonsensical (and never-erroring) IC
+            # against unrelated bars. save_quant_signal would then happily
+            # persist a signal that scored well purely because of this bug.
+            return f"forward_days must be a positive number of trading days, got {forward_days}."
         lookback_days = min(lookback_days, _MAX_LOOKBACK_DAYS)
         bars = _fetch_stooq_history(ticker, lookback_days)
         if len(bars) < 30:

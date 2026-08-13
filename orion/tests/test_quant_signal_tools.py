@@ -60,6 +60,19 @@ def test_backtest_not_enough_history(monkeypatch):
     assert "Not enough price history" in result
 
 
+def test_backtest_rejects_a_non_positive_forward_days():
+    """Regression test: the harness indexes bars[i + forward_days] with no
+    lower-bound check on forward_days — a negative value didn't raise, it
+    silently wrapped via Python's negative-index semantics into bars near
+    the end of the whole history, producing a nonsensical (and
+    never-erroring) IC that a caller could go on to persist via
+    save_quant_signal as if it meant something."""
+    result = BacktestQuantSignalTool().run(
+        ticker="AAPL", signal_code="def signal(bars):\n    return [1] * len(bars)\n", forward_days=-1
+    )
+    assert "forward_days must be" in result
+
+
 def test_backtest_computes_ic_for_a_real_signal():
     signal_code = (
         "def signal(bars):\n"

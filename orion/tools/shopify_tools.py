@@ -546,13 +546,24 @@ class CreateShopifyDiscountTool(Tool):
         rule_response.raise_for_status()
         rule_id = rule_response.json()["price_rule"]["id"]
 
-        code_response = client.post(
-            f"{_base_url()}/price_rules/{rule_id}/discount_codes.json",
-            headers=_headers(),
-            json={"discount_code": {"code": code}},
-            timeout=20,
-        )
-        code_response.raise_for_status()
+        try:
+            code_response = client.post(
+                f"{_base_url()}/price_rules/{rule_id}/discount_codes.json",
+                headers=_headers(),
+                json={"discount_code": {"code": code}},
+                timeout=20,
+            )
+            code_response.raise_for_status()
+        except httpx.HTTPStatusError:
+            # The price_rule above is already committed on Shopify's side —
+            # if attaching a code to it fails (a duplicate code, a
+            # validation error), it used to be left behind with no code
+            # attached and no way for the caller to know it existed. Clean
+            # it up before re-raising so a failed call doesn't leave store
+            # state behind; best-effort (a failure here just means the
+            # orphaned rule needs manual cleanup, same as before this fix).
+            client.delete(f"{_base_url()}/price_rules/{rule_id}.json", headers=_headers(), timeout=20)
+            raise
 
         value_desc = f"{value}%" if discount_type == "percentage" else f"{value}"
         return f"Created discount code '{code}' ({value_desc} off)."

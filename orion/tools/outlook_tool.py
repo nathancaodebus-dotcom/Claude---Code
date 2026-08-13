@@ -47,7 +47,15 @@ class OutlookSearchTool(Tool):
             "$select": "id,subject,from,receivedDateTime,bodyPreview",
         }
         if query:
-            params["$search"] = f'"{query}"'
+            # $search wraps the query in literal double quotes — an
+            # embedded '"' in the query itself (e.g. a phrase like 'find
+            # the "Q3 budget" email') used to break out of that wrapping
+            # unescaped, producing a malformed search string instead of the
+            # intended free-text search. Escaped the same way
+            # microsoft_contacts_tool.py already escapes its own OData
+            # filter input.
+            escaped_query = query.replace('"', '\\"')
+            params["$search"] = f'"{escaped_query}"'
         else:
             params["$filter"] = "isRead eq false"
             params["$orderby"] = "receivedDateTime desc"

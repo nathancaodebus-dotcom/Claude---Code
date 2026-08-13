@@ -30,6 +30,47 @@ def test_create_note_sanitizes_filename(vault):
     assert ":" not in files[0].name
 
 
+def test_create_note_refuses_to_silently_overwrite_an_existing_one(vault):
+    """Regression test: a second 'create a note called X' for a different,
+    unrelated idea used to silently wipe out the first note's content with
+    no error and no indication anything was overwritten."""
+    CreateObsidianNoteTool().run(title="Ideas", content="Idea A.")
+
+    result = CreateObsidianNoteTool().run(title="Ideas", content="Idea B.")
+
+    assert "already exists" in result
+    assert (vault / "Ideas.md").read_text().count("Idea A.") == 1
+    assert "Idea B." not in (vault / "Ideas.md").read_text()
+
+
+def test_create_note_overwrite_true_replaces_it(vault):
+    CreateObsidianNoteTool().run(title="Ideas", content="Idea A.")
+
+    result = CreateObsidianNoteTool().run(title="Ideas", content="Idea B.", overwrite=True)
+
+    assert "Created" in result
+    text = (vault / "Ideas.md").read_text()
+    assert "Idea B." in text
+    assert "Idea A." not in text
+
+
+def test_create_note_tags_with_commas_and_colons_survive_as_separate_valid_tags(vault):
+    """Regression test: tags were interpolated raw into YAML flow-sequence
+    syntax — a tag containing a comma silently split into two tags on
+    Obsidian's YAML parse, and one containing a colon could produce
+    invalid YAML that keeps Obsidian from parsing the frontmatter at all."""
+    CreateObsidianNoteTool().run(title="Tagged", content="x", tags=["type: idea", "work, urgent"])
+
+    text = (vault / "Tagged.md").read_text()
+    assert 'tags: ["type: idea", "work, urgent"]' in text
+
+    import yaml
+
+    frontmatter = text.split("---")[1]
+    parsed = yaml.safe_load(frontmatter)
+    assert parsed["tags"] == ["type: idea", "work, urgent"]
+
+
 def test_append_to_existing_note(vault):
     CreateObsidianNoteTool().run(title="Journal", content="Day 1.")
     AppendObsidianNoteTool().run(title="Journal", content="Day 2.")

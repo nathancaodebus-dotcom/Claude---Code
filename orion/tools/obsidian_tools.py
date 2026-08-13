@@ -26,25 +26,49 @@ def _safe_filename(title: str) -> str:
 
 class CreateObsidianNoteTool(Tool):
     name = "create_obsidian_note"
-    description = "Create a new note (markdown file) in the user's Obsidian vault."
+    description = (
+        "Create a new note (markdown file) in the user's Obsidian vault. Fails if a note with the "
+        "same title already exists (use append_obsidian_note to add to it, or pass overwrite=true "
+        "to replace it) rather than silently wiping existing content."
+    )
     input_schema = {
         "type": "object",
         "properties": {
             "title": {"type": "string"},
             "content": {"type": "string"},
             "tags": {"type": "array", "items": {"type": "string"}},
+            "overwrite": {
+                "type": "boolean",
+                "description": "Replace an existing note with the same title. Default false.",
+            },
         },
         "required": ["title", "content"],
     }
 
-    def run(self, title: str, content: str, tags: list[str] | None = None) -> str:
+    def run(self, title: str, content: str, tags: list[str] | None = None, overwrite: bool = False) -> str:
         vault = _vault_path()
         filename = f"{_safe_filename(title)}.md"
         path = vault / filename
 
+        if path.exists() and not overwrite:
+            # A second "create a note called X" for a different, unrelated
+            # idea used to silently wipe out the first note's content with
+            # no error and no indication anything was overwritten.
+            return (
+                f"A note named '{filename}' already exists. Use append_obsidian_note to add to it, "
+                "or pass overwrite=true to replace it."
+            )
+
         frontmatter = f"---\ncreated: {datetime.now().isoformat()}\n"
         if tags:
-            frontmatter += "tags: [" + ", ".join(tags) + "]\n"
+            # Each tag is quoted (with embedded '"' escaped) rather than
+            # inserted raw into YAML flow-sequence syntax — a tag
+            # containing a comma used to silently split into two tags on
+            # Obsidian's YAML parse, and one containing a colon or bracket
+            # could produce invalid YAML that keeps Obsidian from parsing
+            # the note's frontmatter/properties at all.
+            quoted_tags = ", ".join('"' + t.replace('"', '\\"') + '"' for t in tags)
+            frontmatter += f"tags: [{quoted_tags}]\n"
         frontmatter += "---\n\n"
 
         path.write_text(frontmatter + f"# {title}\n\n{content}\n", encoding="utf-8")

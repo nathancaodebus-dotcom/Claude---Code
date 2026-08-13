@@ -389,17 +389,25 @@ class Store:
     # --- projects / milestones ---
 
     def create_project(self, name: str) -> int:
+        # get_project() below matches case-insensitively — routing through
+        # it here (instead of a plain INSERT ... ON CONFLICT, which only
+        # dedupes an *exact* byte-for-byte match) means 'add a milestone to
+        # website redesign' finds the 'Website Redesign' project created
+        # earlier instead of silently forking a second, differently-cased
+        # project that looks identical to a human but is a separate row.
+        existing = self.get_project(name)
+        if existing:
+            return existing.id
         cur = self._conn.execute(
-            "INSERT INTO projects (name, created_at) VALUES (?, ?) "
-            "ON CONFLICT(name) DO UPDATE SET name = excluded.name",
-            (name, time.time()),
+            "INSERT INTO projects (name, created_at) VALUES (?, ?)", (name, time.time())
         )
         self._conn.commit()
-        row = self._conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
-        return row[0]
+        return cur.lastrowid
 
     def get_project(self, name: str) -> Project | None:
-        row = self._conn.execute("SELECT id, name FROM projects WHERE name = ?", (name,)).fetchone()
+        row = self._conn.execute(
+            "SELECT id, name FROM projects WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
         return Project(id=row[0], name=row[1]) if row else None
 
     def list_projects(self) -> list[Project]:

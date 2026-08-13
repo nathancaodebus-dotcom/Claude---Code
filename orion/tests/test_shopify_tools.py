@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from core.config import config
@@ -15,7 +16,9 @@ class _FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
+            raise httpx.HTTPStatusError(
+                f"HTTP {self.status_code}", request=httpx.Request("GET", "https://example.com"), response=self
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -387,3 +390,30 @@ def test_create_discount_percentage(monkeypatch):
     assert rule_call[1]["price_rule"]["value_type"] == "percentage"
     code_call = captured["posts"][1]
     assert "price_rules/99/discount_codes.json" in code_call[0]
+
+
+def test_create_discount_cleans_up_the_price_rule_if_attaching_the_code_fails(monkeypatch):
+    """Regression test: the price_rule is created first, then a code is
+    attached to it in a second call — if the second call fails (a
+    duplicate code, a validation error), the already-committed price_rule
+    used to be left behind with no code attached and no way for the caller
+    to know it existed. It should now be cleaned up instead."""
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        if "price_rules.json" in url and "discount_codes" not in url:
+            return _FakeResponse({"price_rule": {"id": 99}})
+        return _FakeResponse(status_code=422)  # attaching the code fails
+
+    deletes = []
+
+    def fake_delete(url, headers=None, timeout=None):
+        deletes.append(url)
+        return _FakeResponse({})
+
+    monkeypatch.setattr(shopify_tools.client, "post", fake_post)
+    monkeypatch.setattr(shopify_tools.client, "delete", fake_delete)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        shopify_tools.CreateShopifyDiscountTool().run(code="SUMMER10", discount_type="percentage", value=10)
+
+    assert deletes == ["https://test-store.myshopify.com/admin/api/2024-10/price_rules/99.json"]

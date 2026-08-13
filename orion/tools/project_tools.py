@@ -23,7 +23,14 @@ class CreateProjectTool(Tool):
         self._store = store
 
     def run(self, name: str) -> str:
+        # create_project is now itself a get-or-create (see core/store.py),
+        # so it always "succeeds" — checking first means the response
+        # accurately says which one happened instead of always claiming
+        # "Created" even when nothing changed.
+        existing = self._store.get_project(name)
         self._store.create_project(name)
+        if existing:
+            return f"Project '{existing.name}' already exists — nothing changed."
         return f"Created project '{name}'."
 
 

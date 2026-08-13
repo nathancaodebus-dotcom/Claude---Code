@@ -38,10 +38,26 @@ class RunBackupTool(Tool):
         dest_path = Path(destination) / f"{source_path.name}-{timestamp}"
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if source_path.is_dir():
-            shutil.copytree(source_path, dest_path)
-        else:
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_path, dest_path)
+        # Copies into a '.partial'-suffixed name first, only renaming to the
+        # real dest_path once the copy fully succeeds. A copy that fails
+        # partway (disk full, permission error, a source file vanishing
+        # mid-copy) used to leave a partially-populated directory sitting
+        # right at dest_path — indistinguishable from a complete backup to
+        # a later "restore from latest backup" workflow. This way dest_path
+        # only ever comes into existence once the copy is actually done;
+        # anything left behind by a failed attempt is cleaned up instead.
+        staging_path = dest_path.with_name(dest_path.name + ".partial")
+        try:
+            if source_path.is_dir():
+                shutil.copytree(source_path, staging_path)
+            else:
+                shutil.copy2(source_path, staging_path)
+        except Exception:
+            if staging_path.is_dir():
+                shutil.rmtree(staging_path, ignore_errors=True)
+            else:
+                staging_path.unlink(missing_ok=True)
+            raise
 
+        staging_path.rename(dest_path)
         return f"Backed up '{source}' to '{dest_path}'."

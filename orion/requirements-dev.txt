@@ -1,2 +1,6 @@
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
+# Only used by tests/test_obsidian_tools.py, to verify a fix actually
+# produces parseable YAML frontmatter rather than just eyeballing the
+# string — not a runtime dependency of any tool.
+pyyaml>=6.0.0

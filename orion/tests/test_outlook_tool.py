@@ -56,6 +56,24 @@ def test_search_with_query_uses_search_param(monkeypatch):
     assert "$filter" not in captured["params"]
 
 
+def test_search_escapes_embedded_double_quotes_in_the_query(monkeypatch):
+    """Regression test: $search wraps the query in literal double quotes —
+    an embedded '"' in the query itself used to break out of that wrapping
+    unescaped, producing a malformed search string instead of the intended
+    free-text search."""
+    captured = {}
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        captured["params"] = params
+        return _FakeResponse({"value": []})
+
+    monkeypatch.setattr(outlook_tool.client, "get", fake_get)
+
+    outlook_tool.OutlookSearchTool().run(query='find the "Q3 budget" email')
+
+    assert captured["params"]["$search"] == '"find the \\"Q3 budget\\" email"'
+
+
 def test_search_formats_results(monkeypatch):
     messages = {
         "value": [
