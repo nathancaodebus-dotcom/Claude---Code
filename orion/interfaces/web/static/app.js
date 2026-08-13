@@ -62,6 +62,14 @@
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
     const count = 70;
+    // Icy blue/violet/teal, matching the constellation-nebula palette —
+    // varied per particle so the drift reads as a starfield, not one flat color.
+    const hues = [
+      "rgba(215, 226, 255, 0.7)",
+      "rgba(124, 147, 255, 0.6)",
+      "rgba(155, 107, 255, 0.5)",
+      "rgba(33, 201, 184, 0.45)",
+    ];
     const particles = Array.from({ length: count }, () => {
       const angle = Math.random() * Math.PI * 2;
       const radius = 90 + Math.random() * 70;
@@ -71,6 +79,7 @@
         speed: (Math.random() - 0.5) * 0.006,
         wobble: Math.random() * Math.PI * 2,
         size: Math.random() * 1.6 + 0.4,
+        hue: hues[Math.floor(Math.random() * hues.length)],
       };
     });
 
@@ -84,7 +93,7 @@
         const y = cy + Math.sin(p.angle) * r;
         ctx.beginPath();
         ctx.arc(x, y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(75, 227, 255, 0.65)";
+        ctx.fillStyle = p.hue;
         ctx.fill();
       }
       requestAnimationFrame(frame);
