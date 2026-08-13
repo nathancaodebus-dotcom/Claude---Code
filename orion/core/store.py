@@ -7,6 +7,7 @@ recalling as text.
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -234,6 +235,18 @@ class Store:
         self._conn.executescript(_SCHEMA)
         _ensure_column(self._conn, "crypto_trade_proposals", "fee_pct", "REAL NOT NULL DEFAULT 0.0")
         self._conn.commit()
+        # sqlite3's check_same_thread=False only disables Python's own
+        # same-thread assertion — it doesn't make one Connection object
+        # safe to drive from multiple threads *concurrently*. A single
+        # simple statement is fine (SQLite serializes those internally),
+        # but a multi-statement sequence (read, branch, several writes) can
+        # genuinely interleave with another thread's statements on the same
+        # connection and raise low-level errors ("another row available")
+        # that have nothing to do with the SQL itself. Guards exactly the
+        # methods that run such a sequence — see confirm_crypto_trade/
+        # reject_crypto_trade below — not every single-statement method,
+        # which would just be uncontended overhead for no benefit.
+        self._lock = threading.Lock()
 
     # --- todos ---
 
@@ -541,76 +554,104 @@ class Store:
         what it nets you), so effective_price_usd there is purely
         informational — this project has no cash-balance/proceeds ledger to
         apply it to."""
-        proposal = self.get_crypto_trade_proposal(proposal_id)
-        if proposal is None:
-            raise ValueError(f"No trade proposal with id {proposal_id}.")
-        if proposal.status != "pending":
-            raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
+        # A raw sqlite3.Connection isn't safe to drive from multiple threads
+        # *concurrently* just because check_same_thread=False lets them try
+        # — that only disables Python's same-thread assertion, not actual
+        # interleaving protection for a multi-statement sequence like this
+        # one (read, branch, several writes). Without this lock, two threads
+        # running this method at once can trip low-level sqlite3 errors
+        # ("another row available") that have nothing to do with the SQL
+        # itself. The atomic UPDATE...WHERE status='pending' below still
+        # matters even with the lock held (it's what makes an in-progress-
+        # but-uncommitted claim visible to the *next* caller in line, not
+        # just to concurrent ones) — this closes the lower-level thread-
+        # safety gap the lock alone doesn't.
+        with self._lock:
+            proposal = self.get_crypto_trade_proposal(proposal_id)
+            if proposal is None:
+                raise ValueError(f"No trade proposal with id {proposal_id}.")
 
-        fee_amount_usd = proposal.quantity * proposal.price_usd * (proposal.fee_pct / 100)
-
-        existing = self._conn.execute(
-            "SELECT quantity, avg_buy_price_usd FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
-            (proposal.portfolio, proposal.coin),
-        ).fetchone()
-
-        if proposal.action == "buy":
-            effective_price = proposal.price_usd * (1 + proposal.fee_pct / 100)
-            if existing is None:
-                new_quantity, new_avg_price = proposal.quantity, effective_price
-            else:
-                old_quantity, old_avg_price = existing
-                new_quantity = old_quantity + proposal.quantity
-                new_avg_price = (
-                    old_quantity * old_avg_price + proposal.quantity * effective_price
-                ) / new_quantity
-            self._conn.execute(
-                "INSERT INTO crypto_holdings (portfolio, coin, quantity, avg_buy_price_usd, updated_at) "
-                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(portfolio, coin) DO UPDATE SET "
-                "quantity = excluded.quantity, avg_buy_price_usd = excluded.avg_buy_price_usd, "
-                "updated_at = excluded.updated_at",
-                (proposal.portfolio, proposal.coin, new_quantity, new_avg_price, time.time()),
+            cur = self._conn.execute(
+                "UPDATE crypto_trade_proposals SET status = 'confirmed', resolved_at = ? "
+                "WHERE id = ? AND status = 'pending'",
+                (time.time(), proposal_id),
             )
-        else:  # sell
-            effective_price = proposal.price_usd * (1 - proposal.fee_pct / 100)
-            if existing is None or existing[0] < proposal.quantity:
-                held = existing[0] if existing else 0.0
-                raise ValueError(
-                    f"Can't sell {proposal.quantity} {proposal.coin} from '{proposal.portfolio}' — "
-                    f"only {held} held."
-                )
-            old_quantity, old_avg_price = existing
-            new_quantity = old_quantity - proposal.quantity
-            if new_quantity == 0:
-                self._conn.execute(
-                    "DELETE FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
-                    (proposal.portfolio, proposal.coin),
-                )
-            else:
-                self._conn.execute(
-                    "UPDATE crypto_holdings SET quantity = ?, updated_at = ? "
-                    "WHERE portfolio = ? AND coin = ?",
-                    (new_quantity, time.time(), proposal.portfolio, proposal.coin),
-                )
+            if cur.rowcount == 0:
+                self._conn.rollback()
+                raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
 
-        self._conn.execute(
-            "UPDATE crypto_trade_proposals SET status = 'confirmed', resolved_at = ? WHERE id = ?",
-            (time.time(), proposal_id),
-        )
-        self._conn.commit()
-        return {"effective_price_usd": effective_price, "fee_amount_usd": fee_amount_usd}
+            fee_amount_usd = proposal.quantity * proposal.price_usd * (proposal.fee_pct / 100)
+
+            existing = self._conn.execute(
+                "SELECT quantity, avg_buy_price_usd FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
+                (proposal.portfolio, proposal.coin),
+            ).fetchone()
+
+            if proposal.action == "buy":
+                effective_price = proposal.price_usd * (1 + proposal.fee_pct / 100)
+                if existing is None:
+                    new_quantity, new_avg_price = proposal.quantity, effective_price
+                else:
+                    old_quantity, old_avg_price = existing
+                    new_quantity = old_quantity + proposal.quantity
+                    new_avg_price = (
+                        old_quantity * old_avg_price + proposal.quantity * effective_price
+                    ) / new_quantity
+                self._conn.execute(
+                    "INSERT INTO crypto_holdings (portfolio, coin, quantity, avg_buy_price_usd, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?) ON CONFLICT(portfolio, coin) DO UPDATE SET "
+                    "quantity = excluded.quantity, avg_buy_price_usd = excluded.avg_buy_price_usd, "
+                    "updated_at = excluded.updated_at",
+                    (proposal.portfolio, proposal.coin, new_quantity, new_avg_price, time.time()),
+                )
+            else:  # sell
+                effective_price = proposal.price_usd * (1 - proposal.fee_pct / 100)
+                if existing is None or existing[0] < proposal.quantity:
+                    held = existing[0] if existing else 0.0
+                    # Undoes the atomic claim above — this transaction is
+                    # still uncommitted, so rolling back here leaves the
+                    # proposal exactly as it was (still 'pending'), same as
+                    # if this call had never been made.
+                    self._conn.rollback()
+                    raise ValueError(
+                        f"Can't sell {proposal.quantity} {proposal.coin} from '{proposal.portfolio}' — "
+                        f"only {held} held."
+                    )
+                old_quantity, old_avg_price = existing
+                new_quantity = old_quantity - proposal.quantity
+                if new_quantity == 0:
+                    self._conn.execute(
+                        "DELETE FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
+                        (proposal.portfolio, proposal.coin),
+                    )
+                else:
+                    self._conn.execute(
+                        "UPDATE crypto_holdings SET quantity = ?, updated_at = ? "
+                        "WHERE portfolio = ? AND coin = ?",
+                        (new_quantity, time.time(), proposal.portfolio, proposal.coin),
+                    )
+
+            self._conn.commit()
+            return {"effective_price_usd": effective_price, "fee_amount_usd": fee_amount_usd}
 
     def reject_crypto_trade(self, proposal_id: int) -> None:
-        proposal = self.get_crypto_trade_proposal(proposal_id)
-        if proposal is None:
-            raise ValueError(f"No trade proposal with id {proposal_id}.")
-        if proposal.status != "pending":
-            raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
-        self._conn.execute(
-            "UPDATE crypto_trade_proposals SET status = 'rejected', resolved_at = ? WHERE id = ?",
-            (time.time(), proposal_id),
-        )
-        self._conn.commit()
+        # Same lock + atomic-claim shape as confirm_crypto_trade above, for
+        # the same reason: two concurrent rejects of the same id could
+        # otherwise both read status='pending' before either writes.
+        with self._lock:
+            proposal = self.get_crypto_trade_proposal(proposal_id)
+            if proposal is None:
+                raise ValueError(f"No trade proposal with id {proposal_id}.")
+
+            cur = self._conn.execute(
+                "UPDATE crypto_trade_proposals SET status = 'rejected', resolved_at = ? "
+                "WHERE id = ? AND status = 'pending'",
+                (time.time(), proposal_id),
+            )
+            if cur.rowcount == 0:
+                self._conn.rollback()
+                raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
+            self._conn.commit()
 
     def list_crypto_holdings(self, portfolio: str | None = None) -> list[CryptoHolding]:
         query = "SELECT id, portfolio, coin, quantity, avg_buy_price_usd FROM crypto_holdings"

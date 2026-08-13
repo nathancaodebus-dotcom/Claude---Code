@@ -1021,6 +1021,23 @@ already done to close that gap as much as it can be:
 
 ## Reliability
 
+- **A crypto trade can't be double-applied by a concurrent confirm/reject**:
+  `core/store.py`'s `confirm_crypto_trade`/`reject_crypto_trade` used to
+  read a proposal's status, then separately apply it to holdings and write
+  the new status — two calls for the same proposal id at once (`core/agent.py`
+  dispatches a turn's tool calls concurrently) could both read 'pending'
+  before either wrote, silently doubling the position. Fixed two layers
+  deep: the status is now claimed with a single atomic
+  `UPDATE ... WHERE status = 'pending'` before anything else runs, *and*
+  the whole method body is now guarded by a lock, because a raw
+  `sqlite3.Connection`'s `check_same_thread=False` only disables Python's
+  same-thread assertion — it doesn't make one connection object safe to
+  drive from multiple threads truly concurrently for a multi-statement
+  sequence, as a `tests/test_crypto_store.py` regression test firing ten
+  concurrent confirms at the same proposal found the hard way (a handful of
+  threads got through and doubled the holding, or the connection raised a
+  low-level `sqlite3.DatabaseError` — reproduced consistently before the
+  fix, gone after it, verified across repeated runs).
 - **Concurrent requests to the same session can't corrupt the conversation**:
   the web UI (§18) lets two browser tabs share one conversation by design.
   Since FastAPI runs each request in a thread pool, two `/api/chat` calls

@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 
 from core.store import Store
@@ -162,6 +164,74 @@ def test_confirm_already_resolved_proposal_raises(tmp_path):
 
     with pytest.raises(ValueError, match="already confirmed"):
         store.confirm_crypto_trade(buy)
+
+
+def test_concurrent_confirm_calls_apply_the_trade_at_most_once(tmp_path):
+    """core/agent.py dispatches a turn's tool calls concurrently (a thread
+    pool) — if confirm_crypto_trade were ever called twice for the same
+    proposal id at once, a naive read-then-write (check status, then apply
+    to holdings, then mark confirmed) lets both calls read 'pending' before
+    either writes, silently doubling the position. Fires the same confirm
+    from several threads at once and checks the holding reflects exactly
+    one buy, never more, no matter how many callers raced for it."""
+    store = Store(db_path=str(tmp_path / "test.db"))
+    proposal_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="bitcoin", quantity=1, price_usd=100, reasoning="x"
+    )
+
+    outcomes: list[str] = []
+    outcomes_lock = threading.Lock()
+
+    def confirm() -> None:
+        try:
+            store.confirm_crypto_trade(proposal_id)
+            outcome = "ok"
+        except ValueError:
+            outcome = "error"
+        with outcomes_lock:
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=confirm) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert outcomes.count("ok") == 1, "the trade was applied more than once"
+    assert outcomes.count("error") == 9
+
+    holdings = store.list_crypto_holdings("stable")
+    assert len(holdings) == 1
+    assert holdings[0].quantity == 1
+
+
+def test_concurrent_reject_calls_only_succeed_once(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    proposal_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="bitcoin", quantity=1, price_usd=100, reasoning="x"
+    )
+
+    outcomes: list[str] = []
+    outcomes_lock = threading.Lock()
+
+    def reject() -> None:
+        try:
+            store.reject_crypto_trade(proposal_id)
+            outcome = "ok"
+        except ValueError:
+            outcome = "error"
+        with outcomes_lock:
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=reject) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert outcomes.count("ok") == 1
+    assert outcomes.count("error") == 9
+    assert store.get_crypto_trade_proposal(proposal_id).status == "rejected"
 
 
 def test_reject_crypto_trade_marks_rejected_and_does_not_touch_holdings(tmp_path):
