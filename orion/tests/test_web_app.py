@@ -257,9 +257,10 @@ def test_outputs_mount_404s_for_a_missing_file(client):
 
 
 class _FakeSegment:
-    def __init__(self, text: str, no_speech_prob: float = 0.05):
+    def __init__(self, text: str, no_speech_prob: float = 0.05, compression_ratio: float = 1.0):
         self.text = text
         self.no_speech_prob = no_speech_prob
+        self.compression_ratio = compression_ratio
 
 
 class _FakeWhisperModel:
