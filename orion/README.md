@@ -407,14 +407,37 @@ device on the same network with an SSH tunnel:
 `ssh -L 8420:127.0.0.1:8420 pi@<pi-address>`, then open
 `http://127.0.0.1:8420` on your own machine.
 
-**On Windows**, systemd doesn't exist — the equivalent is a **Scheduled
-Task** set to run at logon (Task Scheduler → Create Task → trigger "At
-log on" → action running
-`C:\path\to\orion\.venv\Scripts\python.exe -m interfaces.voice.voice_loop`
-with "Start in" set to the `orion` folder), or a small always-on console
-window if you'd rather see its output live. Not set up yet in this repo —
-ask when you're ready to move past manual testing and this gets built out
-properly rather than as an afterthought here.
+**On Windows**, systemd doesn't exist — `scripts/windows/install_orion_tasks.ps1`
+registers the same three interfaces as Scheduled Tasks instead, the closest
+Windows equivalent (auto-start at logon, auto-restart on failure):
+
+```powershell
+cd orion
+.\scripts\windows\install_orion_tasks.ps1
+```
+
+(If PowerShell blocks it with an execution-policy error, same fix as venv
+activation in section 1: `powershell -ExecutionPolicy Bypass -File
+.\scripts\windows\install_orion_tasks.ps1`.) This registers `Orion-Web`,
+`Orion-Telegram`, and `Orion-Voice`, each running
+`.venv\Scripts\pythonw.exe -m <interface module>` (`pythonw`, not `python`
+— no console window popping up at every logon) with the repo folder as its
+working directory, triggered at your next logon under your own user
+account, restarting up to 999 times a minute apart if one crashes. Pass
+`-Interfaces web,telegram` to register only a subset. Manage them
+afterwards from Task Scheduler (`taskschd.msc`) or PowerShell
+(`Get-ScheduledTask -TaskName 'Orion-*'`, `Start-ScheduledTask -TaskName
+'Orion-Web'` to start one immediately instead of waiting for next logon,
+`Get-ScheduledTaskInfo -TaskName 'Orion-Web'` for last run result). Run
+`.\scripts\windows\uninstall_orion_tasks.ps1` to remove all three.
+
+Requires the venv to already exist with dependencies installed first
+(section 1) — the install script checks for `.venv\Scripts\pythonw.exe`
+and errors with that reminder if it's missing, rather than registering a
+task that would just fail silently at logon. `.env` is picked up the same
+way as everywhere else (`core/config.py`'s `load_dotenv()` finds it from
+the working directory), so there's no separate step to hand it to the
+task the way `EnvironmentFile=` does for systemd.
 
 ## 9. Optional extras (calendars, tasks, notes, movies, backups, safety, automation)
 
