@@ -57,13 +57,26 @@ MIN_SILENCE_THRESHOLD = 150  # floor, in case the room is closer to silent than 
 
 # Once the wake word has fired once, keep the conversation open turn after
 # turn instead of requiring it again for every exchange (matching the
-# Termux interface's behavior). FOLLOWUP_LISTEN_GRACE_S is deliberately more
+# Termux interface's behavior). INITIAL_SILENCE_GRACE_S is deliberately more
 # generous than SILENCE_DURATION_S: that constant is for detecting when an
 # utterance the user has already started *ends*, but deciding whether
-# they're going to say anything else at all needs more breathing room than
-# that, or the conversation ends before they've had a chance to speak again.
+# they're going to say anything at all needs more breathing room than that,
+# or the conversation ends before they've had a chance to speak.
+#
+# This used to only apply to follow-up turns (turn > 0), on the theory that
+# right after the wake word fires the user is already mid-sentence and
+# needs no grace at all — in practice that's backwards: the moment right
+# after "hey orion" (println, wake model inference, the user's own reaction
+# time) is exactly when the *most* grace is needed, and giving it only the
+# 0.7s trailing-silence cutoff meant a recording that started before the
+# user had even opened their mouth, got fed to faster-whisper, and either
+# came back empty or (see core/stt.py) as a Whisper hallucination — visibly
+# reproduced live: "Ambient noise level: 118" and "Processing audio with
+# duration 00:00.800" on turn 1, immediately back to wake-word listening
+# with nothing captured. Same grace period on every turn now, not just
+# follow-ups.
 MAX_CONVERSATION_TURNS = 20
-FOLLOWUP_LISTEN_GRACE_S = 3.0
+INITIAL_SILENCE_GRACE_S = 3.0
 STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop orion", "goodbye"}
 
 # Barge-in: while Orion is talking, a loud-enough sound cuts playback short
@@ -230,10 +243,8 @@ class VoiceLoop:
         self._silence_threshold = max(MIN_SILENCE_THRESHOLD, ambient * SILENCE_MARGIN_MULTIPLIER)
         print(f"Ambient noise level: {ambient:.0f} — silence threshold set to {self._silence_threshold:.0f}")
 
-    def _listen_and_transcribe(self, stream: sd.InputStream, *, is_followup: bool) -> str:
-        utterance = self._record_utterance(
-            stream, max_initial_silence_s=FOLLOWUP_LISTEN_GRACE_S if is_followup else None
-        )
+    def _listen_and_transcribe(self, stream: sd.InputStream) -> str:
+        utterance = self._record_utterance(stream, max_initial_silence_s=INITIAL_SILENCE_GRACE_S)
         segments, _ = self._stt.transcribe(
             utterance.astype(np.float32) / 32768.0, language=config.voice_language
         )
@@ -244,8 +255,19 @@ class VoiceLoop:
         listening turn after turn — no need to repeat the wake word — until
         the user goes quiet, says a stop phrase, or hits the turn cap."""
         for turn in range(MAX_CONVERSATION_TURNS):
-            text = self._listen_and_transcribe(stream, is_followup=turn > 0)
+            text = self._listen_and_transcribe(stream)
             if not text:
+                if turn == 0:
+                    # The wake word itself fired (so something loud enough
+                    # triggered it), but nothing usable followed — the mic
+                    # didn't catch real speech in time, or Whisper wasn't
+                    # confident about what it heard (core/stt.py). Worth
+                    # saying so: silently dropping back to wake-word
+                    # listening here reads as Orion ignoring the user, not
+                    # as "it didn't catch that." Turn > 0 with nothing said
+                    # is the normal, expected way a conversation ends
+                    # (the user just stopped talking) and doesn't get this.
+                    self._speak("Je n'ai pas bien entendu, tu peux réessayer.")
                 break  # nothing said — end the conversation, back to wake-word listening
 
             print(f"you (spoken)> {text}")
