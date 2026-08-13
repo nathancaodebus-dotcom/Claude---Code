@@ -231,11 +231,25 @@ def transcribe(audio: bytes = File(...)) -> dict:
     if not audio:
         return {"error": "No audio received."}
 
-    with tempfile.NamedTemporaryFile(suffix=".webm") as tmp:
+    # delete=False + close before transcribe, not the with-block-holds-it-
+    # open shape used elsewhere: on Windows specifically (not Linux/Mac,
+    # where a second open() on an already-open file is fine), a file still
+    # held open by this process's own NamedTemporaryFile handle can't be
+    # opened a second time by anything else -- confirmed live, faster-
+    # whisper's own attempt to open tmp.name to decode it raised
+    # PermissionError ("used by another process"), an uncaught 500 for
+    # every single transcription attempt on Windows. Closing this
+    # process's handle first before handing the path to faster-whisper
+    # avoids the conflict; delete=False + the manual unlink in `finally`
+    # replaces the auto-delete the with-block would otherwise have done.
+    tmp = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+    try:
         tmp.write(audio)
-        tmp.flush()
+        tmp.close()
         segments, _ = model.transcribe(tmp.name, language=config.voice_language)
         text = join_confident_segments(segments)
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)
 
     if not text:
         return {"error": "Didn't catch that — could you repeat?"}

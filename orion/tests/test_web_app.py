@@ -6,6 +6,7 @@ test."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -293,6 +294,39 @@ def test_transcribe_returns_joined_segment_text(client, monkeypatch):
     assert len(fake_model.calls) == 1
     called_path, called_language = fake_model.calls[0]
     assert called_path.endswith(".webm")
+
+
+def test_transcribe_temp_file_is_closed_before_whisper_opens_it_and_cleaned_up_after(client, monkeypatch):
+    """Regression test: on Windows specifically (not Linux/Mac, where a
+    second open() on an already-open file is fine), the temp file used to
+    stay open under this endpoint's own NamedTemporaryFile handle for the
+    whole duration of model.transcribe() -- which needs to open that same
+    path itself to decode it. Windows refuses a second open on a file
+    another handle in the same process already holds, so every real
+    transcription request 500'd there. Can't reproduce the Windows-only
+    PermissionError on Linux, but this pins the two behaviors that fix
+    requires: the path is a real, independently-openable file at the
+    moment Whisper is handed it, and it's gone afterward (no leaked temp
+    files piling up in a long-running server)."""
+    seen_path = {}
+
+    class _FileCheckingWhisperModel(_FakeWhisperModel):
+        def transcribe(self, path: str, language: str | None = None):
+            seen_path["path"] = path
+            # Would raise on Windows if this endpoint still held its own
+            # handle open on the same file -- proves it's independently
+            # openable, i.e. this process's own handle was already closed.
+            with open(path, "rb") as f:
+                f.read()
+            return super().transcribe(path, language)
+
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: _FileCheckingWhisperModel(["Bonjour"]))
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "Bonjour"}
+    assert not Path(seen_path["path"]).exists()  # cleaned up, not leaked
 
 
 def test_transcribe_rejects_empty_audio(client, monkeypatch):
