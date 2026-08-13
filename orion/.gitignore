@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+credentials.json
+token.json
+*.db
+*.db-shm
+*.db-wal
+*.log
+.pytest_cache/
+outputs/
+
+# scripts/wake_word_training/ — setup.sh clones/downloads these fresh;
+# only the pipeline code and the final wake_word_models/*.onnx are tracked.
+scripts/wake_word_training/venv/
+scripts/wake_word_training/piper-sample-generator/

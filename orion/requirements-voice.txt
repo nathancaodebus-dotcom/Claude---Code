@@ -1,0 +1,19 @@
+# Extra dependencies for the always-listening Raspberry Pi voice interface.
+# Install alongside requirements.txt: pip install -r requirements.txt -r requirements-voice.txt
+openwakeword>=0.6.0
+faster-whisper>=1.0.0
+# >=1.6.0: older piper-tts exposed synthesize_stream_raw() returning raw
+# bytes directly; 1.6.0's synthesize() yields AudioChunk objects instead
+# (see core/tts.py's PiperSynthesizer, which targets this newer shape).
+piper-tts>=1.6.0
+sounddevice>=0.4.6
+# numpy is already in requirements.txt (also used by generate_ambient_sound)
+
+# Optional: expressive cloud TTS instead of Piper, if ELEVENLABS_API_KEY is set
+elevenlabs>=1.0.0
+
+# Optional: free, zero-setup cloud TTS fallback (no API key, no local voice
+# model file) used automatically if neither ElevenLabs nor a local Piper
+# model is configured. Needs ffmpeg on PATH (already a faster-whisper
+# prerequisite) to decode its mp3 output.
+edge-tts>=6.1.0

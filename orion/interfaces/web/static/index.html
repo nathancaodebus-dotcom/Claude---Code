@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>O.R.I.O.N.</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%234be3ff' stroke-width='2.5' stroke-dasharray='4 3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%234be3ff'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="hud-header">
+  <div class="brand">
+    <div class="core-mini" id="core-mini">
+      <svg viewBox="0 0 100 100" class="ring ring--a"><circle cx="50" cy="50" r="46" /></svg>
+      <svg viewBox="0 0 100 100" class="ring ring--b"><circle cx="50" cy="50" r="36" /></svg>
+      <div class="core-dot"></div>
+    </div>
+    <div class="brand-text">
+      <span class="brand-name" id="brand-name">O.R.I.O.N.</span>
+      <span class="brand-sub" id="status-line">SYSTEM ACTIVE</span>
+    </div>
+  </div>
+  <div class="readouts">
+    <div class="readout"><span class="readout-label">CORE_STATUS</span><span class="readout-value" id="readout-core">--</span></div>
+    <div class="readout"><span class="readout-label">MODEL</span><span class="readout-value" id="readout-model">--</span></div>
+    <div class="readout"><span class="readout-label">TIME</span><span class="readout-value" id="readout-clock">--:--:--</span></div>
+  </div>
+</header>
+
+<main class="stage">
+  <section class="hero" id="hero">
+    <div class="core-hero-wrap">
+      <!-- Radial equalizer: bars around the circle's rim react while Orion
+           is replying, instead of a visible transcript of what's said —
+           see app.js's Visualizer. Sized larger than .core-hero and
+           z-indexed behind it so the bars extend outward past the rings,
+           into the "back" of the circle. -->
+      <canvas id="visualizer" class="visualizer" width="600" height="600"></canvas>
+      <div class="core-hero" id="core-hero">
+        <div class="nebula">
+          <span class="nebula-blob nebula-blob--teal"></span>
+          <span class="nebula-blob nebula-blob--violet"></span>
+          <span class="nebula-blob nebula-blob--blue"></span>
+        </div>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--1"><circle cx="200" cy="200" r="188" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--2"><circle cx="200" cy="200" r="156" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ring hero-ring--3"><circle cx="200" cy="200" r="124" /></svg>
+        <svg viewBox="0 0 400 400" class="hero-ticks"><circle cx="200" cy="200" r="188" /></svg>
+        <canvas id="particles" width="400" height="400"></canvas>
+        <div class="hero-glow"></div>
+        <!-- The user's own generated artwork, used as-is rather than a
+             code-drawn approximation. mix-blend-mode:screen in style.css
+             drops its pure-black background into the page's own dark
+             background/nebula instead of showing as a visible rectangle. -->
+        <img class="hero-figure-img" src="/assets/orion-figure.png" alt="ORION" />
+      </div>
+    </div>
+    <p class="hero-hint" id="hero-hint">WAITING FOR COMMAND</p>
+  </section>
+</main>
+
+<div class="notifications" id="notifications" aria-live="polite"></div>
+
+<footer class="hud-input">
+  <span class="prompt-caret">&gt;</span>
+  <input id="input" type="text" autocomplete="off" placeholder="Entrez une commande…" />
+  <button id="send" type="button">ENVOYER</button>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

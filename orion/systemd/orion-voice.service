@@ -1,0 +1,16 @@
+[Unit]
+Description=Orion - voice interface (wake word + mic + speaker)
+After=sound.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/orion
+EnvironmentFile=/home/pi/orion/.env
+ExecStart=/home/pi/orion/.venv/bin/python -m interfaces.voice.voice_loop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

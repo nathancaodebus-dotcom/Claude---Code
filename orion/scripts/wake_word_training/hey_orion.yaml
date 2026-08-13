@@ -1,0 +1,44 @@
+model_name: "hey_orion"
+
+target_phrase:
+  - "hey orion"
+
+custom_negative_phrases: []
+
+n_samples: 3000
+n_samples_val: 400
+
+tts_batch_size: 16
+augmentation_batch_size: 16
+
+piper_sample_generator_path: "/home/user/Claude---Code/orion/scripts/wake_word_training/piper-sample-generator"
+
+output_dir: "/tmp/orion_wakeword_data/my_custom_model"
+
+rir_paths:
+  - "/home/user/Claude---Code/orion/scripts/wake_word_training/piper-sample-generator/piper_sample_generator/impulses"
+
+background_paths:
+  - "/tmp/orion_wakeword_data/speech_commands_extracted/_background_noise_"
+
+background_paths_duplication_rate:
+  - 1
+
+false_positive_validation_data_path: "/tmp/orion_wakeword_data/features/speech_commands_features_val_flat.npy"
+
+augmentation_rounds: 1
+
+feature_data_files:
+  "speech_commands_negative": "/tmp/orion_wakeword_data/features/speech_commands_features_train.npy"
+
+batch_n_per_class:
+  "speech_commands_negative": 512
+  "adversarial_negative": 50
+  "positive": 50
+
+model_type: "dnn"
+layer_size: 32
+
+steps: 10000
+max_negative_weight: 1500
+target_false_positives_per_hour: 0.2
