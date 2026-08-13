@@ -275,9 +275,19 @@ class VoiceLoop:
     def _play_audio(self, audio: np.ndarray) -> bool:
         """Blocks until playback finishes. Returns True if the user talked
         loudly enough, for long enough, to count as barging in — playback
-        was cut short in that case rather than played to completion."""
+        was cut short in that case rather than played to completion. Only
+        actually checks for that if VOICE_BARGE_IN_ENABLED is set (see
+        core/config.py) — off by default, since without real acoustic echo
+        cancellation this is a plain RMS check on the same mic Orion's own
+        voice plays out of, and on a laptop's built-in speakers+mic (inches
+        apart) that reliably means Orion hears itself and cuts itself off
+        mid-reply."""
         self._drain_queue()
         sd.play(audio, samplerate=self._tts.sample_rate)
+
+        if not config.voice_barge_in_enabled:
+            sd.wait()
+            return False
 
         loud_chunks = 0
         barge_in_level = self._silence_threshold * BARGE_IN_LOUDNESS_MULTIPLIER

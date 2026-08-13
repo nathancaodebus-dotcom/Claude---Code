@@ -371,12 +371,19 @@ and hearing a reply.
 On first start (and each time you launch it), it spends about a second and
 a half measuring the room's actual background noise and sets its
 silence-detection threshold from that, rather than a fixed value that's
-wrong for most rooms/mics. You can also talk over Orion while it's
-speaking to cut it off and start your next turn immediately, instead of
-having to wait for it to finish — though since this is a plain volume
-check on the same mic (no real echo cancellation), a speaker and mic
-crammed close together may occasionally misfire; move them apart a bit if
-that happens.
+wrong for most rooms/mics.
+
+**Talking over Orion to interrupt it (barge-in) is off by default.**
+`VOICE_BARGE_IN_ENABLED=true` turns it on, but it's a plain volume check
+on the same mic Orion's own voice plays out of — with no real acoustic
+echo cancellation, a laptop's built-in speakers and mic (inches apart) or
+any external speaker close to the mic will make Orion reliably hear
+*itself* and cut its own reply off mid-sentence, not the user talking.
+This isn't a hypothetical edge case; it's what "keeps interrupting itself
+for no reason" almost always turns out to be, and there's no software fix
+for it without either headphones (so the mic never hears the speaker
+output at all) or an actual AEC pipeline, neither of which this project
+has. Only turn it on if your setup genuinely doesn't have this problem.
 
 **If replies feel slow to start**, the biggest lever on a CPU-only laptop
 is the transcription model: `WHISPER_MODEL_SIZE` in `.env` defaults to
