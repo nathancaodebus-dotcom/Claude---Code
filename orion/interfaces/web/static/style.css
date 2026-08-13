@@ -353,6 +353,16 @@ body {
   opacity: 0.6;
 }
 
+.hero-figure .spearhead {
+  fill: var(--ice);
+  opacity: 0.85;
+  filter: drop-shadow(0 0 5px var(--cyan-bright));
+}
+
+.hero-figure .figure-glow {
+  animation: breathe 5s ease-in-out infinite;
+}
+
 .hero-figure .figure-joints circle {
   fill: var(--ice);
   filter: drop-shadow(0 0 4px var(--cyan));
