@@ -1,0 +1,16 @@
+[Unit]
+Description=Orion - HUD web interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/orion
+EnvironmentFile=/home/pi/orion/.env
+ExecStart=/home/pi/orion/.venv/bin/python -m interfaces.web.app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

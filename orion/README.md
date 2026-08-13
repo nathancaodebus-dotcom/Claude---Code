@@ -392,13 +392,20 @@ hardware is available, so this is the main knob until that changes.
 **On Linux** (Raspberry Pi or otherwise):
 
 ```bash
-sudo cp systemd/orion-telegram.service systemd/orion-voice.service /etc/systemd/system/
+sudo cp systemd/orion-telegram.service systemd/orion-voice.service systemd/orion-web.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now orion-telegram orion-voice
+sudo systemctl enable --now orion-telegram orion-voice orion-web
 ```
 
 Edit the `User=`, `WorkingDirectory=` and venv path in the unit files first
-if your setup differs from `/home/pi/orion`.
+if your setup differs from `/home/pi/orion`. All three are independent —
+enable only the ones you actually want running as background services;
+`orion-web` still needs `pip install -r requirements-web.txt` done first
+(§18) or it'll restart-loop on the missing `fastapi`/`uvicorn` imports.
+Since the web UI binds to `127.0.0.1` only (§18), reach it from another
+device on the same network with an SSH tunnel:
+`ssh -L 8420:127.0.0.1:8420 pi@<pi-address>`, then open
+`http://127.0.0.1:8420` on your own machine.
 
 **On Windows**, systemd doesn't exist — the equivalent is a **Scheduled
 Task** set to run at logon (Task Scheduler → Create Task → trigger "At
@@ -877,6 +884,10 @@ generator) — so it's one `pip install` away from running and there's
 nothing to break. The backend is a small FastAPI app that streams replies
 over Server-Sent Events; `requirements-web.txt` is the only new
 dependency (`fastapi`, `uvicorn`).
+
+To keep it running in the background instead of a foreground terminal,
+`systemd/orion-web.service` follows the same pattern as the Telegram/voice
+units — see §8.
 
 ## What's deferred (from the full integration wishlist)
 
