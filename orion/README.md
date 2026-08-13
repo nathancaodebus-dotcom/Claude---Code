@@ -1038,6 +1038,23 @@ already done to close that gap as much as it can be:
   threads got through and doubled the holding, or the connection raised a
   low-level `sqlite3.DatabaseError` — reproduced consistently before the
   fix, gone after it, verified across repeated runs).
+- **One bad TTS synthesis can't take down the always-on voice service**:
+  `interfaces/voice/voice_loop.py`'s main `while True` loop had no
+  exception handling around a conversation turn — same failure mode
+  `ReminderScheduler`/`HealthMonitor` were already fixed against earlier,
+  just not yet applied here. A single unexpected error (a TTS backend
+  hiccup, anything else unforeseen) used to crash the whole process,
+  silently ending wake-word listening until someone noticed the systemd
+  service (§8) had died and restarted it. Now caught, logged, and the loop
+  keeps listening. Related: `core/tts.py`'s Edge TTS backend decodes its
+  mp3 response via an `ffmpeg` subprocess call that — unlike every other
+  subprocess call in this codebase — had no timeout; a truncated/corrupted
+  stream (a network hiccup mid-response) could hang it indefinitely. Both
+  now bounded. (voice_loop.py can't be imported in this project's own dev/CI
+  sandbox — `sounddevice` needs a real PortAudio install this environment
+  doesn't have — so this specific fix is verified by inspection rather than
+  an automated test, unlike everything else in this section; the ffmpeg
+  timeout half of it does have one, in `tests/test_tts.py`.)
 - **Concurrent requests to the same session can't corrupt the conversation**:
   the web UI (§18) lets two browser tabs share one conversation by design.
   Since FastAPI runs each request in a thread pool, two `/api/chat` calls

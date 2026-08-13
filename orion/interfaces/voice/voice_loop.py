@@ -9,6 +9,7 @@ Requires requirements-voice.txt. Tune SILENCE_* constants for your room/mic.
 """
 from __future__ import annotations
 
+import logging
 import queue
 import time
 from pathlib import Path
@@ -27,6 +28,8 @@ from core.scheduler import ReminderScheduler
 from core.store import Store
 from core.tts import find_local_piper_model, get_synthesizer
 from tools.registry_builder import build_registry
+
+logger = logging.getLogger("orion.voice_loop")
 
 _BUNDLED_WAKE_MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "wake_word_models"
 
@@ -279,7 +282,17 @@ class VoiceLoop:
 
                 print("Wake word detected, listening...")
                 self._drain_queue()  # drop the wake-word backlog so recording starts fresh
-                self._converse(stream)
+                try:
+                    self._converse(stream)
+                except Exception:
+                    # This is an always-on service (README §8, typically a
+                    # systemd unit) — one bad turn (a TTS backend hiccup, a
+                    # transient STT failure, anything unexpected) must not
+                    # take down the whole process and silently stop
+                    # listening for the wake word until someone notices and
+                    # restarts it. Same reasoning as ReminderScheduler/
+                    # HealthMonitor's poll loops: log it, keep running.
+                    logger.exception("Conversation turn failed; listening for the wake word again.")
 
 
 def main() -> None:

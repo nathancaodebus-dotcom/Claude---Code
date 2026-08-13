@@ -161,8 +161,8 @@ def fake_edge_tts_module(monkeypatch):
 def fake_ffmpeg(monkeypatch):
     calls = []
 
-    def fake_run(cmd, input, stdout, stderr, check):
-        calls.append({"cmd": cmd, "input": input})
+    def fake_run(cmd, input, stdout, stderr, check, timeout=None):
+        calls.append({"cmd": cmd, "input": input, "timeout": timeout})
         return types.SimpleNamespace(stdout=b"pcm-bytes")
 
     monkeypatch.setattr("core.tts.subprocess.run", fake_run)
@@ -177,6 +177,18 @@ def test_edge_tts_synthesize_joins_audio_chunks_and_decodes_via_ffmpeg(fake_ffmp
     assert result == b"pcm-bytes"
     assert fake_ffmpeg[0]["input"] == b"mp3-part1-mp3-part2"
     assert "-ar" in fake_ffmpeg[0]["cmd"]
+
+
+def test_edge_tts_ffmpeg_decode_has_a_timeout(fake_ffmpeg):
+    """A truncated/corrupted mp3 stream (a network hiccup partway through
+    edge-tts's response) used to be able to hang this ffmpeg call forever —
+    with nothing upstream catching that, it could take down whichever
+    always-on interface hit it. Regression test for the timeout= that
+    closes that gap."""
+    EdgeTTSSynthesizer("fr-FR-HenriNeural").synthesize("Bonjour")
+
+    assert fake_ffmpeg[0]["timeout"] is not None
+    assert fake_ffmpeg[0]["timeout"] > 0
 
 
 def test_edge_tts_skips_ffmpeg_for_pure_list_marker_fragment(fake_ffmpeg):

@@ -138,12 +138,21 @@ class EdgeTTSSynthesizer:
         return b"".join(chunks)
 
     def _decode_mp3_to_pcm(self, mp3_bytes: bytes) -> bytes:
+        # Every other subprocess.run in this codebase (telegram_bot.py's
+        # ffmpeg encode, sandbox_tools.py, deploy_tool.py, ...) is bounded
+        # by a timeout; this one wasn't — a truncated/corrupted mp3 stream
+        # (a network hiccup partway through edge-tts's response) could hang
+        # ffmpeg indefinitely, and with no caller anywhere catching that,
+        # it could take down whichever always-on interface hit it (see
+        # interfaces/voice/voice_loop.py's run() loop for the other half of
+        # this same fix).
         result = subprocess.run(
             ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-ar", str(self.sample_rate), "-ac", "1", "pipe:1"],
             input=mp3_bytes,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             check=True,
+            timeout=30,
         )
         return result.stdout
 
