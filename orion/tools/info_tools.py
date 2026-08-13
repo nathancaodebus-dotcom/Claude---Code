@@ -118,15 +118,24 @@ class CurrencyConversionTool(Tool):
     }
 
     def run(self, amount: float, from_currency: str, to_currency: str) -> str:
-        data = client.get(
+        from_currency, to_currency = from_currency.upper(), to_currency.upper()
+        # frankfurter.app omits the base currency from `rates` when it's
+        # the same as `to` (converting a currency to itself is "trivial"
+        # so it leaves it out) — this used to read that as "no rate found"
+        # and wrongly report a completely valid 1:1 conversion as failed.
+        if from_currency == to_currency:
+            return f"{amount} {from_currency} = {amount} {to_currency}"
+        response = client.get(
             "https://api.frankfurter.app/latest",
-            params={"amount": amount, "from": from_currency.upper(), "to": to_currency.upper()},
+            params={"amount": amount, "from": from_currency, "to": to_currency},
             timeout=10,
-        ).json()
-        rate = data["rates"].get(to_currency.upper())
+        )
+        response.raise_for_status()
+        data = response.json()
+        rate = data["rates"].get(to_currency)
         if rate is None:
             return f"Could not convert {from_currency} to {to_currency}."
-        return f"{amount} {from_currency.upper()} = {rate} {to_currency.upper()}"
+        return f"{amount} {from_currency} = {rate} {to_currency}"
 
 
 class StockPriceTool(Tool):
@@ -175,7 +184,13 @@ class CryptoPriceTool(Tool):
         data = response.json()
         if coin.lower() not in data:
             return f"No price found for '{coin}'. Use the CoinGecko coin id, e.g. 'bitcoin' not 'BTC'."
-        price = data[coin.lower()][vs_currency.lower()]
+        # CoinGecko returns the coin key present but with an *empty* inner
+        # object when vs_currency isn't one it recognizes — checking only
+        # the outer key used to let an unsupported/misspelled currency
+        # through to a raw KeyError instead of a clean message.
+        price = data[coin.lower()].get(vs_currency.lower())
+        if price is None:
+            return f"'{vs_currency}' isn't a currency CoinGecko recognizes for '{coin}'."
         return f"{coin} = {price} {vs_currency.upper()}"
 
 
@@ -229,7 +244,15 @@ class HistoricalWeatherTool(Tool):
         today = date.today()
         lines = []
         for years in range(1, years_back + 1):
-            past_date = today.replace(year=today.year - years)
+            try:
+                past_date = today.replace(year=today.year - years)
+            except ValueError:
+                # today.replace(year=...) raises on Feb 29 whenever the
+                # target year isn't a leap year (3 of every 4 years_back
+                # values, any time this runs on a leap day) — that used to
+                # abort the whole comparison instead of just skipping the
+                # one year that genuinely has no Feb 29 to compare against.
+                continue
             data = client.get(
                 "https://archive-api.open-meteo.com/v1/archive",
                 params={

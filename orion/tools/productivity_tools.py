@@ -9,9 +9,17 @@ from datetime import datetime
 from core.store import Store
 from tools.base import Tool
 
-_DURATION_RE = re.compile(r"(\d+)\s*(d|day|days|h|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)")
+# 'w'/'week'/'weeks' added because tools/project_tools.py's AddMilestoneTool
+# documents its own in_duration parameter with exactly that example
+# ("e.g. '3 days', '2 weeks'") — without it, following that tool's own
+# documented example raised a ValueError before add_milestone ever ran,
+# aborting the call instead of creating the milestone.
+_DURATION_RE = re.compile(
+    r"(\d+)\s*(w|week|weeks|d|day|days|h|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)"
+)
 
 _UNIT_SECONDS = {
+    "w": 604800, "week": 604800, "weeks": 604800,
     "d": 86400, "day": 86400, "days": 86400,
     "h": 3600, "hour": 3600, "hours": 3600,
     "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
@@ -20,10 +28,10 @@ _UNIT_SECONDS = {
 
 
 def parse_duration(text: str) -> int:
-    """Parse a free-form duration like '10m', '1h30m', '2 days' into seconds."""
+    """Parse a free-form duration like '10m', '1h30m', '2 days', '3 weeks' into seconds."""
     matches = _DURATION_RE.findall(text.lower())
     if not matches:
-        raise ValueError(f"Could not parse a duration from '{text}'. Try e.g. '10m', '1h30m', '2 days'.")
+        raise ValueError(f"Could not parse a duration from '{text}'. Try e.g. '10m', '1h30m', '2 days', '3 weeks'.")
     return sum(int(amount) * _UNIT_SECONDS[unit] for amount, unit in matches)
 
 

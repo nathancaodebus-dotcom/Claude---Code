@@ -2,6 +2,8 @@
 untimed lyrics (no synced/karaoke timing; no free API offers that reliably)."""
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 
 from core.http import client
@@ -18,7 +20,15 @@ class GetLyricsTool(Tool):
     }
 
     def run(self, artist: str, title: str) -> str:
-        response = client.get(f"https://api.lyrics.ovh/v1/{artist}/{title}", timeout=10)
+        # artist/title are interpolated as URL *path segments* — an
+        # unescaped '/' in either (e.g. artist='AC/DC') turns into an extra
+        # path segment instead of a literal character, so the API sees
+        # 'AC', 'DC', title as three segments instead of {artist}/{title},
+        # 404s, and this tool reports "no lyrics found" for a song that
+        # obviously has some. quote() with the default safe='/' would still
+        # let a literal '/' through unescaped, so it's excluded here.
+        url = f"https://api.lyrics.ovh/v1/{quote(artist, safe='')}/{quote(title, safe='')}"
+        response = client.get(url, timeout=10)
         if response.status_code != 200:
             return f"No lyrics found for '{title}' by {artist}."
         return response.json().get("lyrics", "No lyrics found.").strip()

@@ -20,11 +20,25 @@ _TIMEOUT_S = 300  # encoding can take a while, unlike everything else in this pr
 
 def _output_path(source_path: str, suffix: str, output_path: str | None, extension: str | None = None) -> Path:
     if output_path:
+        # output_path is deliberately allowed to be any filesystem path —
+        # this whole tool suite already operates on arbitrary user-given
+        # paths for input (path/video_path aren't confined to outputs/
+        # either), so a caller saying 'save it to ~/Desktop/clip.mp4' is
+        # the intended, documented behavior, not a bug.
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         return Path(output_path)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Unlike output_path above, extension is only ever meant to be a short
+    # suffix like 'mp4' or 'webm' — ConvertVideoFormatTool passes its
+    # caller-supplied `format` argument straight through here. Stripping
+    # path separators (and a bare ':', which Windows treats specially even
+    # without a following backslash — see tools/document_utils.py's
+    # resolve_path for the same reasoning) stops a `format` value like
+    # '../../../../tmp/evil' from turning what's supposed to be a same-
+    # directory auto-generated filename into a write outside OUTPUT_DIR.
     ext = extension or Path(source_path).suffix.lstrip(".") or "mp4"
-    return OUTPUT_DIR / f"{Path(source_path).stem}-{suffix}.{ext}"
+    safe_ext = ext.replace("/", "-").replace("\\", "-").replace(":", "-")
+    return OUTPUT_DIR / f"{Path(source_path).stem}-{suffix}.{safe_ext}"
 
 
 def _run_ffmpeg(args: list[str]) -> str | None:

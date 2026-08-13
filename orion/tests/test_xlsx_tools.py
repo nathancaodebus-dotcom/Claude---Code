@@ -4,12 +4,15 @@ import pytest
 from openpyxl import load_workbook
 
 from core.store import Store
+from openpyxl.styles import Font
+
 from tools.xlsx_tools import (
     AddSpreadsheetRowTool,
     AddSpreadsheetSheetTool,
     CreateSpreadsheetTool,
     FormatSpreadsheetCellsTool,
     ListSpreadsheetsTool,
+    SetSpreadsheetFormulaTool,
 )
 
 
@@ -100,3 +103,59 @@ def test_add_sheet_refuses_duplicate_name(store):
     AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2")
     result = AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2")
     assert "already has a sheet" in result
+
+
+def test_add_row_targets_the_named_sheet_not_always_the_first_one(store):
+    """Regression test: wb.active stays pinned to the first sheet even
+    after add_spreadsheet_sheet adds a new one — every row/formula/chart/
+    format tool used to always write to wb.active regardless, silently
+    landing on the wrong sheet with no error."""
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item"])
+    AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2", headers=["Item"])
+
+    AddSpreadsheetRowTool(store).run(document_name="budget", row=["Rent"], sheet_name="Q2")
+
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    assert [c.value for c in wb["Q2"][2]] == ["Rent"]
+    assert wb.active.max_row == 1  # first sheet (still just its header row) untouched
+
+
+def test_add_row_reports_a_clear_error_for_an_unknown_sheet_name(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item"])
+    result = AddSpreadsheetRowTool(store).run(document_name="budget", row=["Rent"], sheet_name="Q2")
+    assert "No sheet named 'Q2'" in result
+
+
+def test_set_formula_targets_the_named_sheet(store):
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item"])
+    AddSpreadsheetSheetTool(store).run(document_name="budget", sheet_name="Q2", headers=["Item"])
+
+    SetSpreadsheetFormulaTool(store).run(document_name="budget", cell="B1", formula="=SUM(A1:A5)", sheet_name="Q2")
+
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    assert wb["Q2"]["B1"].value == "=SUM(A1:A5)"
+    assert wb.active["B1"].value is None  # first sheet untouched
+
+
+def test_format_bold_preserves_other_font_attributes_instead_of_resetting_them(store):
+    """Regression test: FormatSpreadsheetCellsTool used to replace the
+    whole Font object rather than merge into it — setting only font_color
+    on a cell that already had bold=True/size=14 used to silently reset
+    bold back to False and drop the size, discarding formatting the caller
+    never asked to touch."""
+    CreateSpreadsheetTool(store).run(title="Budget", headers=["Item", "Price"], rows=[["Bread", 2.5]])
+    doc = store.get_document("budget")
+    wb = load_workbook(doc.path)
+    wb.active["A1"].font = Font(bold=True, size=14, name="Calibri")
+    wb.save(doc.path)
+
+    FormatSpreadsheetCellsTool(store).run(document_name="budget", cell_range="A1", font_color="FF0000")
+
+    wb = load_workbook(doc.path)
+    cell = wb.active["A1"]
+    assert cell.font.bold is True
+    assert cell.font.size == 14
+    assert cell.font.name == "Calibri"
+    assert cell.font.color.rgb == "00FF0000"

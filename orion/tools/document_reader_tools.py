@@ -47,5 +47,15 @@ class ReadWordDocumentTool(Tool):
 
     def run(self, path: str, max_chars: int = 8000) -> str:
         doc = WordDocument(path)
-        text = "\n".join(p.text for p in doc.paragraphs)
+        # doc.paragraphs only walks top-level body paragraphs — it skips
+        # table content entirely, so a document containing a table (created
+        # by this project's own add_table_to_word_document, or received/
+        # opened from anywhere else) used to have that data silently
+        # omitted with no indication anything was skipped.
+        parts = [p.text for p in doc.paragraphs]
+        for i, table in enumerate(doc.tables, start=1):
+            parts.append(f"\n[Table {i}]")
+            for row in table.rows:
+                parts.append(" | ".join(cell.text for cell in row.cells))
+        text = "\n".join(parts)
         return text[:max_chars] if text.strip() else "No text found in this document."

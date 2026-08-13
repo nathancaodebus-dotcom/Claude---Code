@@ -42,11 +42,28 @@ class SecurityAuditCodeTool(Tool):
         if not issues:
             return f"No issues found by bandit in '{directory}'."
 
+        # Bandit's results are ordered by scan position (file/line), not by
+        # severity — truncating to the first 30 in that order used to be
+        # able to silently drop a real HIGH/CRITICAL finding that happened
+        # to occur after 30 earlier LOW-severity ones (e.g. many B101
+        # assert_used hits in test files), while still returning a
+        # "here are the findings" response that reads as complete. Sorting
+        # by severity first means anything genuinely dangerous surfaces
+        # before the cutoff.
+        severity_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "UNDEFINED": 3}
+        issues.sort(key=lambda i: severity_rank.get(i.get("issue_severity", "UNDEFINED"), 3))
+
+        shown = issues[:30]
         lines = []
-        for issue in issues[:30]:
+        for issue in shown:
             lines.append(
                 f"- [{issue['issue_severity']}] {issue['test_name']} in {issue['filename']}:"
                 f"{issue['line_number']} — {issue['issue_text']}"
+            )
+        if len(issues) > len(shown):
+            lines.append(
+                f"... {len(issues) - len(shown)} more lower-severity issue(s) not shown "
+                f"({len(issues)} total)."
             )
         return "\n".join(lines)
 

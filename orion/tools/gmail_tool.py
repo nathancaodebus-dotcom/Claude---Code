@@ -14,14 +14,30 @@ def _extract_snippet(message: dict) -> str:
     return message.get("snippet", "")
 
 
+def _find_text_plain_part(payload: dict) -> dict | None:
+    """MIME parts nest: any message with an attachment, or many client-
+    generated HTML+plaintext emails, wraps the actual text one or more
+    levels deep (payload -> multipart/mixed -> multipart/alternative ->
+    text/plain), not as a direct top-level part. Only scanning one level
+    used to silently fall back to the ~100-char snippet for any such
+    message, despite the tool being documented as returning "the full
+    body." Recurses depth-first so the first text/plain leaf found anywhere
+    in the tree wins."""
+    if payload.get("mimeType") == "text/plain":
+        return payload
+    for part in payload.get("parts") or []:
+        found = _find_text_plain_part(part)
+        if found is not None:
+            return found
+    return None
+
+
 def _extract_body(message: dict) -> str:
-    payload = message.get("payload", {})
-    parts = payload.get("parts") or [payload]
-    for part in parts:
-        if part.get("mimeType") == "text/plain":
-            data = part.get("body", {}).get("data")
-            if data:
-                return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+    part = _find_text_plain_part(message.get("payload", {}))
+    if part is not None:
+        data = part.get("body", {}).get("data")
+        if data:
+            return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
     return _extract_snippet(message)
 
 

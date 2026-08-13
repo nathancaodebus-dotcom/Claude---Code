@@ -11,7 +11,7 @@ from core.memory import Memory
 from core.store import Store
 from tools.base import Tool
 
-_TOKEN_FILES = ["google_token_path", "spotify_token_path"]
+_TOKEN_FILES = ["google_token_path", "spotify_token_path", "microsoft_token_path"]
 
 
 class EmergencyWipeTool(Tool):
@@ -46,15 +46,28 @@ class EmergencyWipeTool(Tool):
 
         conn = memory._conn  # noqa: SLF001 - intentional direct access for a full wipe
         conn.executescript(
-            "DELETE FROM messages; DELETE FROM facts; DELETE FROM conversation_summaries;"
+            "DELETE FROM messages; DELETE FROM facts; DELETE FROM conversation_summaries; "
+            "DELETE FROM corrections; DELETE FROM corrections_digest;"
         )
         conn.commit()
 
+        # documents is deliberately left alone: it's just a name->path index
+        # for files that stay on disk either way (see the Store() comment
+        # above), so wiping the row without the file wouldn't remove
+        # anything sensitive, just break 'add a slide to X'-style tracking
+        # for files still sitting in outputs/. Everything else here is pure
+        # DB state with nothing on disk to leave behind, so it's wiped the
+        # same as messages/facts/todos above — crypto holdings/proposals and
+        # quant signals are exactly as much "local history" as a note or a
+        # todo, and were being silently left behind by a tool whose whole
+        # point is "get rid of everything traceable."
         store_conn = store._conn  # noqa: SLF001
         store_conn.executescript(
             "DELETE FROM todos; DELETE FROM notes; DELETE FROM shopping_items; "
             "DELETE FROM reminders; DELETE FROM projects; DELETE FROM milestones; "
-            "DELETE FROM failed_commands;"
+            "DELETE FROM failed_commands; DELETE FROM crypto_holdings; "
+            "DELETE FROM crypto_trade_proposals; DELETE FROM quant_signals; "
+            "DELETE FROM health_alerts;"
         )
         store_conn.commit()
 

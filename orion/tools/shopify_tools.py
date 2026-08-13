@@ -38,6 +38,33 @@ def _first_variant(product: dict) -> dict | None:
     return variants[0] if variants else None
 
 
+# Purely a safety net against an unbounded loop if Shopify ever kept
+# returning a 'next' link forever — not because 250 * this many orders is
+# an expected size for one summary window.
+_MAX_ORDER_PAGES = 20
+
+
+def _all_orders_since(since: str) -> list[dict]:
+    """Follows Shopify's Link-header cursor pagination to collect every
+    order in the window. GetShopifySalesSummaryTool aggregates a total
+    across all of them — silently stopping at the first page (250 orders,
+    Shopify's max page size) used to report a confidently-wrong, quietly
+    incomplete total for any store with more orders than that in the
+    requested window, with nothing telling the caller it was cut off."""
+    orders: list[dict] = []
+    url = f"{_base_url()}/orders.json"
+    params: dict[str, object] | None = {"status": "any", "created_at_min": since, "limit": 250}
+    for _ in range(_MAX_ORDER_PAGES):
+        response = client.get(url, headers=_headers(), params=params, timeout=20)
+        response.raise_for_status()
+        orders.extend(response.json().get("orders", []))
+        next_link = response.links.get("next")
+        if not next_link:
+            break
+        url, params = next_link["url"], None  # the next link already encodes every needed param
+    return orders
+
+
 def _first_location_id() -> int:
     response = client.get(f"{_base_url()}/locations.json", headers=_headers(), timeout=15)
     response.raise_for_status()
@@ -146,10 +173,21 @@ class FulfillShopifyOrderTool(Tool):
         )
         fo_response.raise_for_status()
         fulfillment_orders = fo_response.json().get("fulfillment_orders", [])
-        open_fo = next((fo for fo in fulfillment_orders if fo.get("status") in ("open", "in_progress")), None)
-        if open_fo is None:
+        open_fos = [fo for fo in fulfillment_orders if fo.get("status") in ("open", "in_progress")]
+        if not open_fos:
             return f"Order {order_id} has no open fulfillment orders left to fulfill."
 
+        # An order split across locations/vendors can have more than one
+        # open fulfillment order — fulfilling only the first one used to be
+        # reported as "Fulfilled order {id}" with no mention that other
+        # line items remain unfulfilled, even though Shopify's own
+        # fulfillment_status for the order would be 'partial', not
+        # 'fulfilled'. Fulfilling the first one and being explicit about
+        # what's left (rather than silently fulfilling all of them without
+        # being asked) matches this module's own "reversible, expected
+        # forward action" principle — the caller can call this again for
+        # the rest.
+        open_fo = open_fos[0]
         payload: dict[str, object] = {
             "fulfillment": {
                 "line_items_by_fulfillment_order": [{"fulfillment_order_id": open_fo["id"]}],
@@ -164,7 +202,13 @@ class FulfillShopifyOrderTool(Tool):
 
         response = client.post(f"{_base_url()}/fulfillments.json", headers=_headers(), json=payload, timeout=20)
         response.raise_for_status()
-        return f"Fulfilled order {order_id}" + (f" with tracking {tracking_number}." if tracking_number else ".")
+        result = f"Fulfilled order {order_id}" + (f" with tracking {tracking_number}." if tracking_number else ".")
+        if len(open_fos) > 1:
+            result += (
+                f" Note: {len(open_fos) - 1} more fulfillment order(s) on this order are still open "
+                "(likely split across locations) — call this again to fulfill the rest."
+            )
+        return result
 
 
 class GetShopifySalesSummaryTool(Tool):
@@ -177,24 +221,27 @@ class GetShopifySalesSummaryTool(Tool):
 
     def run(self, days: int = 7) -> str:
         since = (dt.datetime.utcnow() - dt.timedelta(days=days)).isoformat() + "Z"
-        response = client.get(
-            f"{_base_url()}/orders.json",
-            headers=_headers(),
-            params={"status": "any", "created_at_min": since, "limit": 250},
-            timeout=20,
-        )
-        response.raise_for_status()
-        orders = response.json().get("orders", [])
+        orders = _all_orders_since(since)
         if not orders:
             return f"No orders in the last {days} day(s)."
 
-        currency = orders[0]["currency"]
-        total = sum(float(o["total_price"]) for o in orders)
-        return (
-            f"Last {days} day(s): {len(orders)} order(s), "
-            f"{total:.2f} {currency} total revenue, "
-            f"{total / len(orders):.2f} {currency} average order value."
-        )
+        # A store that's ever changed its presentment currency (or takes
+        # multi-currency checkout) can have orders["currency"] differ across
+        # the window — summing raw total_price across mixed currencies as if
+        # it were one currency would silently misreport the total. Split by
+        # currency instead of assuming there's only one.
+        totals: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for o in orders:
+            currency = o["currency"]
+            totals[currency] = totals.get(currency, 0.0) + float(o["total_price"])
+            counts[currency] = counts.get(currency, 0) + 1
+
+        lines = [f"Last {days} day(s): {len(orders)} order(s) total."]
+        for currency, total in totals.items():
+            count = counts[currency]
+            lines.append(f"  {count} order(s), {total:.2f} {currency} revenue, {total / count:.2f} {currency} average.")
+        return "\n".join(lines)
 
 
 class ListShopifyProductsTool(Tool):

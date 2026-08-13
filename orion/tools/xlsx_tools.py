@@ -10,6 +10,26 @@ from core.store import Store
 from tools.base import Tool
 from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
+_SHEET_NAME_PROPERTY = {
+    "type": "string",
+    "description": "Which sheet (tab) to target. Defaults to the first/active sheet if omitted.",
+}
+
+
+def _resolve_sheet(wb, sheet_name: str | None):
+    """Every row/formula/chart/format tool below used to always operate on
+    wb.active, which stays pinned to the first sheet created — wb.active
+    doesn't follow wb.create_sheet() (see AddSpreadsheetSheetTool). A
+    caller that added a second sheet and then tried to populate it had no
+    way to actually target it: the row/formula/etc. silently landed on the
+    first sheet instead, with no error or indication anything went to the
+    wrong place."""
+    if sheet_name is None:
+        return wb.active
+    if sheet_name not in wb.sheetnames:
+        raise ValueError(f"No sheet named '{sheet_name}'. Available: {', '.join(wb.sheetnames)}")
+    return wb[sheet_name]
+
 
 class CreateSpreadsheetTool(Tool):
     requires_network = False
@@ -65,6 +85,7 @@ class AddSpreadsheetRowTool(Tool):
         "properties": {
             "document_name": {"type": "string"},
             "row": {"type": "array", "items": {"type": ["string", "number"]}},
+            "sheet_name": _SHEET_NAME_PROPERTY,
         },
         "required": ["document_name", "row"],
     }
@@ -72,13 +93,17 @@ class AddSpreadsheetRowTool(Tool):
     def __init__(self, store: Store):
         self._store = store
 
-    def run(self, document_name: str, row: list) -> str:
+    def run(self, document_name: str, row: list, sheet_name: str | None = None) -> str:
         doc = self._store.get_document(document_name)
         if not doc or doc.kind != "xlsx":
             return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
 
         wb = load_workbook(doc.path)
-        wb.active.append(row)
+        try:
+            sheet = _resolve_sheet(wb, sheet_name)
+        except ValueError as exc:
+            return str(exc)
+        sheet.append(row)
         wb.save(doc.path)
 
         self._store.touch_document(document_name)
@@ -99,6 +124,7 @@ class SetSpreadsheetFormulaTool(Tool):
             "document_name": {"type": "string"},
             "cell": {"type": "string", "description": "Cell reference, e.g. 'C2'."},
             "formula": {"type": "string", "description": "Must start with '='."},
+            "sheet_name": _SHEET_NAME_PROPERTY,
         },
         "required": ["document_name", "cell", "formula"],
     }
@@ -106,13 +132,17 @@ class SetSpreadsheetFormulaTool(Tool):
     def __init__(self, store: Store):
         self._store = store
 
-    def run(self, document_name: str, cell: str, formula: str) -> str:
+    def run(self, document_name: str, cell: str, formula: str, sheet_name: str | None = None) -> str:
         doc = self._store.get_document(document_name)
         if not doc or doc.kind != "xlsx":
             return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
 
         wb = load_workbook(doc.path)
-        wb.active[cell] = formula
+        try:
+            sheet = _resolve_sheet(wb, sheet_name)
+        except ValueError as exc:
+            return str(exc)
+        sheet[cell] = formula
         wb.save(doc.path)
 
         self._store.touch_document(document_name)
@@ -133,6 +163,7 @@ class AddSpreadsheetChartTool(Tool):
             "category_range": {"type": "string", "description": "Cell range for category labels, e.g. 'A2:A10'."},
             "title": {"type": "string"},
             "anchor_cell": {"type": "string", "description": "Top-left cell to place the chart. Default 'E2'."},
+            "sheet_name": _SHEET_NAME_PROPERTY,
         },
         "required": ["document_name", "chart_type", "data_range", "category_range"],
     }
@@ -148,13 +179,17 @@ class AddSpreadsheetChartTool(Tool):
         category_range: str,
         title: str = "",
         anchor_cell: str = "E2",
+        sheet_name: str | None = None,
     ) -> str:
         doc = self._store.get_document(document_name)
         if not doc or doc.kind != "xlsx":
             return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
 
         wb = load_workbook(doc.path)
-        sheet = wb.active
+        try:
+            sheet = _resolve_sheet(wb, sheet_name)
+        except ValueError as exc:
+            return str(exc)
 
         chart_classes = {"bar": BarChart, "line": LineChart, "pie": PieChart}
         chart = chart_classes[chart_type]()
@@ -189,6 +224,7 @@ class FormatSpreadsheetCellsTool(Tool):
                 "type": "string",
                 "description": "Excel number format code, e.g. '0.00', '#,##0', '0%', '$#,##0.00'.",
             },
+            "sheet_name": _SHEET_NAME_PROPERTY,
         },
         "required": ["document_name", "cell_range"],
     }
@@ -204,19 +240,39 @@ class FormatSpreadsheetCellsTool(Tool):
         font_color: str | None = None,
         fill_color: str | None = None,
         number_format: str | None = None,
+        sheet_name: str | None = None,
     ) -> str:
         doc = self._store.get_document(document_name)
         if not doc or doc.kind != "xlsx":
             return f"No spreadsheet named '{document_name}'. Use create_spreadsheet first."
 
         wb = load_workbook(doc.path)
-        sheet = wb.active
+        try:
+            sheet = _resolve_sheet(wb, sheet_name)
+        except ValueError as exc:
+            return str(exc)
         target = sheet[cell_range]
         rows = target if isinstance(target, tuple) else ((target,),)
         for row in rows:
             for cell in row:
                 if bold is not None or font_color is not None:
-                    cell.font = Font(bold=bool(bold), color=font_color)
+                    # Font is replaced wholesale, not merged — building the
+                    # new one from the existing cell's other attributes
+                    # (name/size/italic/...) keeps whatever the caller
+                    # didn't ask to change instead of silently resetting it
+                    # to openpyxl's defaults (e.g. bold->False, font name
+                    # lost) just because only font_color was requested.
+                    existing = cell.font
+                    cell.font = Font(
+                        name=existing.name,
+                        size=existing.size,
+                        bold=bold if bold is not None else existing.bold,
+                        italic=existing.italic,
+                        vertAlign=existing.vertAlign,
+                        underline=existing.underline,
+                        strike=existing.strike,
+                        color=font_color if font_color is not None else existing.color,
+                    )
                 if fill_color is not None:
                     cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
                 if number_format is not None:

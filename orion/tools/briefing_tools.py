@@ -47,9 +47,10 @@ class MorningBriefingTool(Tool):
 class EveningDebriefTool(Tool):
     name = "evening_debrief"
     description = (
-        "Give the user an evening debrief: to-dos completed today, tomorrow's calendar, and "
-        "a reminder to handle any lights/devices still on. Call this when the user asks for "
-        "their evening recap/debrief."
+        "Give the user an evening debrief: remaining open to-dos (todos have no completion "
+        "timestamp, so this is what's still open, not what was finished today), tomorrow's "
+        "calendar, and a reminder to handle any lights/devices still on. Call this when the "
+        "user asks for their evening recap/debrief."
     )
     input_schema = {"type": "object", "properties": {}}
 

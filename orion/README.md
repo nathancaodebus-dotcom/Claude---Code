@@ -1021,6 +1021,53 @@ already done to close that gap as much as it can be:
 
 ## Reliability
 
+**Full tool-by-tool correctness review.** Beyond the cross-cutting fixes
+below, every tool in `tools/` (~150 across ~65 files) was read end to end
+looking for business-logic bugs specific to each one, not just the shared
+patterns above. Highlights, each with a regression test:
+
+- **`emergency_wipe` didn't wipe everything it claimed to**: behavioral
+  corrections, crypto holdings/proposals, and saved quant signals were
+  left behind after a "wipe all local history" call — now included.
+- **Path traversal in generated-document/video filenames**: `document_name`
+  (docx/pptx/xlsx create tools) and `format` (video conversion) were used
+  unsanitized to build a filename — a value like `../../../../tmp/evil`
+  could write outside `outputs/`. Both are now confined to it.
+- **Outlook event creation silently forced UTC**: Microsoft Graph's
+  `dateTime` field is a naive local-time string paired with a separate
+  timezone name, not an embedded offset the way Google Calendar's API
+  works — a bare local time used to land several hours off from what was
+  meant. Now requires and correctly converts a real UTC offset.
+- **Gmail `read_email` silently truncated to a snippet**: body extraction
+  only scanned one level of MIME parts, so any message with an attachment
+  (nested `multipart/mixed` → `multipart/alternative` → `text/plain`)
+  fell back to Gmail's ~100-char preview with no indication the "full
+  body" wasn't actually full. Now recurses.
+- **Shopify sales summary silently truncated at 250 orders** (Shopify's
+  page size, no pagination) and **summed mixed currencies as one number**;
+  **`fulfill_order` reported full success while only fulfilling the first
+  of several open fulfillment orders** on a split order. All three fixed.
+- **Spreadsheet tools always wrote to the first sheet**, ignoring one
+  added via `add_spreadsheet_sheet` — silently landing content on the
+  wrong tab. All four row/formula/chart/format tools now take an optional
+  `sheet_name`. Formatting a cell's color also used to reset its bold/
+  size/name to defaults instead of merging — fixed to merge.
+- **`read_word_document` dropped table content entirely** (only walks
+  top-level paragraphs) — now included.
+- **`audit_code_security` could silently drop a real HIGH-severity
+  finding**: bandit's results are ordered by scan position, not severity,
+  and the 30-result cap used to apply before sorting — a false negative in
+  a tool whose whole purpose is surfacing real issues. Now sorts by
+  severity first and notes when results are truncated.
+- **`get_lyrics` broke on any artist/title containing `/`** (unescaped
+  into the URL path, e.g. "AC/DC"), **`convert_currency` reported a valid
+  same-currency conversion as failed** (the API omits a trivial 1:1 rate
+  from its response), **`get_crypto_price` crashed with a raw KeyError**
+  for an unsupported `vs_currency`, **`get_historical_weather` crashed
+  outright when run on Feb 29** comparing against a non-leap year, and
+  **`add_project_milestone` rejected its own documented example**
+  ('2 weeks' — the duration parser had no week unit). All fixed.
+
 - **A crypto trade can't be double-applied by a concurrent confirm/reject**:
   `core/store.py`'s `confirm_crypto_trade`/`reject_crypto_trade` used to
   read a proposal's status, then separately apply it to holdings and write

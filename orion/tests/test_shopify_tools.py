@@ -5,9 +5,10 @@ from tools import shopify_tools
 
 
 class _FakeResponse:
-    def __init__(self, json_data=None, status_code=200):
+    def __init__(self, json_data=None, status_code=200, links=None):
         self._json_data = json_data or {}
         self.status_code = status_code
+        self.links = links or {}
 
     def json(self):
         return self._json_data
@@ -135,6 +136,28 @@ def test_fulfill_order_success_with_tracking(monkeypatch):
     assert captured["json"]["fulfillment"]["tracking_info"]["number"] == "ABC123"
 
 
+def test_fulfill_order_with_multiple_open_fulfillment_orders_notes_the_rest_are_still_open(monkeypatch):
+    """Regression test: an order split across locations/vendors can have
+    more than one open fulfillment order. Fulfilling only the first one
+    used to be reported as a plain 'Fulfilled order {id}' with no mention
+    that other line items remain unfulfilled — Shopify's own
+    fulfillment_status for the order would actually be 'partial'."""
+    monkeypatch.setattr(
+        shopify_tools.client,
+        "get",
+        lambda *a, **kw: _FakeResponse(
+            {"fulfillment_orders": [{"id": 55, "status": "open"}, {"id": 56, "status": "open"}]}
+        ),
+    )
+    monkeypatch.setattr(shopify_tools.client, "post", lambda *a, **kw: _FakeResponse({"fulfillment": {"id": 99}}))
+
+    result = shopify_tools.FulfillShopifyOrderTool().run(order_id=1)
+
+    assert "Fulfilled order 1" in result
+    assert "1 more fulfillment order" in result
+    assert "still open" in result
+
+
 def test_sales_summary_no_orders(monkeypatch):
     monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse({"orders": []}))
     result = shopify_tools.GetShopifySalesSummaryTool().run(days=7)
@@ -155,6 +178,53 @@ def test_sales_summary_computes_totals(monkeypatch):
     assert "2 order(s)" in result
     assert "80.00 CHF" in result
     assert "40.00 CHF" in result
+
+
+def test_sales_summary_follows_pagination_instead_of_truncating_at_one_page(monkeypatch):
+    """Regression test: the sales summary used to fetch a single page
+    (limit=250, no pagination) and silently report totals as if that were
+    the whole window — any store with more orders than that in the period
+    got a confidently-wrong, quietly incomplete number."""
+    pages = [
+        _FakeResponse(
+            {"orders": [{"total_price": "10.00", "currency": "CHF"}]},
+            links={"next": {"url": "https://test-store.myshopify.com/admin/api/2024-10/orders.json?page_info=abc"}},
+        ),
+        _FakeResponse({"orders": [{"total_price": "20.00", "currency": "CHF"}]}),  # no 'next' link — last page
+    ]
+    calls = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append(url)
+        return pages[len(calls) - 1]
+
+    monkeypatch.setattr(shopify_tools.client, "get", fake_get)
+
+    result = shopify_tools.GetShopifySalesSummaryTool().run(days=7)
+
+    assert len(calls) == 2
+    assert "2 order(s)" in result
+    assert "30.00 CHF" in result
+
+
+def test_sales_summary_splits_totals_by_currency_instead_of_mixing_them(monkeypatch):
+    """A store that's ever changed presentment currency (or takes
+    multi-currency checkout) can have orders in different currencies in the
+    same window — summing raw total_price across them as one number used
+    to silently misreport the total."""
+    orders = {
+        "orders": [
+            {"total_price": "50.00", "currency": "CHF"},
+            {"total_price": "30.00", "currency": "USD"},
+        ]
+    }
+    monkeypatch.setattr(shopify_tools.client, "get", lambda *a, **kw: _FakeResponse(orders))
+
+    result = shopify_tools.GetShopifySalesSummaryTool().run(days=7)
+
+    assert "50.00 CHF" in result
+    assert "30.00 USD" in result
+    assert "80.00" not in result  # never summed across currencies
 
 
 def test_list_products_formats_results(monkeypatch):

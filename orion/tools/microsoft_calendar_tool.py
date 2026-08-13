@@ -17,6 +17,28 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {get_access_token()}"}
 
 
+def _to_utc_naive_iso(iso_string: str) -> str:
+    """Graph's event dateTime field is a naive local-time string paired
+    separately with a timeZone name (see the 'timeZone': 'UTC' below) — it
+    does NOT accept an embedded UTC offset the way Google Calendar's API
+    does. This used to just pass start_iso straight through with
+    timeZone hardcoded to UTC regardless of what offset (if any) the
+    caller's string actually carried, so '2026-08-12T14:00:00' (a plausible
+    local wall-clock time, matching tools/calendar_tool.py's own example
+    format before it required an offset) got silently created as 14:00
+    *UTC* — several hours off from whatever the caller meant anywhere west
+    of Greenwich. Requiring and converting a real UTC offset here (raising
+    on a genuinely ambiguous naive input rather than guessing) makes this
+    tool's contract match tools/calendar_tool.py's Google equivalent."""
+    parsed = dt.datetime.fromisoformat(iso_string)
+    if parsed.tzinfo is None:
+        raise ValueError(
+            f"'{iso_string}' has no UTC offset — pass one explicitly (e.g. '...-04:00'), "
+            "a bare local time here is ambiguous."
+        )
+    return parsed.astimezone(dt.timezone.utc).replace(tzinfo=None).isoformat()
+
+
 class ListOutlookEventsTool(Tool):
     name = "list_outlook_calendar_events"
     description = "List the user's upcoming Outlook calendar events within the next N days (default 7)."
@@ -62,11 +84,11 @@ class CreateOutlookEventTool(Tool):
             "summary": {"type": "string", "description": "Event title."},
             "start_iso": {
                 "type": "string",
-                "description": "Start time in ISO 8601, e.g. '2026-08-12T14:00:00'.",
+                "description": "Start time in ISO 8601 with UTC offset, e.g. '2026-08-12T14:00:00-04:00'.",
             },
             "end_iso": {
                 "type": "string",
-                "description": "End time in ISO 8601. If omitted, defaults to 1 hour after start.",
+                "description": "End time in ISO 8601 with UTC offset. If omitted, defaults to 1 hour after start.",
             },
             "description": {"type": "string", "description": "Optional event description."},
         },
@@ -74,15 +96,15 @@ class CreateOutlookEventTool(Tool):
     }
 
     def run(self, summary: str, start_iso: str, end_iso: str | None = None, description: str = "") -> str:
+        start_dt = dt.datetime.fromisoformat(start_iso)
         if not end_iso:
-            start_dt = dt.datetime.fromisoformat(start_iso)
             end_iso = (start_dt + dt.timedelta(hours=1)).isoformat()
 
         payload = {
             "subject": summary,
             "body": {"contentType": "Text", "content": description},
-            "start": {"dateTime": start_iso, "timeZone": "UTC"},
-            "end": {"dateTime": end_iso, "timeZone": "UTC"},
+            "start": {"dateTime": _to_utc_naive_iso(start_iso), "timeZone": "UTC"},
+            "end": {"dateTime": _to_utc_naive_iso(end_iso), "timeZone": "UTC"},
         }
         response = client.post(f"{_GRAPH}/me/events", headers=_headers(), json=payload, timeout=15)
         response.raise_for_status()
