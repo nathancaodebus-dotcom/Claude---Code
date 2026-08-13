@@ -100,9 +100,12 @@
   // --- equalizer: a ring of radial bars around the circle that reacts
   // while Orion is thinking/replying, standing in for a visible transcript
   // (per the user's request: keep the input bar, lose the written
-  // back-and-forth). There's no real audio here — levels are synthetic,
+  // back-and-forth). The bar levels themselves are still synthetic —
   // randomly re-targeted and eased every frame, the same trick a lot of
-  // "audio reactive" UIs use when there's no actual mic/waveform to read. ---
+  // "audio reactive" UIs use when there's no waveform to read — but real
+  // speech audio now plays alongside it (see the audio queue below), so
+  // the animation reads as reacting to Orion's actual voice rather than
+  // being pure decoration. ---
 
   const visualizer = (() => {
     const canvas = document.getElementById("visualizer");
@@ -242,6 +245,46 @@
     }
   }
 
+  // --- spoken replies: each "sentence" SSE event carries a base64 WAV
+  // (synthesized server-side by the same TTS backends Telegram/the voice
+  // loop use — core/tts.py) alongside its text. Queued and played one at a
+  // time in order, since sentences can arrive faster than they take to
+  // speak. audio is null when no TTS backend is configured (§18/§7) —
+  // the equalizer-only animation is what that degrades to. ---
+
+  const audioQueue = [];
+  const audioPlayer = new Audio();
+  let audioPlaying = false;
+
+  function playNextQueuedAudio() {
+    const next = audioQueue.shift();
+    if (!next) {
+      audioPlaying = false;
+      return;
+    }
+    audioPlaying = true;
+    audioPlayer.src = next;
+    // Autoplay can be blocked if the browser no longer considers this
+    // triggered by the user gesture that started sendMessage() (rare, but
+    // possible on a slow reply) — fail quietly into silent mode rather
+    // than throwing an unhandled rejection; the equalizer still animates.
+    audioPlayer.play().catch(() => {});
+  }
+  audioPlayer.addEventListener("ended", playNextQueuedAudio);
+
+  function enqueueSpokenSentence(base64Wav) {
+    if (!base64Wav) return;
+    audioQueue.push(`data:audio/wav;base64,${base64Wav}`);
+    if (!audioPlaying) playNextQueuedAudio();
+  }
+
+  function resetAudioQueue() {
+    audioQueue.length = 0;
+    audioPlayer.pause();
+    audioPlayer.removeAttribute("src");
+    audioPlaying = false;
+  }
+
   // --- sending a message, streaming the SSE reply into the equalizer only ---
 
   async function sendMessage() {
@@ -253,6 +296,7 @@
 
     setState("thinking");
     heroHintEl.textContent = "PROCESSING…";
+    resetAudioQueue();
 
     try {
       const response = await fetch("/api/chat", {
@@ -276,6 +320,7 @@
 
           if (event.type === "sentence") {
             setState("speaking");
+            enqueueSpokenSentence(event.audio);
           } else if (event.type === "done") {
             showAttachments(event.attachments);
           } else if (event.type === "error") {

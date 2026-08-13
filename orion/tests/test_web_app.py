@@ -68,17 +68,79 @@ def test_static_assets_are_served(client):
 
 
 def test_chat_streams_each_sentence_then_a_done_event(client, monkeypatch):
+    # _tts is None in the test environment (no ELEVENLABS_API_KEY, no Piper
+    # model, edge-tts not installed) — same "no backend configured" path
+    # every other interface degrades through, so audio comes back null here.
+    monkeypatch.setattr(app_module, "_tts", None)
     fake_agent = _FakeAgent(["Bonjour.", "Comment puis-je aider ?"])
     monkeypatch.setattr(app_module, "_agent", fake_agent)
 
     response = client.post("/api/chat", json={"message": "salut"})
 
     events = _parse_sse(response.text)
-    assert events[0] == {"type": "sentence", "text": "Bonjour."}
-    assert events[1] == {"type": "sentence", "text": "Comment puis-je aider ?"}
+    assert events[0] == {"type": "sentence", "text": "Bonjour.", "audio": None}
+    assert events[1] == {"type": "sentence", "text": "Comment puis-je aider ?", "audio": None}
     assert events[2]["type"] == "done"
     assert events[2]["text"] == "Bonjour. Comment puis-je aider ?"
     assert fake_agent.calls == [(app_module.SESSION_ID, "salut")]
+
+
+class _FakeSynthesizer:
+    sample_rate = 16000
+
+    def __init__(self):
+        self.calls: list[str] = []
+
+    def synthesize(self, text: str, urgent: bool = False) -> bytes:
+        self.calls.append(text)
+        # Two arbitrary 16-bit PCM samples — real content doesn't matter,
+        # only that it survives the WAV round-trip intact.
+        return b"\x01\x02\x03\x04"
+
+
+def test_chat_sentence_events_carry_synthesized_audio_when_tts_is_configured(client, monkeypatch):
+    import base64
+    import wave
+    from io import BytesIO
+
+    fake_tts = _FakeSynthesizer()
+    monkeypatch.setattr(app_module, "_tts", fake_tts)
+    monkeypatch.setattr(app_module, "_agent", _FakeAgent(["Bonjour."]))
+
+    response = client.post("/api/chat", json={"message": "salut"})
+
+    events = _parse_sse(response.text)
+    sentence_event = events[0]
+    assert sentence_event["text"] == "Bonjour."
+    assert fake_tts.calls == ["Bonjour."]
+
+    wav_bytes = base64.b64decode(sentence_event["audio"])
+    with wave.open(BytesIO(wav_bytes), "rb") as wav_file:
+        assert wav_file.getnchannels() == 1
+        assert wav_file.getsampwidth() == 2
+        assert wav_file.getframerate() == 16000
+        assert wav_file.readframes(wav_file.getnframes()) == b"\x01\x02\x03\x04"
+
+
+def test_chat_sentence_audio_is_null_when_synthesizer_returns_no_audio(client, monkeypatch):
+    """An empty sentence (or a TTS backend that legitimately produces no
+    audio for it, e.g. after markdown-stripping leaves nothing) shouldn't
+    crash trying to wrap zero bytes in a WAV header — falls back to null,
+    same as no TTS backend configured at all."""
+
+    class _SilentSynthesizer:
+        sample_rate = 16000
+
+        def synthesize(self, text: str, urgent: bool = False) -> bytes:
+            return b""
+
+    monkeypatch.setattr(app_module, "_tts", _SilentSynthesizer())
+    monkeypatch.setattr(app_module, "_agent", _FakeAgent(["..."]))
+
+    response = client.post("/api/chat", json={"message": "salut"})
+
+    events = _parse_sse(response.text)
+    assert events[0]["audio"] is None
 
 
 def test_chat_done_event_includes_drained_attachments(client, monkeypatch):

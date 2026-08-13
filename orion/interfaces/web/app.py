@@ -12,9 +12,12 @@ Run with: python -m interfaces.web.app
 """
 from __future__ import annotations
 
+import base64
+import io
 import json
 import queue
 import threading
+import wave
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Iterator
@@ -34,6 +37,7 @@ from core.memory import Memory
 from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
 from core.store import Store
+from core.tts import get_synthesizer_if_available
 from tools.registry_builder import build_registry
 
 SESSION_ID = "web"
@@ -43,6 +47,32 @@ _OUTPUTS_DIR = Path("outputs")
 _memory = Memory()
 _store = Store()
 _agent = Agent(_memory, build_registry(_memory, _store))
+
+# Same TTS backends (ElevenLabs / Piper / Edge TTS) Telegram and the voice
+# loop already use — see core/tts.py. None if none of the three is
+# configured, in which case _synthesize_wav_b64 below degrades to the
+# equalizer-only animation the HUD had before, exactly like a voice message
+# with no TTS backend falls back to text-only on Telegram.
+_tts = get_synthesizer_if_available()
+
+
+def _synthesize_wav_b64(text: str) -> str | None:
+    """Wraps core/tts.py's raw 16-bit PCM into a WAV container browsers can
+    play natively (no ffmpeg/Opus transcoding needed here, unlike Telegram's
+    voice-note requirement), base64-encoded so it can ride the existing SSE
+    "sentence" event instead of needing a second endpoint or a websocket."""
+    if _tts is None:
+        return None
+    pcm = _tts.synthesize(text)
+    if not pcm:
+        return None
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(_tts.sample_rate)
+        wav_file.writeframes(pcm)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 # Reminders due and health alerts arrive on their own background threads
 # (same notify-callback shape cli.py prints and voice_loop.py speaks) and
@@ -128,7 +158,7 @@ def _stream_chat(message: str) -> Iterator[str]:
         return
 
     def on_sentence(text: str) -> None:
-        events.put({"type": "sentence", "text": text})
+        events.put({"type": "sentence", "text": text, "audio": _synthesize_wav_b64(text)})
 
     def run() -> None:
         try:

@@ -885,14 +885,26 @@ python -m interfaces.web.app
 
 Then open **http://127.0.0.1:8420** (port configurable via
 `ORION_WEB_PORT`). Deliberately no visible transcript — type a message and
-there's no scrolling back-and-forth text log; instead a radial equalizer
-around the circle reacts while Orion replies, the same idea as a
-microphone app's level meter, and the central emblem's glow speeds up
-while thinking and pulses while replying. Reminders, health alerts
-(§9/§10), errors, and anything a tool generates (an image, a QR code, a
-document) all surface as brief HUD notification toasts instead — the
-input bar is still there for typing, just nothing renders the
-conversation itself on screen.
+there's no scrolling back-and-forth text log; instead Orion speaks the
+reply out loud, sentence by sentence as each one is ready, using the same
+TTS backends as Telegram and the voice loop (ElevenLabs if
+`ELEVENLABS_API_KEY` is set, else a local Piper model per §7, else Edge
+TTS automatically — nothing extra to configure if you already did §7). A
+radial equalizer around the circle reacts while it plays, the same idea
+as a microphone app's level meter, and the central emblem's glow speeds
+up while thinking and pulses while replying. If no TTS backend is
+configured at all, the equalizer still animates on its own — you just
+won't hear anything, the same silent-but-working degradation a Telegram
+voice message gets with no TTS set up. Reminders, health alerts (§9/§10),
+errors, and anything a tool generates (an image, a QR code, a document)
+all surface as brief HUD notification toasts — the input bar is still
+there for typing, just nothing renders the conversation as text on screen.
+
+Browsers restrict autoplaying audio to actions the user actually
+triggered — since playback starts from the same click/Enter that sent the
+message, this works in every browser tested, but if a reply ever plays
+silently, that's almost certainly why (no error, no toast, just no
+sound).
 
 Single-user, single-session, same as the CLI — two browser tabs open at
 once share one conversation, the same as running the CLI twice would with
