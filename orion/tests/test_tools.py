@@ -1,5 +1,6 @@
 from core.memory import Memory
 from tools.base import Tool, ToolRegistry
+from tools.correction_tool import ListCorrectionsTool, LogCorrectionTool
 from tools.memory_tool import RecallFactsTool, RememberFactTool
 
 
@@ -64,3 +65,44 @@ def test_remember_and_recall_fact_tools(tmp_path):
     remember.run(key="dog_name", value="Rex")
 
     assert "Rex" in recall.run()
+
+
+def test_log_and_list_corrections_tools(tmp_path):
+    memory = Memory(db_path=str(tmp_path / "test.db"))
+    log = LogCorrectionTool(memory)
+    listing = ListCorrectionsTool(memory)
+
+    result = log.run(category="tone", mistake="was too formal", correction="be casual")
+
+    assert "tone" in result
+    listed = listing.run()
+    assert "was too formal" in listed
+    assert "be casual" in listed
+
+
+def test_log_correction_indexes_into_vector_memory_when_available(tmp_path):
+    memory = Memory(db_path=str(tmp_path / "test.db"))
+
+    class _FakeVectorMemory:
+        def __init__(self):
+            self.indexed = []
+
+        def index(self, text, source):
+            self.indexed.append((text, source))
+
+    vector_memory = _FakeVectorMemory()
+    log = LogCorrectionTool(memory, vector_memory)
+
+    log.run(category="tool_usage", mistake="used the wrong calendar", correction="use the work calendar")
+
+    assert len(vector_memory.indexed) == 1
+    text, source = vector_memory.indexed[0]
+    assert "used the wrong calendar" in text
+    assert source == "correction"
+
+
+def test_list_corrections_reports_none_when_empty(tmp_path):
+    memory = Memory(db_path=str(tmp_path / "test.db"))
+    listing = ListCorrectionsTool(memory)
+
+    assert listing.run() == "No corrections logged yet."

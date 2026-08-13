@@ -43,7 +43,7 @@ Around 90-160 tools depending on configuration, registered in
 
 | Category | Tools |
 |---|---|
-| Memory | remember/recall durable facts, preferences, and corrections; **semantic memory** (search_memory/index_memory, §10) for recalling something by meaning, not exact wording |
+| Memory | remember/recall durable facts and preferences; log/list corrections distilled into a "lessons learned" digest over time (see "How Orion learns" below); **semantic memory** (search_memory/index_memory, §10) for recalling something by meaning, not exact wording |
 | Email & calendar *(needs Google setup, §2)* | search/read Gmail, draft emails, **archive/mark-read/count unread** (triage, never auto-sends), list/create Google Calendar events, search/add contacts |
 | Outlook / Microsoft 365 *(needs Azure app registration, §15)* | same shape as the Google row above but for Outlook Mail/Calendar/Contacts via Microsoft Graph — search/read/draft mail (never auto-sends), archive/mark-read/count unread, list/create calendar events, search/add contacts |
 | **Shopify** *(needs a custom app token, §16)* | run real parts of an e-commerce business — list/view/fulfill orders, sales summaries, create/update products, manage stock, search customers, create discount codes. Deliberately no refunds or order cancellation, see §16 for why |
@@ -85,15 +85,38 @@ projet X' triggers `create_presentation` whether you type it or say it.
 
 ## How Orion learns
 
-Memory here works on three tracks, all automatic — none require the user
-to say "remember this":
+Worth being precise about what "learns" means here: this is all in-context
+memory — persisted facts and summaries re-read into the prompt every turn —
+not weight-level training. The Anthropic API doesn't expose a fine-tuning
+endpoint for Claude models to regular API customers, so there's no way for
+Orion's underlying model to actually update from corrections the way a
+trained ML model would. Everything below is the practical, honest substitute:
+software that makes the in-context memory behave as much like "learning from
+mistakes" as an architecture without weight updates can.
 
-- **Facts, preferences, and corrections** (`core/memory.py`, the `facts`
-  table): the system prompt instructs the model to call `remember_fact`
-  whenever it notices something durable worth keeping — not just stated
-  facts, but preferences it infers and corrections the user makes ("no,
-  I meant the other calendar" becomes a stored rule, not a one-off fix).
-  These are global, visible to every interface and session.
+Memory here works on four tracks, all automatic — none require the user to
+say "remember this":
+
+- **Facts and preferences** (`core/memory.py`, the `facts` table): the
+  system prompt instructs the model to call `remember_fact` whenever it
+  notices something durable worth keeping — stated facts as well as
+  preferences it infers. Global, visible to every interface and session.
+- **Corrections and "lessons learned"** (`core/memory.py`'s `corrections`
+  table, `core/correction_synthesis.py`): distinct from facts on purpose.
+  When the user corrects how Orion did something — wrong tone, wrong
+  assumption, wrong tool choice — the system prompt instructs it to call
+  `log_correction` instead, capturing the mistake and what to do instead as
+  its own record rather than one more fact among many. If `search_memory`
+  is available (§10), each correction is also indexed there so a related
+  correction can surface contextually, by meaning, even when it isn't in
+  the recent tail. Raw corrections would eventually clutter the prompt, so
+  once more than a dozen accumulate, the oldest ones get folded into a
+  compact "lessons learned" digest via one extra Claude call — merging
+  repeated corrections into a general rule instead of keeping every
+  individual instance — the same distillation `core/consolidation.py` does
+  for conversation history, just for mistakes specifically. Both the digest
+  and any not-yet-folded recent corrections are injected into the system
+  prompt every turn.
 - **Conversation assimilation** (`core/consolidation.py`): `Memory.history()`
   only ever sends the most recent ~40 messages to the model, so a long
   running conversation would normally just lose everything older than that.
@@ -108,15 +131,15 @@ to say "remember this":
   answer is kept for as long as that kind of information stays valid, so
   asking again shortly after reuses it instead of looking it up again from
   scratch — the closest thing here to "learned something new, remembers it
-  next time." Unlike the two tracks above, this is a speed optimization
-  scoped to one running process, not a durable store — it resets on
-  restart and only applies to safe-to-cache lookups (see the "Response
-  speed" section below for exactly which tools and why).
+  next time." Unlike the other tracks, this is a speed optimization scoped
+  to one running process, not a durable store — it resets on restart and
+  only applies to safe-to-cache lookups (see the "Response speed" section
+  below for exactly which tools and why).
 
-All three are visible in code — `recall_facts`, the "Summary of earlier
-conversation" block Orion sees in its own system prompt, and
-`core/tool_cache.py`'s `CACHEABLE_TOOLS` map — nothing here is hidden
-state.
+All four are visible in code — `recall_facts`, `list_corrections`, the
+"Summary of earlier conversation" and "Lessons learned" blocks Orion sees in
+its own system prompt, and `core/tool_cache.py`'s `CACHEABLE_TOOLS` map —
+nothing here is hidden state.
 
 ## 1. Setup
 

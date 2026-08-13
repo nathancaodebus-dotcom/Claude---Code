@@ -38,6 +38,22 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
     consolidated_through_id INTEGER NOT NULL DEFAULT 0,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS corrections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    mistake TEXT NOT NULL,
+    correction TEXT NOT NULL,
+    context TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS corrections_digest (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    digest TEXT NOT NULL,
+    consolidated_through_id INTEGER NOT NULL DEFAULT 0,
+    updated_at REAL NOT NULL
+);
 """
 
 
@@ -46,6 +62,16 @@ class Message:
     role: str
     content: str
     id: int = 0
+
+
+@dataclass
+class Correction:
+    id: int
+    category: str
+    mistake: str
+    correction: str
+    context: str
+    created_at: float
 
 
 class Memory:
@@ -152,3 +178,66 @@ class Memory:
         if not summary:
             return ""
         return f"Summary of earlier conversation in this session (older messages have scrolled out of context):\n{summary}"
+
+    # --- corrections (mistakes the user pointed out, and what to do instead) ---
+
+    def log_correction(self, category: str, mistake: str, correction: str, context: str = "") -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO corrections (category, mistake, correction, context, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (category, mistake, correction, context, time.time()),
+        )
+        self._conn.commit()
+        return cursor.lastrowid
+
+    def recent_corrections(self, limit: int = 20) -> list[Correction]:
+        rows = self._conn.execute(
+            "SELECT id, category, mistake, correction, context, created_at FROM corrections "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [Correction(*row) for row in rows]
+
+    def corrections_after(self, after_id: int) -> list[Correction]:
+        rows = self._conn.execute(
+            "SELECT id, category, mistake, correction, context, created_at FROM corrections "
+            "WHERE id > ? ORDER BY id",
+            (after_id,),
+        ).fetchall()
+        return [Correction(*row) for row in rows]
+
+    def get_corrections_digest(self) -> str:
+        row = self._conn.execute("SELECT digest FROM corrections_digest WHERE id = 1").fetchone()
+        return row[0] if row else ""
+
+    def get_corrections_consolidated_through(self) -> int:
+        row = self._conn.execute(
+            "SELECT consolidated_through_id FROM corrections_digest WHERE id = 1"
+        ).fetchone()
+        return row[0] if row else 0
+
+    def set_corrections_digest(self, digest: str, consolidated_through_id: int) -> None:
+        self._conn.execute(
+            "INSERT INTO corrections_digest (id, digest, consolidated_through_id, updated_at) "
+            "VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+            "digest = excluded.digest, consolidated_through_id = excluded.consolidated_through_id, "
+            "updated_at = excluded.updated_at",
+            (digest, consolidated_through_id, time.time()),
+        )
+        self._conn.commit()
+
+    def corrections_as_prompt_block(self) -> str:
+        """Digest (older corrections folded into general rules by
+        core/correction_synthesis.py) plus whatever's too recent to have
+        been folded in yet — mirrors summary_as_prompt_block's split
+        between a durable digest and a raw recent tail."""
+        digest = self.get_corrections_digest()
+        recent = self.corrections_after(self.get_corrections_consolidated_through())
+
+        parts = []
+        if digest:
+            parts.append(f"Lessons learned from past corrections:\n{digest}")
+        if recent:
+            lines = "\n".join(f"- [{c.category}] {c.mistake} -> do instead: {c.correction}" for c in recent)
+            parts.append(f"Recent corrections (not yet folded into the digest above):\n{lines}")
+        return "\n\n".join(parts)

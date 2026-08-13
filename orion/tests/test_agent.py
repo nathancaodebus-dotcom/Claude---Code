@@ -184,6 +184,40 @@ def test_remembered_fact_reaches_the_next_turns_system_prompt_end_to_end():
     assert "Rex" in dynamic_block_text
 
 
+def test_logged_correction_reaches_the_next_turns_system_prompt_end_to_end():
+    """Same shape as the remember_fact regression test above, but for
+    log_correction — dispatched through the registry exactly as Claude's
+    tool_use block would, then checking the *next* turn's system block
+    actually contains it (via corrections_as_prompt_block, since nothing
+    has crossed SYNTHESIZE_THRESHOLD yet so it's still the raw tail)."""
+    from tools.correction_tool import LogCorrectionTool
+
+    registry = ToolRegistry()
+    memory = Memory(db_path=":memory:")
+    registry.register(LogCorrectionTool(memory))
+
+    correction_round = _FakeMessage(
+        [
+            _ToolUseBlock(
+                "call_1",
+                "log_correction",
+                {"category": "tone", "mistake": "was too formal", "correction": "be casual"},
+            )
+        ],
+        "tool_use",
+    )
+    ack_round = _FakeMessage([_TextBlock("Noted, I'll be more casual.")], "end_turn")
+    agent = Agent(memory, registry)
+    agent._client = _FakeClient([([], correction_round), (["Noted, I'll be more casual."], ack_round)])
+
+    agent.respond("s1", "You were too formal just now.")
+
+    next_turn_system_blocks = agent._system_blocks("s1")
+    dynamic_block_text = "\n\n".join(b["text"] for b in next_turn_system_blocks if "cache_control" not in b)
+    assert "was too formal" in dynamic_block_text
+    assert "be casual" in dynamic_block_text
+
+
 def test_respond_dispatches_tool_use_round_then_returns_final_answer():
     tool = _EchoTool()
     registry = ToolRegistry()

@@ -13,6 +13,7 @@ import anthropic
 
 from core.config import config
 from core.consolidation import Consolidator, make_default_summarizer
+from core.correction_synthesis import CorrectionSynthesizer, make_default_correction_summarizer
 from core.memory import Memory
 from core.offline_agent import OfflineAgent, is_ollama_reachable
 from tools.base import ToolRegistry
@@ -35,10 +36,15 @@ is ambiguous in a way that changes the outcome (e.g. which light, which event to
 short clarifying question instead of guessing. If you don't have a tool for something, say so plainly.
 
 Learn continuously, don't just wait to be told to remember something: call remember_fact whenever you \
-notice a durable fact, preference, routine, or correction — not just when the user explicitly says \
-'remember this'. If the user corrects how you did something (wrong tone, wrong assumption, a rule for \
-next time), store that correction as a fact so you don't repeat the mistake. Check recall_facts if you're \
-about to do something the user might have already told you a preference about.
+notice a durable fact, preference, or routine — not just when the user explicitly says 'remember this'. \
+Check recall_facts if you're about to do something the user might have already told you a preference about.
+
+Separately, if the user corrects how you did something — wrong tone, wrong assumption, wrong tool \
+choice, a rule for next time — call log_correction instead of (or in addition to) remember_fact. \
+Corrections are tracked distinctly from facts specifically so mistakes get reviewed and turned into \
+general rules over time (see the 'Lessons learned' block below, when present) rather than just sitting \
+as one more fact you might not reconsider. Check that block before doing something you've been \
+corrected on before.
 
 When you create a document (presentation/Word doc/spreadsheet/website), remember the document_name \
 or site_name you get back — later requests like 'add a slide about X' or 'add a page about Y' refer \
@@ -93,6 +99,9 @@ class Agent:
         self._consolidator = Consolidator(
             memory, make_default_summarizer(self._client, config.fast_model)
         )
+        self._correction_synthesizer = CorrectionSynthesizer(
+            memory, make_default_correction_summarizer(self._client, config.fast_model)
+        )
         # Constructing this does no I/O (no import, no network call) — it's
         # only ever actually used, and only after checking is_ollama_reachable(),
         # inside _respond_via_offline_fallback below.
@@ -109,6 +118,7 @@ class Agent:
             for block in (
                 self._memory.facts_as_prompt_block(),
                 self._memory.summary_as_prompt_block(session_id),
+                self._memory.corrections_as_prompt_block(),
             )
             if block
         )
@@ -155,17 +165,20 @@ class Agent:
             final_text = self._respond_via_offline_fallback(user_message, on_sentence)
 
         self._memory.append(session_id, "assistant", final_text)
-        # maybe_consolidate is a no-op almost every turn (a cheap row count
-        # check) but, once a session crosses CONSOLIDATE_THRESHOLD messages,
-        # makes a full extra Claude call to rewrite the summary — running
-        # that inline would silently tack an entire second API round trip
-        # onto whichever response happens to cross the threshold. Memory's
-        # SQLite connections are already opened with check_same_thread=False
-        # for exactly this kind of cross-thread use, so it's safe to fire
-        # this in the background and return the user's answer immediately.
-        threading.Thread(
-            target=self._consolidator.maybe_consolidate, args=(session_id,), daemon=True
-        ).start()
+        # maybe_consolidate/maybe_synthesize are no-ops almost every turn (a
+        # cheap row count check) but, once their respective thresholds are
+        # crossed, make a full extra Claude call to rewrite the summary/digest
+        # — running that inline would silently tack an entire second API
+        # round trip onto whichever response happens to cross the threshold.
+        # Memory's SQLite connections are already opened with
+        # check_same_thread=False for exactly this kind of cross-thread use,
+        # so it's safe to fire both in the background and return the user's
+        # answer immediately.
+        def _background_maintenance() -> None:
+            self._consolidator.maybe_consolidate(session_id)
+            self._correction_synthesizer.maybe_synthesize()
+
+        threading.Thread(target=_background_maintenance, daemon=True).start()
         return final_text
 
     def _respond_via_offline_fallback(

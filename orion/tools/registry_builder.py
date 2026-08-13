@@ -38,6 +38,11 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     registry.register(RememberFactTool(memory))
     registry.register(RecallFactsTool(memory))
 
+    # Corrections tool is registered further down, after the semantic-memory
+    # block below (so it can index into VectorMemory when that optional
+    # dependency is available) — but it works with or without it, so it's
+    # not itself gated behind _register_safe.
+
     def _productivity() -> None:
         from tools.productivity_tools import (
             AddNoteTool,
@@ -517,7 +522,10 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
         _register_safe(registry, "sandboxed scripts", _sandbox)
 
+    vector_memory = None
+
     def _semantic_memory() -> None:
+        nonlocal vector_memory
         from core.vector_memory import VectorMemory
         from tools.semantic_memory_tool import IndexMemoryTool, SearchMemoryTool
 
@@ -526,6 +534,14 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(SearchMemoryTool(vector_memory))
 
     _register_safe(registry, "semantic memory", _semantic_memory)
+
+    # Corrections — always available (plain SQLite via Memory, same as
+    # remember_fact above); indexes into vector_memory too when that
+    # optional dependency loaded successfully just above.
+    from tools.correction_tool import ListCorrectionsTool, LogCorrectionTool
+
+    registry.register(LogCorrectionTool(memory, vector_memory))
+    registry.register(ListCorrectionsTool(memory))
 
     if config.google_credentials_path:
         def _google() -> None:
