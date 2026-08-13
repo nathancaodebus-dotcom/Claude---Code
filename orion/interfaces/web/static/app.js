@@ -355,18 +355,61 @@
 
   let mediaRecorder = null;
   let recordedChunks = [];
+  // True for the entire click-to-permission-prompt-resolves window, not
+  // just while mediaRecorder is live — mediaRecorder stays null until
+  // getUserMedia() resolves, so without this a second click during that
+  // (very real, e.g. the user clicking again while the browser's own
+  // permission popup is still up) fell through to a second concurrent
+  // startRecording() call, racing to overwrite mediaRecorder with two
+  // separate streams instead of being treated as "already starting."
+  let micBusy = false;
+
+  const micSupported =
+    typeof navigator !== "undefined" &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function" &&
+    typeof window.MediaRecorder !== "undefined";
+
+  if (!micSupported) {
+    // Most likely causes, in order: not localhost/127.0.0.1 over plain
+    // HTTP (getUserMedia needs a secure context — see README §18), a very
+    // old/unusual browser, or a WebView that doesn't expose these APIs.
+    // Disabling instead of leaving a button that fails silently on click.
+    micEl.disabled = true;
+    micEl.title = "Micro indisponible dans ce navigateur (getUserMedia manquant — voir README §18)";
+  }
 
   async function startRecording() {
+    if (micBusy) return;
+    micBusy = true;
+
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      showNotification(`Micro inaccessible (${err}).`, { isError: true });
+      // err.name is the actionable part (NotAllowedError = permission
+      // denied at the browser or, on Windows specifically, the OS-level
+      // "Let desktop apps access your microphone" privacy toggle;
+      // NotFoundError = no microphone device at all) — surfaced
+      // explicitly rather than relying on the generic error string alone.
+      const hint =
+        err && err.name === "NotAllowedError"
+          ? " Vérifie la permission micro du navigateur ET, sur Windows, Paramètres > Confidentialité > Microphone."
+          : "";
+      showNotification(`Micro inaccessible (${err}).${hint}`, { isError: true });
+      micBusy = false;
       return;
     }
 
     recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
+    try {
+      mediaRecorder = new MediaRecorder(stream);
+    } catch (err) {
+      stream.getTracks().forEach((track) => track.stop());
+      showNotification(`Impossible de démarrer l'enregistrement (${err}).`, { isError: true });
+      micBusy = false;
+      return;
+    }
     mediaRecorder.addEventListener("dataavailable", (e) => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     });
@@ -374,8 +417,16 @@
       stream.getTracks().forEach((track) => track.stop());
       micEl.classList.remove("recording");
       micEl.textContent = "🎤";
+      micBusy = false;
+      if (recordedChunks.length === 0) {
+        showNotification("Rien n'a été enregistré — réessaie.", { isError: true });
+        return;
+      }
       const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
       transcribeAndSend(blob);
+    });
+    mediaRecorder.addEventListener("error", (e) => {
+      showNotification(`Erreur d'enregistrement (${e.error || e}).`, { isError: true });
     });
 
     mediaRecorder.start();
@@ -398,10 +449,24 @@
       const formData = new FormData();
       formData.append("audio", blob, "clip.webm");
       const response = await fetch("/api/transcribe", { method: "POST", body: formData });
-      const data = await response.json();
 
+      if (!response.ok) {
+        showNotification(`Le serveur a refusé la transcription (HTTP ${response.status}).`, { isError: true });
+        return;
+      }
+
+      const data = await response.json();
       if (data.error) {
         showNotification(data.error, { isError: true });
+        return;
+      }
+      // Defends against a malformed/unexpected response shape (missing
+      // "text") turning into the literal string "undefined" getting sent
+      // as a chat message -- setting an <input>'s .value to undefined
+      // stringifies it, and that string is truthy, so sendMessage() would
+      // otherwise happily send it.
+      if (typeof data.text !== "string" || !data.text.trim()) {
+        showNotification("Réponse de transcription inattendue — réessaie.", { isError: true });
         return;
       }
       inputEl.value = data.text;
@@ -417,13 +482,15 @@
     }
   }
 
-  micEl.addEventListener("click", () => {
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  });
+  if (micSupported) {
+    micEl.addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
+  }
 
   // --- proactive notifications (reminders, health alerts) ---
 

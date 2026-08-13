@@ -956,6 +956,39 @@ To keep it running in the background instead of a foreground terminal,
 `systemd/orion-web.service` follows the same pattern as the Telegram/voice
 units — see §8.
 
+**Talking to it instead of typing**: the 🎤 button next to the input bar
+is push-to-talk — click to start recording, click again to stop; the clip
+is transcribed server-side (faster-whisper, needs `requirements-voice.txt`
+installed per §7) and sent exactly like typing the same text would be.
+This is deliberately push-to-talk, not always-listening like §7's
+Raspberry Pi voice loop — a browser tab can't keep a mic open unattended
+waiting for a wake word the way a dedicated process can; for genuinely
+hands-free use, run `interfaces.voice.voice_loop` instead (§7), separately
+from the web UI.
+
+The browser will ask for microphone permission the first time — if it
+never asks, or the mic button shows an error immediately on click, check,
+in order:
+1. **The address bar says `http://127.0.0.1:8420` (or `localhost`)** —
+   `getUserMedia` (the browser API this uses) refuses to run at all
+   outside a "secure context," and plain `http://` only counts as one for
+   `127.0.0.1`/`localhost` specifically, not any other address (a LAN IP
+   like `192.168.x.x`, a hostname, etc.) — those would need HTTPS, which
+   this project deliberately doesn't set up (§18 above).
+2. **On Windows specifically**, a `NotAllowedError` toast even after
+   granting the browser's own permission prompt usually means the *OS-level*
+   toggle is off: Settings → Privacy & security → Microphone → make sure
+   both the main toggle and "Let desktop apps access your microphone" are
+   on. This is a Windows setting, not a browser one, and blocks every
+   browser/app alike regardless of what's granted inside the browser.
+3. **The browser's own per-site permission** — click the padlock/site-info
+   icon in the address bar and check the microphone permission for this
+   page hasn't been explicitly blocked from an earlier "Deny" click.
+
+A `NotFoundError` toast instead means no microphone was found at all
+(disabled/disconnected device, or a laptop's built-in mic disabled in
+Windows Device Manager) — different fix than the permission cases above.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:
