@@ -108,7 +108,8 @@ CREATE TABLE IF NOT EXISTS crypto_trade_proposals (
     reasoning TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at REAL NOT NULL,
-    resolved_at REAL
+    resolved_at REAL,
+    fee_pct REAL NOT NULL DEFAULT 0.0
 );
 
 -- Quantitative signals Claude has proposed and backtested (see
@@ -194,6 +195,7 @@ class CryptoTradeProposal:
     reasoning: str
     status: str
     created_at: float
+    fee_pct: float = 0.0
 
 
 @dataclass
@@ -208,12 +210,25 @@ class QuantSignal:
     created_at: float
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    """CREATE TABLE IF NOT EXISTS only helps brand-new databases — it's a
+    no-op against a table that already exists from an earlier run, so a
+    new column added to _SCHEMA never actually reaches an existing
+    orion.db without this. Checked via PRAGMA table_info rather than
+    try/except around ALTER TABLE, so this stays a plain no-op (no
+    exception-driven control flow) when the column's already there."""
+    existing_columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing_columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 class Store:
     def __init__(self, db_path: str | None = None):
         path = db_path or config.db_path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.executescript(_SCHEMA)
+        _ensure_column(self._conn, "crypto_trade_proposals", "fee_pct", "REAL NOT NULL DEFAULT 0.0")
         self._conn.commit()
 
     # --- todos ---
@@ -449,24 +464,33 @@ class Store:
     # rather than being applied directly) ---
 
     def propose_crypto_trade(
-        self, portfolio: str, action: str, coin: str, quantity: float, price_usd: float, reasoning: str
+        self,
+        portfolio: str,
+        action: str,
+        coin: str,
+        quantity: float,
+        price_usd: float,
+        reasoning: str,
+        fee_pct: float = 0.0,
     ) -> int:
         if action not in ("buy", "sell"):
             raise ValueError(f"action must be 'buy' or 'sell', got '{action}'.")
         if quantity <= 0:
             raise ValueError("quantity must be positive.")
+        if fee_pct < 0:
+            raise ValueError("fee_pct can't be negative.")
         cur = self._conn.execute(
             "INSERT INTO crypto_trade_proposals "
-            "(portfolio, action, coin, quantity, price_usd, reasoning, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
-            (portfolio, action, coin.lower(), quantity, price_usd, reasoning, time.time()),
+            "(portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, fee_pct) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (portfolio, action, coin.lower(), quantity, price_usd, reasoning, time.time(), fee_pct),
         )
         self._conn.commit()
         return cur.lastrowid
 
     def get_crypto_trade_proposal(self, proposal_id: int) -> CryptoTradeProposal | None:
         row = self._conn.execute(
-            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at "
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, fee_pct "
             "FROM crypto_trade_proposals WHERE id = ?",
             (proposal_id,),
         ).fetchone()
@@ -475,11 +499,12 @@ class Store:
         return CryptoTradeProposal(
             id=row[0], portfolio=row[1], action=row[2], coin=row[3],
             quantity=row[4], price_usd=row[5], reasoning=row[6], status=row[7], created_at=row[8],
+            fee_pct=row[9],
         )
 
     def list_pending_crypto_trades(self, portfolio: str | None = None) -> list[CryptoTradeProposal]:
         query = (
-            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at "
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, fee_pct "
             "FROM crypto_trade_proposals WHERE status = 'pending'"
         )
         params: tuple = ()
@@ -492,21 +517,33 @@ class Store:
             CryptoTradeProposal(
                 id=r[0], portfolio=r[1], action=r[2], coin=r[3],
                 quantity=r[4], price_usd=r[5], reasoning=r[6], status=r[7], created_at=r[8],
+                fee_pct=r[9],
             )
             for r in rows
         ]
 
-    def confirm_crypto_trade(self, proposal_id: int) -> None:
+    def confirm_crypto_trade(self, proposal_id: int) -> dict[str, float]:
         """Applies a pending proposal to holdings. Raises ValueError (with a
         message meant to be shown as-is) if the proposal doesn't exist, was
         already resolved, or a sell would take a holding negative — this
         method is the only path that ever changes crypto_holdings, so it's
-        also the only place that needs to guard against a bad sell."""
+        also the only place that needs to guard against a bad sell.
+
+        Returns {"effective_price_usd", "fee_amount_usd"} so callers can
+        report the fee's real impact without recomputing it: on a buy, the
+        fee is folded straight into the cost basis (effective_price_usd is
+        what actually feeds avg_buy_price_usd below); on a sell, holdings
+        math is fee-independent (quantity out is quantity out regardless of
+        what it nets you), so effective_price_usd there is purely
+        informational — this project has no cash-balance/proceeds ledger to
+        apply it to."""
         proposal = self.get_crypto_trade_proposal(proposal_id)
         if proposal is None:
             raise ValueError(f"No trade proposal with id {proposal_id}.")
         if proposal.status != "pending":
             raise ValueError(f"Trade proposal {proposal_id} was already {proposal.status}.")
+
+        fee_amount_usd = proposal.quantity * proposal.price_usd * (proposal.fee_pct / 100)
 
         existing = self._conn.execute(
             "SELECT quantity, avg_buy_price_usd FROM crypto_holdings WHERE portfolio = ? AND coin = ?",
@@ -514,13 +551,14 @@ class Store:
         ).fetchone()
 
         if proposal.action == "buy":
+            effective_price = proposal.price_usd * (1 + proposal.fee_pct / 100)
             if existing is None:
-                new_quantity, new_avg_price = proposal.quantity, proposal.price_usd
+                new_quantity, new_avg_price = proposal.quantity, effective_price
             else:
                 old_quantity, old_avg_price = existing
                 new_quantity = old_quantity + proposal.quantity
                 new_avg_price = (
-                    old_quantity * old_avg_price + proposal.quantity * proposal.price_usd
+                    old_quantity * old_avg_price + proposal.quantity * effective_price
                 ) / new_quantity
             self._conn.execute(
                 "INSERT INTO crypto_holdings (portfolio, coin, quantity, avg_buy_price_usd, updated_at) "
@@ -530,6 +568,7 @@ class Store:
                 (proposal.portfolio, proposal.coin, new_quantity, new_avg_price, time.time()),
             )
         else:  # sell
+            effective_price = proposal.price_usd * (1 - proposal.fee_pct / 100)
             if existing is None or existing[0] < proposal.quantity:
                 held = existing[0] if existing else 0.0
                 raise ValueError(
@@ -555,6 +594,7 @@ class Store:
             (time.time(), proposal_id),
         )
         self._conn.commit()
+        return {"effective_price_usd": effective_price, "fee_amount_usd": fee_amount_usd}
 
     def reject_crypto_trade(self, proposal_id: int) -> None:
         proposal = self.get_crypto_trade_proposal(proposal_id)

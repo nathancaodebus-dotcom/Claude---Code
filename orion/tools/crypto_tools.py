@@ -197,7 +197,10 @@ class ProposeCryptoTradeTool(Tool):
         "with your reasoning — this does NOT execute anything or change the portfolio. It fetches "
         "the current live price itself and stores a pending proposal; the user must explicitly "
         "confirm it with confirm_crypto_trade before it affects any holdings. Never tell the user "
-        "a trade is done just because you proposed it."
+        "a trade is done just because you proposed it. Includes an estimated trading fee (default "
+        "0.1%, roughly a typical major-exchange taker fee — adjust fee_pct if the user trades "
+        "somewhere with different fees) so the paper-tracked P&L doesn't look artificially better "
+        "than a real account would, the same realism backtesting frameworks like Freqtrade insist on."
     )
     input_schema = {
         "type": "object",
@@ -207,6 +210,10 @@ class ProposeCryptoTradeTool(Tool):
             "coin": {"type": "string", "description": "CoinGecko coin id, e.g. 'bitcoin'."},
             "quantity": {"type": "number"},
             "reasoning": {"type": "string", "description": "Why this trade, in a sentence or two."},
+            "fee_pct": {
+                "type": "number",
+                "description": "Trading fee as a percent of trade value. Default 0.1 (0.1%).",
+            },
         },
         "required": ["portfolio", "action", "coin", "quantity", "reasoning"],
     }
@@ -214,7 +221,15 @@ class ProposeCryptoTradeTool(Tool):
     def __init__(self, store: Store):
         self._store = store
 
-    def run(self, portfolio: str, action: str, coin: str, quantity: float, reasoning: str) -> str:
+    def run(
+        self,
+        portfolio: str,
+        action: str,
+        coin: str,
+        quantity: float,
+        reasoning: str,
+        fee_pct: float = 0.1,
+    ) -> str:
         prices = _fetch_prices([coin])
         info = prices.get(coin.lower())
         if info is None or info["price"] is None:
@@ -227,11 +242,14 @@ class ProposeCryptoTradeTool(Tool):
             quantity=quantity,
             price_usd=info["price"],
             reasoning=reasoning,
+            fee_pct=fee_pct,
         )
+        fee_amount = quantity * info["price"] * (fee_pct / 100)
         return (
             f"Proposal #{proposal_id}: {action} {quantity} {coin} at {info['price']} USD "
-            f"in '{portfolio}' — PENDING, not yet applied. Ask the user to confirm or reject it "
-            f"(confirm_crypto_trade / reject_crypto_trade) before treating this as done."
+            f"(~{fee_amount:.2f} USD estimated fee at {fee_pct}%) in '{portfolio}' — PENDING, not yet "
+            f"applied. Ask the user to confirm or reject it (confirm_crypto_trade / reject_crypto_trade) "
+            f"before treating this as done."
         )
 
 
@@ -251,8 +269,71 @@ class ConfirmCryptoTradeTool(Tool):
         self._store = store
 
     def run(self, proposal_id: int) -> str:
-        self._store.confirm_crypto_trade(proposal_id)
-        return f"Proposal #{proposal_id} confirmed and applied to the portfolio."
+        result = self._store.confirm_crypto_trade(proposal_id)
+        return (
+            f"Proposal #{proposal_id} confirmed and applied to the portfolio "
+            f"(effective price after fee: {result['effective_price_usd']:.4f} USD, "
+            f"fee cost: {result['fee_amount_usd']:.2f} USD)."
+        )
+
+
+class SuggestPositionSizeTool(Tool):
+    requires_network = False
+    name = "suggest_position_size"
+    description = (
+        "Suggest a trade size using fixed-fractional risk management — the standard approach most "
+        "trading education and frameworks (e.g. Freqtrade) default to: risk only a small, fixed "
+        "percentage of the portfolio on any single trade, sized so hitting the stop-loss costs "
+        "exactly that percentage, no more. Pure calculation — doesn't place, propose, or even "
+        "reference a specific coin; just the math, in whatever currency/asset units are given."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "portfolio_value": {"type": "number", "description": "Total portfolio value, in your quote currency."},
+            "entry_price": {"type": "number"},
+            "stop_loss_price": {"type": "number", "description": "The price at which you'd exit to cap the loss."},
+            "risk_pct": {
+                "type": "number",
+                "description": "Percent of the portfolio to risk on this one trade. Default 1 — 1-2% is the "
+                "typical conservative range; going much above 2-3% on a single position is unusual "
+                "even for aggressive traders.",
+            },
+        },
+        "required": ["portfolio_value", "entry_price", "stop_loss_price"],
+    }
+
+    def run(
+        self, portfolio_value: float, entry_price: float, stop_loss_price: float, risk_pct: float = 1.0
+    ) -> str:
+        if portfolio_value <= 0:
+            return "portfolio_value must be positive."
+        if entry_price <= 0 or stop_loss_price <= 0:
+            return "entry_price and stop_loss_price must be positive."
+        if entry_price == stop_loss_price:
+            return "entry_price and stop_loss_price can't be equal — there'd be no defined risk per unit."
+        if not (0 < risk_pct <= 100):
+            return "risk_pct must be between 0 and 100."
+
+        risk_amount = portfolio_value * (risk_pct / 100)
+        price_risk_per_unit = abs(entry_price - stop_loss_price)
+        position_size = risk_amount / price_risk_per_unit
+        position_value = position_size * entry_price
+        stop_distance_pct = price_risk_per_unit / entry_price * 100
+
+        result = (
+            f"Risking {risk_pct}% of {portfolio_value:,.2f} = {risk_amount:,.2f} at risk. "
+            f"Stop is {stop_distance_pct:.2f}% from entry ({price_risk_per_unit:.6g} per unit). "
+            f"Suggested size: {position_size:.6g} units "
+            f"({position_value:,.2f} position value at entry price)."
+        )
+        if position_value > portfolio_value:
+            result += (
+                f" Note: that's {position_value / portfolio_value:.1%} of the whole portfolio in one "
+                "position because the stop is very close to entry — sizing this large is risky regardless "
+                "of the risk-per-trade math; consider a wider stop or a lower risk_pct."
+            )
+        return result
 
 
 class RejectCryptoTradeTool(Tool):

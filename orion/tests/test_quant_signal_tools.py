@@ -76,6 +76,58 @@ def test_backtest_computes_ic_for_a_real_signal():
     assert "observations" in result
 
 
+def test_backtest_reports_standard_strategy_metrics(monkeypatch):
+    # Needs real day-to-day variance (unlike the default linear-price
+    # fixture, where every 5-day price difference is identical, so the
+    # signal never crosses its own median) to actually exercise the
+    # above-median split.
+    import random
+
+    rng = random.Random(7)
+    price = 100.0
+    rows = ["Date,Open,High,Low,Close,Volume"]
+    for i in range(120):
+        price *= 1 + rng.uniform(-0.02, 0.022)
+        rows.append(f"2024-01-{i + 1:02d},{price},{price * 1.01},{price * 0.99},{price},1000")
+    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse("\n".join(rows)))
+
+    signal_code = (
+        "def signal(bars):\n"
+        "    out = []\n"
+        "    for i in range(len(bars)):\n"
+        "        out.append(bars[i]['close'] - bars[i - 5]['close'] if i >= 5 else None)\n"
+        "    return out\n"
+    )
+
+    result = BacktestQuantSignalTool().run(ticker="AAPL", signal_code=signal_code, forward_days=3)
+
+    assert "win rate" in result
+    assert "Sharpe" in result
+    assert "Sortino" in result
+    assert "profit factor" in result
+    assert "max drawdown" in result
+    assert "trades" in result
+
+
+def test_backtest_falls_back_to_strategy_note_with_too_few_above_median_trades(monkeypatch):
+    # A signal that's above its own median for only a couple of days can't
+    # support the strategy-metrics section (needs >= 5 above-median trades).
+    csv = "\n".join(
+        ["Date,Open,High,Low,Close,Volume"]
+        + [f"2024-01-{i + 1:02d},100,101,99,100,1000" for i in range(40)]
+    )
+    monkeypatch.setattr("tools.quant_signal_tools.httpx.get", lambda *a, **kw: _FakeResponse(csv))
+
+    signal_code = (
+        "def signal(bars):\n"
+        "    return [1.0 if i == 10 else 0.0 for i in range(len(bars))]\n"
+    )
+    result = BacktestQuantSignalTool().run(ticker="AAPL", signal_code=signal_code, forward_days=3)
+
+    assert "Too few above-median trades" in result
+    assert "Sharpe" not in result
+
+
 def test_backtest_reports_exception_in_signal_code():
     result = BacktestQuantSignalTool().run(
         ticker="AAPL", signal_code="def signal(bars):\n    raise ValueError('bad formula')\n"

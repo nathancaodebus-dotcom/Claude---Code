@@ -104,6 +104,49 @@ def test_confirm_sell_without_enough_holdings_raises(tmp_path):
     assert store.get_crypto_trade_proposal(sell).status == "pending"
 
 
+def test_confirm_buy_folds_fee_into_cost_basis(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    proposal_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="bitcoin", quantity=1, price_usd=100,
+        reasoning="x", fee_pct=1.0,
+    )
+
+    result = store.confirm_crypto_trade(proposal_id)
+
+    assert result["effective_price_usd"] == pytest.approx(101.0)  # 100 * 1.01
+    assert result["fee_amount_usd"] == pytest.approx(1.0)  # 1 * 100 * 1%
+    holdings = store.list_crypto_holdings("stable")
+    assert holdings[0].avg_buy_price_usd == pytest.approx(101.0)
+
+
+def test_confirm_sell_reports_fee_without_touching_cost_basis(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    buy = store.propose_crypto_trade(
+        portfolio="risky", action="buy", coin="ethereum", quantity=2, price_usd=1000, reasoning="x"
+    )
+    store.confirm_crypto_trade(buy)
+    sell = store.propose_crypto_trade(
+        portfolio="risky", action="sell", coin="ethereum", quantity=1, price_usd=1200,
+        reasoning="x", fee_pct=2.0,
+    )
+
+    result = store.confirm_crypto_trade(sell)
+
+    assert result["effective_price_usd"] == pytest.approx(1176.0)  # 1200 * 0.98
+    assert result["fee_amount_usd"] == pytest.approx(24.0)  # 1 * 1200 * 2%
+    holdings = store.list_crypto_holdings("risky")
+    assert holdings[0].avg_buy_price_usd == 1000  # cost basis unaffected by a sell's fee
+
+
+def test_propose_crypto_trade_rejects_negative_fee(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    with pytest.raises(ValueError, match="fee_pct"):
+        store.propose_crypto_trade(
+            portfolio="risky", action="buy", coin="bitcoin", quantity=1, price_usd=1,
+            reasoning="x", fee_pct=-1.0,
+        )
+
+
 def test_confirm_unknown_proposal_raises(tmp_path):
     store = Store(db_path=str(tmp_path / "test.db"))
     with pytest.raises(ValueError, match="No trade proposal"):

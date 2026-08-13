@@ -104,12 +104,64 @@ ic = _spearman(xs, ys)
 mean_sig = sum(xs) / len(xs)
 std_sig = (sum((x - mean_sig) ** 2 for x in xs) / len(xs)) ** 0.5
 
-print(json.dumps({{
+result = {{
     "ic": ic,
     "n_observations": len(pairs),
     "signal_mean": mean_sig,
     "signal_std": std_sig,
-}}))
+}}
+
+# Naive long/flat strategy metrics (Sharpe, Sortino, max drawdown, win
+# rate, profit factor) -- the standard backtest report every framework
+# from Backtrader to QuantConnect leads with, alongside the IC. "Naive"
+# on purpose: go long whenever the signal is above its own median,
+# otherwise flat, just to turn the signal into a return series worth
+# reporting these on -- not a claim that this is the *right* way to
+# trade the signal. Also note forward_days windows overlap (a new
+# "trade" starts every day, each one still open forward_days later), so
+# these returns aren't independent the way a real walk-forward backtest's
+# would be -- indicative, not rigorous.
+sorted_xs = sorted(xs)
+mid = len(sorted_xs) // 2
+median_sig = sorted_xs[mid] if len(sorted_xs) % 2 else (sorted_xs[mid - 1] + sorted_xs[mid]) / 2
+trade_returns = [ret for sig, ret in pairs if sig > median_sig]
+
+if len(trade_returns) < 5:
+    result["strategy_note"] = "Too few above-median trades to compute strategy metrics."
+else:
+    n = len(trade_returns)
+    mean_ret = sum(trade_returns) / n
+    std_ret = (sum((r - mean_ret) ** 2 for r in trade_returns) / n) ** 0.5
+    sharpe = (mean_ret / std_ret) if std_ret > 0 else 0.0
+
+    downside = [r for r in trade_returns if r < 0]
+    downside_std = (sum(r ** 2 for r in downside) / n) ** 0.5 if downside else 0.0
+    sortino = (mean_ret / downside_std) if downside_std > 0 else 0.0
+
+    wins = [r for r in trade_returns if r > 0]
+    losses = [r for r in trade_returns if r < 0]
+    win_rate = len(wins) / n
+    if losses:
+        profit_factor = sum(wins) / abs(sum(losses)) if wins else 0.0
+    else:
+        profit_factor = float("inf") if wins else 0.0
+
+    equity, peak, max_dd = 1.0, 1.0, 0.0
+    for r in trade_returns:
+        equity *= (1 + r)
+        peak = max(peak, equity)
+        max_dd = max(max_dd, (peak - equity) / peak)
+
+    result.update({{
+        "n_trades": n,
+        "win_rate": win_rate,
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "profit_factor": profit_factor,
+        "max_drawdown": max_dd,
+    }})
+
+print(json.dumps(result))
 '''
 
 
@@ -163,7 +215,10 @@ class BacktestQuantSignalTool(Tool):
         "'close', 'volume'. Return a list the same length as `bars`: the signal's value for that "
         "day, or None where it can't be computed yet (e.g. during a lookback warm-up period). "
         "Only Python's standard library is available inside the sandbox — no pandas/numpy — so "
-        "write the formula using plain loops/math/statistics. Reports the raw IC only; it doesn't "
+        "write the formula using plain loops/math/statistics. Also reports standard backtest "
+        "metrics (win rate, Sharpe, Sortino, profit factor, max drawdown) for a naive "
+        "long-when-above-median strategy built from the signal, the same headline numbers "
+        "Backtrader/QuantConnect-style backtests report. Reports raw numbers only; it doesn't "
         "judge what counts as 'good' — that's for Claude to reason about against what the user is "
         "actually trying to find (a rough rule of thumb: |IC| > 0.05 is considered notable in "
         "quant finance, > 0.1 quite strong, but this depends heavily on the asset and horizon)."
@@ -211,10 +266,22 @@ class BacktestQuantSignalTool(Tool):
         if "error" in result:
             return f"Signal error: {result['error']}"
 
-        return (
+        summary = (
             f"{ticker.upper()} | {forward_days}-day forward Rank IC: {result['ic']:.4f} "
             f"({result['n_observations']} observations over {len(bars)} bars of history) | "
             f"signal mean {result['signal_mean']:.4f}, std {result['signal_std']:.4f}"
+        )
+
+        if "strategy_note" in result:
+            return f"{summary}\n{result['strategy_note']}"
+
+        return (
+            f"{summary}\n"
+            f"Naive long-when-above-median strategy ({result['n_trades']} trades, overlapping "
+            f"windows — indicative, not a rigorous walk-forward backtest): "
+            f"win rate {result['win_rate']:.1%}, Sharpe {result['sharpe']:.2f}, "
+            f"Sortino {result['sortino']:.2f}, profit factor {result['profit_factor']:.2f}, "
+            f"max drawdown {result['max_drawdown']:.1%}"
         )
 
 

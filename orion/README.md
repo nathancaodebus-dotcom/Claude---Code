@@ -58,7 +58,7 @@ Around 90-160 tools depending on configuration, registered in
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
-| **Crypto trading & quant research** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order; **quantitative signal backtesting** (Rank IC against real historical stock prices, run in the sandbox) |
+| **Crypto trading & quant research** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order; fee-aware P&L, fixed-fractional position sizing (`suggest_position_size`); **quantitative signal backtesting** (Rank IC + Sharpe/Sortino/win-rate/drawdown against real historical stock prices, run in the sandbox) |
 | Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
 | Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files, basic question/answer or cloze-deletion cards) |
 | **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
@@ -533,6 +533,20 @@ or API key required:
   changes nothing until you explicitly confirm it. `list_crypto_holdings`
   shows live unrealized P&L against your average buy price;
   `list_pending_crypto_trades` shows what's awaiting your decision.
+- Every proposal carries an estimated trading fee (`fee_pct`, default
+  0.1% — a typical major-exchange taker fee, adjustable per proposal) so
+  the paper P&L doesn't look artificially better than a real account
+  would — the same realism backtesting frameworks like Freqtrade insist
+  on. On confirm, a buy's fee is folded straight into the cost basis
+  (`avg_buy_price_usd` reflects what you actually paid, fee included); a
+  sell's fee is reported back but not applied to any balance, since this
+  project keeps no cash-balance/proceeds ledger.
+- `suggest_position_size` — pure fixed-fractional risk-sizing math
+  (portfolio value, entry price, stop-loss price, risk % → suggested
+  position size), the standard approach frameworks like Freqtrade default
+  to: risk a small, fixed slice of the portfolio per trade, sized so
+  hitting the stop costs exactly that slice. No network call, no coin
+  reference — just the calculation, informational only.
 
 **Why it stops there.** No LLM-driven system — this one included — has a
 track record of reliably beating the market autonomously; markets are
@@ -565,12 +579,24 @@ in conversation.
   user-authored script), and reports its **Rank IC** (Spearman correlation
   between the signal and the N-day-forward return) — the standard measure
   of a signal's predictive power. Raw number only, no verdict — same
-  philosophy as the technical indicators above.
+  philosophy as the technical indicators above. It also reports standard
+  performance metrics (win rate, Sharpe, Sortino, profit factor, max
+  drawdown — the same metrics Backtrader/QuantConnect report) for a naive
+  "long when the signal is above its own median" strategy, when there's
+  enough above-median history to compute them. These use overlapping
+  windows, not a rigorous walk-forward backtest — indicative, not a
+  substitute for a real backtesting engine.
 - `save_quant_signal` / `list_quant_signals` — keep the formulas that
   backtested well, ranked by IC, for later reuse.
 
 Pure research: nothing here places a trade, same as everything else in
-this section.
+this section. These additions borrow specific, safe ideas from mature
+open-source trading projects (Freqtrade's fee realism and risk-per-trade
+sizing, Backtrader/QuantConnect's standard performance metrics) — never
+their live-execution engines. Freqtrade, Hummingbot, and StockSharp are
+built around actually placing orders on an exchange; Nautilus Trader's
+core value is a real-time event engine for live trading. None of that fits
+here, on purpose, for the same reason stated above.
 
 ## 13. Website creation
 

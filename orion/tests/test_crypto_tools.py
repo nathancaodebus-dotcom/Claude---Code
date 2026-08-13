@@ -11,6 +11,7 @@ from tools.crypto_tools import (
     ListPendingCryptoTradesTool,
     ProposeCryptoTradeTool,
     RejectCryptoTradeTool,
+    SuggestPositionSizeTool,
     _rsi,
     _sma,
     _volatility_pct,
@@ -141,6 +142,18 @@ def test_propose_crypto_trade_fails_cleanly_without_a_live_price(monkeypatch, tm
     assert store.list_pending_crypto_trades("risky") == []
 
 
+def test_propose_crypto_trade_reports_the_estimated_fee(monkeypatch, tmp_path):
+    _mock_price_response(monkeypatch, {"bitcoin": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}})
+    store = Store(db_path=str(tmp_path / "test.db"))
+    tool = ProposeCryptoTradeTool(store)
+
+    result = tool.run(portfolio="risky", action="buy", coin="bitcoin", quantity=2, reasoning="x", fee_pct=0.5)
+
+    assert "1.00 USD estimated fee at 0.5%" in result  # 2 * 100 * 0.5%
+    proposal = store.list_pending_crypto_trades("risky")[0]
+    assert proposal.fee_pct == 0.5
+
+
 def test_confirm_and_reject_tools_delegate_to_the_store(tmp_path):
     store = Store(db_path=str(tmp_path / "test.db"))
     proposal_id = store.propose_crypto_trade(
@@ -150,6 +163,7 @@ def test_confirm_and_reject_tools_delegate_to_the_store(tmp_path):
     result = ConfirmCryptoTradeTool(store).run(proposal_id=proposal_id)
 
     assert "confirmed" in result
+    assert "fee cost" in result
     assert store.list_crypto_holdings("stable")[0].coin == "bitcoin"
 
 
@@ -182,3 +196,58 @@ def test_list_holdings_tool_reports_live_pnl(monkeypatch, tmp_path):
 
     assert "bitcoin" in result
     assert "+50.00%" in result  # (150 - 100) / 100 * 100
+
+
+# --- suggest_position_size (pure calculation, no mocking needed) ---
+
+def test_suggest_position_size_computes_fixed_fractional_sizing():
+    result = SuggestPositionSizeTool().run(
+        portfolio_value=10_000, entry_price=100, stop_loss_price=90, risk_pct=1
+    )
+    # risk_amount = 100, price_risk_per_unit = 10 -> position_size = 10 units, value = 1000
+    assert "100.00 at risk" in result
+    assert "Suggested size: 10" in result
+    assert "1,000.00 position value" in result
+
+
+def test_suggest_position_size_uses_default_risk_pct_of_one_percent():
+    result = SuggestPositionSizeTool().run(portfolio_value=10_000, entry_price=100, stop_loss_price=95)
+    assert "Risking 1.0%" in result
+
+
+def test_suggest_position_size_warns_when_position_exceeds_portfolio():
+    # Stop is 1% away from entry but risk_pct is 50% -> position value dwarfs the portfolio.
+    result = SuggestPositionSizeTool().run(
+        portfolio_value=1000, entry_price=100, stop_loss_price=99, risk_pct=50
+    )
+    assert "Note:" in result
+    assert "of the whole portfolio in one position" in result
+
+
+def test_suggest_position_size_rejects_non_positive_portfolio_value():
+    assert "portfolio_value must be positive" in SuggestPositionSizeTool().run(
+        portfolio_value=0, entry_price=100, stop_loss_price=90
+    )
+
+
+def test_suggest_position_size_rejects_non_positive_prices():
+    assert "must be positive" in SuggestPositionSizeTool().run(
+        portfolio_value=1000, entry_price=0, stop_loss_price=90
+    )
+    assert "must be positive" in SuggestPositionSizeTool().run(
+        portfolio_value=1000, entry_price=100, stop_loss_price=-5
+    )
+
+
+def test_suggest_position_size_rejects_equal_entry_and_stop():
+    result = SuggestPositionSizeTool().run(portfolio_value=1000, entry_price=100, stop_loss_price=100)
+    assert "can't be equal" in result
+
+
+def test_suggest_position_size_rejects_out_of_range_risk_pct():
+    assert "risk_pct must be between" in SuggestPositionSizeTool().run(
+        portfolio_value=1000, entry_price=100, stop_loss_price=90, risk_pct=0
+    )
+    assert "risk_pct must be between" in SuggestPositionSizeTool().run(
+        portfolio_value=1000, entry_price=100, stop_loss_price=90, risk_pct=150
+    )

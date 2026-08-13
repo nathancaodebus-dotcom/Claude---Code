@@ -119,6 +119,7 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
             ListPendingCryptoTradesTool,
             ProposeCryptoTradeTool,
             RejectCryptoTradeTool,
+            SuggestPositionSizeTool,
         )
 
         registry.register(GetCryptoMarketDataTool())
@@ -129,6 +130,7 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(RejectCryptoTradeTool(store))
         registry.register(ListPendingCryptoTradesTool(store))
         registry.register(ListCryptoHoldingsTool(store))
+        registry.register(SuggestPositionSizeTool())
 
     _register_safe(registry, "crypto trading (research + paper portfolio)", _crypto_trading)
 
