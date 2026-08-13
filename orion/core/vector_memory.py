@@ -79,20 +79,35 @@ class VectorMemory:
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
         self._model = SentenceTransformer(_MODEL_NAME)
+        # search() used to re-fetch every row from SQLite and re-decode each
+        # embedding's raw bytes back into an array on every single call, even
+        # for two searches back to back with nothing indexed in between —
+        # all of that work is redone from scratch, unnecessarily, every time.
+        # Cached in memory instead (this class already assumes one connection
+        # per process, same as core/memory.py/core/store.py), populated
+        # lazily on first use and kept in sync by appending in index()
+        # rather than re-querying.
+        self._rows_cache: list[tuple[str, str, bytes]] | None = None
 
     def _embed(self, text: str) -> np.ndarray:
         return self._model.encode(text, normalize_embeddings=True)
 
     def index(self, text: str, source: str) -> None:
         embedding = self._embed(text)
+        blob = embedding.astype(np.float32).tobytes()
         self._conn.execute(
             "INSERT INTO memory_embeddings (text, source, embedding, created_at) VALUES (?, ?, ?, ?)",
-            (text, source, embedding.astype(np.float32).tobytes(), time.time()),
+            (text, source, blob, time.time()),
         )
         self._conn.commit()
+        if self._rows_cache is not None:
+            self._rows_cache.append((text, source, blob))
 
     def search(self, query: str, top_k: int = 5) -> list[MemoryMatch]:
-        rows = self._conn.execute("SELECT text, source, embedding FROM memory_embeddings").fetchall()
-        if not rows:
+        if self._rows_cache is None:
+            self._rows_cache = self._conn.execute(
+                "SELECT text, source, embedding FROM memory_embeddings"
+            ).fetchall()
+        if not self._rows_cache:
             return []
-        return _top_k_matches(self._embed(query), rows, top_k)
+        return _top_k_matches(self._embed(query), self._rows_cache, top_k)

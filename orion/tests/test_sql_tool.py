@@ -1,4 +1,5 @@
 import sqlite3
+import time
 
 import pytest
 
@@ -52,3 +53,25 @@ def test_no_connection_configured():
 def test_empty_result(db):
     result = RunSqlQueryTool().run(query="SELECT * FROM users WHERE id = 999")
     assert "no rows" in result
+
+
+def test_query_timeout_returns_promptly_instead_of_waiting_for_a_hung_query(db, monkeypatch):
+    """A missing WHERE/LIMIT (or a genuinely stuck connection) used to be
+    able to hang this tool call indefinitely — _execute now runs on a
+    daemon thread with a timeout, so a slow query fails fast instead of
+    freezing the turn. Faked here rather than actually blocking a real
+    query for the test's own sake; the tool call should return well before
+    the fake query's full (2s) duration, not after it."""
+
+    def slow_execute(self, query, max_rows):
+        time.sleep(2)
+        return "should never be returned"
+
+    monkeypatch.setattr(RunSqlQueryTool, "_execute", slow_execute)
+
+    start = time.monotonic()
+    result = RunSqlQueryTool().run(query="SELECT * FROM users", timeout_seconds=1)
+    elapsed = time.monotonic() - start
+
+    assert "timed out" in result.lower()
+    assert elapsed < 1.5, f"took {elapsed:.2f}s — doesn't look like it actually timed out early"

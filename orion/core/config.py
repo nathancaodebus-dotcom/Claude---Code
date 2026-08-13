@@ -44,6 +44,16 @@ class Config:
     # a trail to diagnose after the fact instead of only whatever was left in
     # a terminal that's since closed.
     log_path: str = field(default_factory=lambda: _get("ORION_LOG_PATH", "./orion.log"))
+    # core/outputs_cleanup.py: every generated file (images, documents,
+    # videos, ...) lands under outputs/ and nothing ever removed an old one
+    # — 0 (default) means disabled, since auto-deleting a user's generated
+    # files without being asked isn't something this project does unprompted.
+    # Set to a day count to opt in to an automatic sweep at each interface's
+    # startup; the clean_old_outputs tool works either way, with an explicit
+    # days argument overriding this default for a one-off manual cleanup.
+    outputs_retention_days: int = field(
+        default_factory=lambda: int(_get("ORION_OUTPUTS_RETENTION_DAYS", "0"))
+    )
     # interfaces/web/app.py — local HUD-styled browser UI.
     web_port: int = field(default_factory=lambda: int(_get("ORION_WEB_PORT", "8420")))
 

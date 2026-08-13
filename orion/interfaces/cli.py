@@ -2,12 +2,15 @@
 Telegram or the voice loop, and works identically on the Pi or a laptop."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from core import attachments
 from core.agent import Agent
 from core.config import config
 from core.health_monitor import HealthMonitor
 from core.logging_setup import configure_logging
 from core.memory import Memory
+from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
 from core.store import Store
 from tools.registry_builder import build_registry
@@ -19,6 +22,10 @@ def main() -> None:
     configure_logging()
     if not config.anthropic_api_key:
         raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
+
+    # No-op unless ORION_OUTPUTS_RETENTION_DAYS is set — see
+    # core/outputs_cleanup.py for why this is opt-in.
+    purge_old_outputs(Path("outputs"), config.outputs_retention_days)
 
     memory = Memory()
     store = Store()

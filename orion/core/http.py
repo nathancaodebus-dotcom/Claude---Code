@@ -26,6 +26,8 @@ as an independent request anyway.
 """
 from __future__ import annotations
 
+import atexit
+
 import httpx
 
 # Limits are generous relative to what a single personal-assistant process
@@ -38,3 +40,9 @@ client = httpx.Client(
     timeout=10.0,
     limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
 )
+# Never explicitly closed otherwise — every interface here is a long-running
+# process (a chat loop, a bot, a web server) with no single natural place to
+# call client.close(), so pooled sockets would otherwise just be left open
+# until the OS reclaims them at process exit. Not incorrect, just not clean;
+# atexit makes sure they're actually released as part of a normal shutdown.
+atexit.register(client.close)

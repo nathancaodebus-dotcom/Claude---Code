@@ -28,11 +28,13 @@ Setup (see README §11 for the full walkthrough):
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 from core.agent import Agent
 from core.config import config
 from core.logging_setup import configure_logging
 from core.memory import Memory
+from core.outputs_cleanup import purge_old_outputs
 from core.store import Store
 from tools.registry_builder import build_registry
 
@@ -100,6 +102,8 @@ def main() -> None:
     configure_logging()
     if not config.anthropic_api_key:
         raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
+
+    purge_old_outputs(Path("outputs"), config.outputs_retention_days)
 
     memory = Memory()
     store = Store()

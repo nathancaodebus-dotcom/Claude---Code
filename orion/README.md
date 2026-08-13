@@ -1007,7 +1007,9 @@ already done to close that gap as much as it can be:
   request. They now share one persistent `httpx.Client` (`core/http.py`),
   so a repeat call to a host already used this session (Shopify's API
   during one longer store-management conversation, say) reuses an existing
-  connection instead of paying that handshake again.
+  connection instead of paying that handshake again. Registered with
+  `atexit` to close cleanly on shutdown rather than just being left for the
+  OS to reclaim.
 - **Telegram replies no longer block reminders/health alerts**: the bot's
   reply generation, voice transcription, and TTS encoding are blocking
   calls, often several seconds long — running them directly inside an
@@ -1044,6 +1046,33 @@ already done to close that gap as much as it can be:
   everything already expired in one pass, so memory stays bounded by live
   entries, not all-time-ever-cached ones — matters over a long-running
   process with heavy, varied lookup traffic.
+- **`outputs/` can't grow forever unnoticed**: every generated file (images,
+  documents, videos, ...) landed under `outputs/` and nothing ever removed
+  an old one. Off by default — auto-deleting a user's files without being
+  asked isn't something this project does unprompted — but setting
+  `ORION_OUTPUTS_RETENTION_DAYS` opts into an automatic sweep at each
+  interface's startup (`core/outputs_cleanup.py`), and the `clean_old_outputs`
+  tool covers an explicit one-off cleanup either way. `outputs/websites/` is
+  never touched by either path — those are live, redeployable site
+  projects (§13), not disposable generated one-offs.
+- **Semantic memory search doesn't re-fetch everything from disk on every
+  call**: `core/vector_memory.py`'s `search()` used to re-query every row
+  from SQLite and re-decode each embedding's raw bytes from scratch on
+  every single call, even for two searches back to back with nothing newly
+  indexed in between. Rows are now cached in memory after the first search
+  and kept in sync by appending in `index()`, instead of re-querying —
+  matters most for corrections (§ "How Orion learns") and notes/documents
+  indexed into semantic memory over a long-running session.
+- **A hung SQL query can't freeze `run_sql_query` indefinitely**: a missing
+  `WHERE`/`LIMIT` (or a genuinely stuck connection) used to be able to hang
+  the tool call — and by extension that turn — for as long as the query
+  took, with no way back short of killing the process. It now runs on a
+  daemon thread with a `timeout_seconds` cap (default 30s): the tool call
+  fails fast with a clear message past that point rather than hanging.
+  There's no portable, dialect-safe way to actually cancel an in-flight
+  query from another thread, so the query itself may keep running against
+  the database in the background — but Orion is no longer stuck waiting on
+  it.
 
 - **WAL mode on every SQLite store**: `core/memory.py`, `core/store.py`,
   and `core/vector_memory.py` share one `orion.db` file across several

@@ -32,6 +32,7 @@ from core.config import config
 from core.health_monitor import pending_alerts
 from core.logging_setup import configure_logging
 from core.memory import Memory
+from core.outputs_cleanup import purge_old_outputs
 from core.store import Store
 from core.tts import Synthesizer, get_synthesizer_if_available
 from tools.registry_builder import build_registry
@@ -190,6 +191,8 @@ def main() -> None:
         raise SystemExit(
             "TELEGRAM_ALLOWED_USER_ID is not set. Message @userinfobot to get your id."
         )
+
+    purge_old_outputs(Path("outputs"), config.outputs_retention_days)
 
     memory = Memory()
     store = Store()

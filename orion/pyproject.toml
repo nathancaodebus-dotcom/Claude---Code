@@ -1,2 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Explicit rather than relying on pytest-asyncio's own default: only tests/
+# test_telegram_handlers_async.py actually needs it (interfaces/telegram_bot.py's
+# asyncio.to_thread handlers), everything else in the suite is synchronous.
+asyncio_mode = "strict"

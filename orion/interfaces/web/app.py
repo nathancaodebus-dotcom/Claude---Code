@@ -31,6 +31,7 @@ from core.config import config
 from core.health_monitor import HealthMonitor
 from core.logging_setup import configure_logging
 from core.memory import Memory
+from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
 from core.store import Store
 from tools.registry_builder import build_registry
@@ -85,6 +86,7 @@ def _chat_lock(session_id: str) -> threading.Lock:
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    purge_old_outputs(_OUTPUTS_DIR, config.outputs_retention_days)
     _scheduler.start()
     _health_monitor.start()
     yield

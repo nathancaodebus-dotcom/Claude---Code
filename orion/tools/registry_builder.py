@@ -543,6 +543,11 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
     registry.register(LogCorrectionTool(memory, vector_memory))
     registry.register(ListCorrectionsTool(memory))
 
+    # Outputs cleanup — no third-party dependency, always available.
+    from tools.outputs_cleanup_tool import CleanOldOutputsTool
+
+    registry.register(CleanOldOutputsTool())
+
     if config.google_credentials_path:
         def _google() -> None:
             from tools.calendar_tool import CreateEventTool, ListEventsTool
