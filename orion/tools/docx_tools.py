@@ -13,6 +13,7 @@ from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
 
 class CreateWordDocumentTool(Tool):
+    requires_network = False
     name = "create_word_document"
     description = (
         "Create a new Word document with a title and a list of paragraphs (or headings). "
@@ -51,6 +52,7 @@ class CreateWordDocumentTool(Tool):
 
 
 class AppendToWordDocumentTool(Tool):
+    requires_network = False
     name = "append_to_word_document"
     description = "Append a paragraph or heading to an existing Word document."
     input_schema = {
@@ -92,6 +94,7 @@ class AppendToWordDocumentTool(Tool):
 
 
 class AddTableToWordDocumentTool(Tool):
+    requires_network = False
     name = "add_table_to_word_document"
     description = "Append a table to an existing Word document, with a header row and data rows."
     input_schema = {
@@ -133,6 +136,7 @@ class AddTableToWordDocumentTool(Tool):
 
 
 class AddImageToWordDocumentTool(Tool):
+    requires_network = False
     name = "add_image_to_word_document"
     description = (
         "Insert an image (e.g. one made with generate_image or edit_image) into an existing "
@@ -168,6 +172,7 @@ class AddImageToWordDocumentTool(Tool):
 
 
 class ListWordDocumentsTool(Tool):
+    requires_network = False
     name = "list_word_documents"
     description = "List all Word documents Orion has created."
     input_schema = {"type": "object", "properties": {}}

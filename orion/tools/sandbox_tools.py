@@ -77,6 +77,7 @@ def _run_in_subprocess(code: str, timeout_seconds: int) -> str:
 
 
 class RunPythonSnippetTool(Tool):
+    requires_network = False
     name = "run_python_snippet"
     description = (
         "Write and run a short Python script for a one-off task (e.g. renaming files, "

@@ -18,6 +18,14 @@ class Tool(ABC):
     description: str
     input_schema: dict[str, Any]
 
+    # Defaults to True (unsafe) deliberately: a tool has to be reviewed and
+    # explicitly marked False to be exposed to core/offline_agent.py's local
+    # fallback model, rather than every tool being offline-eligible unless
+    # someone remembers to opt it out. Only set this False on a tool whose
+    # run() makes no network call under any input — see core/offline_agent.py
+    # for what actually happens with this flag.
+    requires_network: bool = True
+
     @abstractmethod
     def run(self, **kwargs: Any) -> str:
         """Execute the tool and return a string result to feed back to the model."""
@@ -28,6 +36,16 @@ class Tool(ABC):
             "name": self.name,
             "description": self.description,
             "input_schema": self.input_schema,
+        }
+
+    def to_ollama_schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.input_schema,
+            },
         }
 
 
@@ -48,6 +66,9 @@ class ToolRegistry:
 
     def anthropic_schemas(self) -> list[dict[str, Any]]:
         return [t.to_anthropic_schema() for t in self._tools.values()]
+
+    def offline_safe_tools(self) -> list[Tool]:
+        return [t for t in self._tools.values() if not t.requires_network]
 
     def dispatch(self, name: str, kwargs: dict[str, Any]) -> str:
         tool = self.get(name)

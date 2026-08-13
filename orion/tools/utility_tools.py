@@ -63,6 +63,7 @@ _WEIGHT_TO_GRAMS = {"mg": 0.001, "g": 1.0, "kg": 1000.0, "oz": 28.3495, "lb": 45
 
 
 class CalculatorTool(Tool):
+    requires_network = False
     name = "calculate"
     description = (
         "Evaluate a math expression, e.g. '12 * (3 + 4)', 'sqrt(2)', '2**10'. "
@@ -80,6 +81,7 @@ class CalculatorTool(Tool):
 
 
 class UnitConversionTool(Tool):
+    requires_network = False
     name = "convert_units"
     description = (
         "Convert a value between units of length (mm, cm, m, km, in, ft, yd, mi), "
@@ -116,6 +118,7 @@ class UnitConversionTool(Tool):
 
 
 class GeneratePasswordTool(Tool):
+    requires_network = False
     name = "generate_password"
     description = "Generate a cryptographically random password."
     input_schema = {
@@ -135,6 +138,7 @@ class GeneratePasswordTool(Tool):
 
 
 class GenerateQrCodeTool(Tool):
+    requires_network = False
     name = "generate_qr_code"
     description = "Generate a QR code image encoding the given text (a URL, wifi password, anything)."
     input_schema = {

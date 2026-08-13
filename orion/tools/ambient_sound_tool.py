@@ -53,6 +53,7 @@ _GENERATORS = {"white": _white_noise, "pink": _pink_noise, "brown": _brown_noise
 
 
 class GenerateAmbientSoundTool(Tool):
+    requires_network = False
     name = "generate_ambient_sound"
     description = "Generate white, pink, or brown noise for focus/sleep, as a playable audio file."
     input_schema = {

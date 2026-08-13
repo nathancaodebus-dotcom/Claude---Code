@@ -9,6 +9,7 @@ from tools.base import Tool
 
 
 class ReadTextFileTool(Tool):
+    requires_network = False
     name = "read_text_file"
     description = "Read a local text or code file by path (source code, config, logs, plain text, markdown, etc.)."
     input_schema = {

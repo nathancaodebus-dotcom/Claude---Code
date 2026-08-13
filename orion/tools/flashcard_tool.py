@@ -44,6 +44,7 @@ _CLOZE_MODEL = genanki.Model(
 
 
 class GenerateFlashcardsTool(Tool):
+    requires_network = False
     name = "generate_flashcards"
     description = (
         "Generate an Anki-importable flashcard deck (.apkg) from a list of question/answer pairs "
@@ -81,6 +82,7 @@ class GenerateFlashcardsTool(Tool):
 
 
 class GenerateClozeFlashcardsTool(Tool):
+    requires_network = False
     name = "generate_cloze_flashcards"
     description = (
         "Generate an Anki-importable cloze-deletion deck (.apkg) — cards where a blank is hidden "
@@ -125,6 +127,7 @@ class GenerateClozeFlashcardsTool(Tool):
 
 
 class GenerateQuizTool(Tool):
+    requires_network = False
     name = "generate_quiz"
     description = "Format a set of quiz questions (with answers) as plain text, e.g. for self-testing on a topic."
     input_schema = {

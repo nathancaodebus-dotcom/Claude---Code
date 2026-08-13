@@ -37,6 +37,7 @@ def _add_slide(prs: Presentation, title: str, bullets: list[str]) -> None:
 
 
 class CreatePresentationTool(Tool):
+    requires_network = False
     name = "create_presentation"
     description = (
         "Create a new PowerPoint presentation with a title slide and a list of content "
@@ -94,6 +95,7 @@ class CreatePresentationTool(Tool):
 
 
 class AddSlideTool(Tool):
+    requires_network = False
     name = "add_slide"
     description = "Add a new content slide (title + bullet points) to an existing presentation."
     input_schema = {
@@ -123,6 +125,7 @@ class AddSlideTool(Tool):
 
 
 class EditSlideTool(Tool):
+    requires_network = False
     name = "edit_slide"
     description = (
         "Edit an existing slide's title and/or bullet points by its 1-based index "
@@ -175,6 +178,7 @@ class EditSlideTool(Tool):
 
 
 class DeleteSlideTool(Tool):
+    requires_network = False
     name = "delete_slide"
     description = "Delete a slide from a presentation by its 1-based index."
     input_schema = {
@@ -210,6 +214,7 @@ class DeleteSlideTool(Tool):
 
 
 class ListSlidesTool(Tool):
+    requires_network = False
     name = "list_slides"
     description = "List the slides in a presentation (index and title)."
     input_schema = {
@@ -235,6 +240,7 @@ class ListSlidesTool(Tool):
 
 
 class AddImageToSlideTool(Tool):
+    requires_network = False
     name = "add_image_to_slide"
     description = (
         "Insert an image (e.g. one made with generate_image or edit_image) into an existing "
@@ -289,6 +295,7 @@ class AddImageToSlideTool(Tool):
 
 
 class SetSlideNotesTool(Tool):
+    requires_network = False
     name = "set_slide_notes"
     description = "Set the speaker notes for a slide, by its 1-based index. Replaces any existing notes."
     input_schema = {
@@ -323,6 +330,7 @@ class SetSlideNotesTool(Tool):
 
 
 class ListPresentationsTool(Tool):
+    requires_network = False
     name = "list_presentations"
     description = "List all presentations Orion has created."
     input_schema = {"type": "object", "properties": {}}

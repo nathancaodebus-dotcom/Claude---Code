@@ -33,6 +33,7 @@ def _cpu_temperature_c() -> float | None:
 
 
 class SystemStatusTool(Tool):
+    requires_network = False
     name = "get_system_status"
     description = (
         "Get the health status of the machine Orion is running on: CPU usage/temperature, "
@@ -59,6 +60,7 @@ class SystemStatusTool(Tool):
 
 
 class ListFailedCommandsTool(Tool):
+    requires_network = False
     name = "list_failed_commands"
     description = (
         "List recent tool calls that failed (unknown tools, exceptions, expired API keys...). "
@@ -84,6 +86,7 @@ class ListFailedCommandsTool(Tool):
 
 
 class ListProcessesTool(Tool):
+    requires_network = False
     name = "list_top_processes"
     description = "List the top processes by CPU or memory usage, for spotting what's slowing the machine down."
     input_schema = {
@@ -115,6 +118,7 @@ class ListProcessesTool(Tool):
 
 
 class SetProcessPriorityTool(Tool):
+    requires_network = False
     name = "set_process_priority"
     description = "Lower or raise a process's scheduling priority (nice level) by its PID, to free up resources without killing it."
     input_schema = {

@@ -184,6 +184,7 @@ def _find_page(manifest: dict, slug: str) -> dict | None:
 
 
 class CreateWebsiteTool(Tool):
+    requires_network = False
     name = "create_website"
     description = (
         "Create a new static website (plain HTML/CSS, no build step) with one or more pages. "
@@ -254,6 +255,7 @@ class CreateWebsiteTool(Tool):
 
 
 class AddWebsitePageTool(Tool):
+    requires_network = False
     name = "add_website_page"
     description = "Add a new page to an existing website. Updates the nav on every page of the site."
     input_schema = {
@@ -289,6 +291,7 @@ class AddWebsitePageTool(Tool):
 
 
 class EditWebsitePageTool(Tool):
+    requires_network = False
     name = "edit_website_page"
     description = "Edit an existing page's title and/or content. Omit a field to leave it unchanged."
     input_schema = {
@@ -329,6 +332,7 @@ class EditWebsitePageTool(Tool):
 
 
 class DeleteWebsitePageTool(Tool):
+    requires_network = False
     name = "delete_website_page"
     description = "Delete a page from a website. Can't delete the last remaining page."
     input_schema = {
@@ -362,6 +366,7 @@ class DeleteWebsitePageTool(Tool):
 
 
 class AddWebsiteImageTool(Tool):
+    requires_network = False
     name = "add_website_image"
     description = (
         "Copy an image (e.g. one made with generate_image or edit_image) into a website's "
@@ -404,6 +409,7 @@ class AddWebsiteImageTool(Tool):
 
 
 class ListWebsitePagesTool(Tool):
+    requires_network = False
     name = "list_website_pages"
     description = "List the pages in a website (slug and title)."
     input_schema = {
@@ -425,6 +431,7 @@ class ListWebsitePagesTool(Tool):
 
 
 class ListWebsitesTool(Tool):
+    requires_network = False
     name = "list_websites"
     description = "List all websites Orion has created."
     input_schema = {"type": "object", "properties": {}}

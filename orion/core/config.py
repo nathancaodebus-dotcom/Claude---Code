@@ -63,6 +63,17 @@ class Config:
     # some cost to recognizing less common words/names. See README §7.
     whisper_model_size: str = field(default_factory=lambda: _get("WHISPER_MODEL_SIZE", "small"))
 
+    # Offline fallback (core/offline_agent.py): a local Ollama server Orion
+    # switches to automatically if a Claude call fails for a genuinely
+    # offline-shaped reason (no network, Anthropic outage, empty account
+    # balance) — never on its own initiative otherwise. Requires Ollama
+    # installed separately (ollama.com) with OLLAMA_MODEL already pulled
+    # (`ollama pull llama3.1:8b`); if Ollama isn't reachable at the
+    # configured host, Orion just behaves as it does today — no crash, no
+    # fallback, same as any other optional integration here. See README §7.
+    ollama_host: str = field(default_factory=lambda: _get("OLLAMA_HOST", "http://localhost:11434"))
+    ollama_model: str = field(default_factory=lambda: _get("OLLAMA_MODEL", "llama3.1:8b"))
+
     spotify_client_id: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_ID"))
     spotify_client_secret: str | None = field(default_factory=lambda: _get("SPOTIFY_CLIENT_SECRET"))
     spotify_redirect_uri: str = field(

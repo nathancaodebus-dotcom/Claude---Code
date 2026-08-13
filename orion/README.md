@@ -68,6 +68,7 @@ Around 90-160 tools depending on configuration, registered in
 | Vision | **analyze/critique a supplied image** (design mockups, screenshots, photos — no camera needed, works on any image file) |
 | Just for fun | coin flip, dice, 8-ball, quotes, jokes, song lyrics, YouTube transcripts/summaries |
 | **Briefings** | `morning_briefing`, `evening_debrief`, `prepare_meeting_briefing` |
+| **Offline fallback** *(§17, needs Ollama installed separately)* | automatic only — switches to a local model when Claude is genuinely unreachable (no connection, an outage, empty account balance), with a curated subset of tools that need no network; never on its own initiative, every reply says so plainly |
 
 Everything except Gmail/Calendar/Home Assistant/Spotify/YouTube/Chromecast/
 CalDAV/Todoist/TMDb works with zero extra setup — just the Anthropic API
@@ -723,6 +724,57 @@ unsupervised. Everything built here either reads data or takes a normal,
 expected, reversible forward action (shipping a paid order, updating a
 listing, restocking inventory, creating a discount) — nothing that
 un-does a sale a customer already completed.
+
+## 17. Offline fallback (local model via Ollama)
+
+Every interface (CLI, Telegram, voice) shares one `Agent`, which tries
+Claude first — always. Only if a Claude call fails for a specifically
+offline-shaped reason does it automatically switch to a local model
+instead:
+
+- No network connection (`APIConnectionError`)
+- Anthropic is rate-limiting or having an outage (`RateLimitError`,
+  `InternalServerError`)
+- The account is out of credit (the "Your credit balance is too low..."
+  error)
+
+It deliberately does **not** fall back on an authentication error or any
+other `BadRequestError` — those mean something is actually
+misconfigured (a bad API key, a malformed request), and silently
+switching to a much less capable local model would just hide the real
+bug instead of surfacing it. Every offline reply is prefixed with
+`[mode hors-ligne] ` so it's never ambiguous which "brain" answered.
+
+**This is a fallback, not a replacement.** An open-weight local model is
+meaningfully less reliable than Claude at multi-step tool orchestration,
+so this never becomes the default — it only activates automatically,
+only when Claude is genuinely unreachable, and only exposes a curated
+subset of tools that make no network call of their own (to-dos, notes,
+reminders, remembered facts, local documents/spreadsheets/presentations,
+local image/video edits, and similar — not Gmail, weather, Spotify, or
+anything else that needs a service Ollama can't reach either). If the
+user asks for something outside that set while offline, it says so
+plainly rather than guessing.
+
+Setup:
+
+1. Install [Ollama](https://ollama.com) separately (it's not a Python
+   dependency — a standalone local server).
+2. Pull a model once: `ollama pull llama3.1:8b` (needs ~5 GB free disk
+   and runs comfortably on 16 GB+ RAM; with 32 GB+ RAM, a larger model
+   like `qwen2.5:14b` is also viable — set `OLLAMA_MODEL` to match
+   whatever you pull).
+3. That's it — `OLLAMA_HOST` (default `http://localhost:11434`) and
+   `OLLAMA_MODEL` (default `llama3.1:8b`) are already set in
+   `.env.example`. If Ollama isn't installed or isn't running, Orion just
+   behaves exactly as it does today (a Claude failure surfaces as an
+   honest error instead of a fallback) — no crash, no extra setup
+   required to keep using Orion normally.
+
+Tools (`core/offline_agent.py`, `tools/base.py`'s `Tool.requires_network`
+flag): no new tools — this reuses the existing registry, filtered to
+whichever tools have been explicitly reviewed and marked safe for a model
+that can't reach the network at all.
 
 ## What's deferred (from the full integration wishlist)
 

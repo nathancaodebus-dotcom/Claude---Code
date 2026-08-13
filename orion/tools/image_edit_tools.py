@@ -58,6 +58,7 @@ def _load_font(size: int):
 
 
 class EditImageTool(Tool):
+    requires_network = False
     name = "edit_image"
     description = (
         "Apply one edit operation to an image: resize, crop, rotate, grayscale, sepia, invert, "
@@ -155,6 +156,7 @@ class EditImageTool(Tool):
 
 
 class AddTextToImageTool(Tool):
+    requires_network = False
     name = "add_text_to_image"
     description = "Overlay text on an image — a caption, watermark, or meme-style label."
     input_schema = {
@@ -212,6 +214,7 @@ class AddTextToImageTool(Tool):
 
 
 class CreateImageCollageTool(Tool):
+    requires_network = False
     name = "create_image_collage"
     description = "Combine multiple images into a single grid collage, in the order given."
     input_schema = {

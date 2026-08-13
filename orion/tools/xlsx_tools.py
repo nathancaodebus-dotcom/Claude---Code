@@ -12,6 +12,7 @@ from tools.document_utils import kind_collision_warning, resolve_path, slugify
 
 
 class CreateSpreadsheetTool(Tool):
+    requires_network = False
     name = "create_spreadsheet"
     description = (
         "Create a new Excel spreadsheet with a header row and data rows. Returns the "
@@ -56,6 +57,7 @@ class CreateSpreadsheetTool(Tool):
 
 
 class AddSpreadsheetRowTool(Tool):
+    requires_network = False
     name = "add_spreadsheet_row"
     description = "Append a row of values to an existing spreadsheet."
     input_schema = {
@@ -85,6 +87,7 @@ class AddSpreadsheetRowTool(Tool):
 
 
 class SetSpreadsheetFormulaTool(Tool):
+    requires_network = False
     name = "set_spreadsheet_formula"
     description = (
         "Set a cell to an Excel formula, e.g. cell='C2', formula='=A2*B2' or "
@@ -118,6 +121,7 @@ class SetSpreadsheetFormulaTool(Tool):
 
 
 class AddSpreadsheetChartTool(Tool):
+    requires_network = False
     name = "add_spreadsheet_chart"
     description = "Add a bar, line, or pie chart to a spreadsheet, plotting a range of data against category labels."
     input_schema = {
@@ -170,6 +174,7 @@ class AddSpreadsheetChartTool(Tool):
 
 
 class FormatSpreadsheetCellsTool(Tool):
+    requires_network = False
     name = "format_spreadsheet_cells"
     description = "Apply bold, a text color, a fill (background) color, and/or a number format to a range of cells."
     input_schema = {
@@ -224,6 +229,7 @@ class FormatSpreadsheetCellsTool(Tool):
 
 
 class AddSpreadsheetSheetTool(Tool):
+    requires_network = False
     name = "add_spreadsheet_sheet"
     description = "Add a new sheet (tab) to an existing spreadsheet, optionally with a header row."
     input_schema = {
@@ -259,6 +265,7 @@ class AddSpreadsheetSheetTool(Tool):
 
 
 class ListSpreadsheetsTool(Tool):
+    requires_network = False
     name = "list_spreadsheets"
     description = "List all spreadsheets Orion has created."
     input_schema = {"type": "object", "properties": {}}

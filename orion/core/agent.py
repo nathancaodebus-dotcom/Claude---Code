@@ -13,6 +13,7 @@ import anthropic
 from core.config import config
 from core.consolidation import Consolidator, make_default_summarizer
 from core.memory import Memory
+from core.offline_agent import OfflineAgent, is_ollama_reachable
 from tools.base import ToolRegistry
 
 # Static instructions only — never changes across users, sessions, or turns,
@@ -66,6 +67,23 @@ MAX_TOOL_ITERATIONS = 8
 _SENTENCE_END_RE = re.compile(r"[.!?…]+(?:\s+|$)")
 
 
+def _is_offline_fallback_eligible(exc: Exception) -> bool:
+    """True for the specific shapes of failure that actually mean 'Claude
+    is unreachable right now' — a dropped connection, a rate limit, an
+    Anthropic-side outage, or (checked by message, since the SDK has no
+    dedicated exception type for it) an empty account balance. Deliberately
+    excludes AuthenticationError/PermissionDeniedError and anything else:
+    a bad API key or a real misconfiguration is a bug the user needs to
+    see and fix, not something to silently paper over with a much less
+    capable local model."""
+    if isinstance(exc, (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError)):
+        return True
+    if isinstance(exc, anthropic.BadRequestError):
+        message = str(exc).lower()
+        return "credit balance" in message or "insufficient" in message
+    return False
+
+
 class Agent:
     def __init__(self, memory: Memory, tools: ToolRegistry):
         self._memory = memory
@@ -74,6 +92,10 @@ class Agent:
         self._consolidator = Consolidator(
             memory, make_default_summarizer(self._client, config.fast_model)
         )
+        # Constructing this does no I/O (no import, no network call) — it's
+        # only ever actually used, and only after checking is_ollama_reachable(),
+        # inside _respond_via_offline_fallback below.
+        self._offline = OfflineAgent(tools, config.ollama_host, config.ollama_model)
 
     def _system_blocks(self, session_id: str) -> list[dict[str, Any]]:
         static_text = SYSTEM_PROMPT_STATIC.format(name=config.assistant_name)
@@ -124,6 +146,47 @@ class Agent:
             {"role": m.role, "content": m.content} for m in self._memory.history(session_id)
         ]
 
+        try:
+            final_text = self._respond_via_claude(session_id, messages, on_sentence)
+        except Exception as exc:
+            if not _is_offline_fallback_eligible(exc):
+                raise
+            final_text = self._respond_via_offline_fallback(user_message, on_sentence)
+
+        self._memory.append(session_id, "assistant", final_text)
+        # maybe_consolidate is a no-op almost every turn (a cheap row count
+        # check) but, once a session crosses CONSOLIDATE_THRESHOLD messages,
+        # makes a full extra Claude call to rewrite the summary — running
+        # that inline would silently tack an entire second API round trip
+        # onto whichever response happens to cross the threshold. Memory's
+        # SQLite connections are already opened with check_same_thread=False
+        # for exactly this kind of cross-thread use, so it's safe to fire
+        # this in the background and return the user's answer immediately.
+        threading.Thread(
+            target=self._consolidator.maybe_consolidate, args=(session_id,), daemon=True
+        ).start()
+        return final_text
+
+    def _respond_via_offline_fallback(
+        self, user_message: str, on_sentence: Callable[[str], None] | None
+    ) -> str:
+        if not is_ollama_reachable(config.ollama_host):
+            return (
+                "I can't reach Claude right now (no connection, an outage, or the account may be "
+                f"out of credit) — and the offline fallback isn't available either, no Ollama server "
+                f"found at {config.ollama_host}. See README §7 to set one up."
+            )
+        reply = self._offline.respond(user_message)
+        if on_sentence is not None:
+            on_sentence(reply)
+        return reply
+
+    def _respond_via_claude(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        on_sentence: Callable[[str], None] | None,
+    ) -> str:
         final_text = ""
         for _ in range(MAX_TOOL_ITERATIONS):
             buffer = ""
@@ -173,16 +236,4 @@ class Agent:
                 )
             messages.append({"role": "user", "content": tool_results})
 
-        self._memory.append(session_id, "assistant", final_text)
-        # maybe_consolidate is a no-op almost every turn (a cheap row count
-        # check) but, once a session crosses CONSOLIDATE_THRESHOLD messages,
-        # makes a full extra Claude call to rewrite the summary — running
-        # that inline would silently tack an entire second API round trip
-        # onto whichever response happens to cross the threshold. Memory's
-        # SQLite connections are already opened with check_same_thread=False
-        # for exactly this kind of cross-thread use, so it's safe to fire
-        # this in the background and return the user's answer immediately.
-        threading.Thread(
-            target=self._consolidator.maybe_consolidate, args=(session_id,), daemon=True
-        ).start()
         return final_text

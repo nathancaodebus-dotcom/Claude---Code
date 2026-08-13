@@ -19,6 +19,7 @@ _CHART_BUILDERS = {
 
 
 class GenerateChartTool(Tool):
+    requires_network = False
     name = "generate_chart"
     description = (
         "Generate an interactive chart (bar, line, scatter, pie, or histogram) from labeled data "

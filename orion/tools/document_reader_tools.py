@@ -12,6 +12,7 @@ from tools.base import Tool
 
 
 class ReadPdfTool(Tool):
+    requires_network = False
     name = "read_pdf"
     description = "Extract text from a PDF file by its local path, for summarizing or answering questions about it."
     input_schema = {
@@ -32,6 +33,7 @@ class ReadPdfTool(Tool):
 
 
 class ReadWordDocumentTool(Tool):
+    requires_network = False
     name = "read_word_document"
     description = "Extract text from an existing Word document (.docx) by its local path."
     input_schema = {

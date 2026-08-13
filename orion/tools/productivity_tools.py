@@ -30,6 +30,7 @@ def parse_duration(text: str) -> int:
 # --- Todos ---
 
 class AddTodoTool(Tool):
+    requires_network = False
     name = "add_todo"
     description = "Add an item to the user's to-do list."
     input_schema = {
@@ -47,6 +48,7 @@ class AddTodoTool(Tool):
 
 
 class ListTodosTool(Tool):
+    requires_network = False
     name = "list_todos"
     description = "List the user's to-do items. By default only shows items not yet done."
     input_schema = {
@@ -65,6 +67,7 @@ class ListTodosTool(Tool):
 
 
 class CompleteTodoTool(Tool):
+    requires_network = False
     name = "complete_todo"
     description = "Mark a to-do item as done, by its id (from list_todos)."
     input_schema = {
@@ -84,6 +87,7 @@ class CompleteTodoTool(Tool):
 # --- Notes ---
 
 class AddNoteTool(Tool):
+    requires_network = False
     name = "add_note"
     description = "Save a free-form note for later (an idea, something to remember, a snippet)."
     input_schema = {
@@ -101,6 +105,7 @@ class AddNoteTool(Tool):
 
 
 class ListNotesTool(Tool):
+    requires_network = False
     name = "list_notes"
     description = "List saved notes, optionally filtered by a search substring."
     input_schema = {
@@ -123,6 +128,7 @@ class ListNotesTool(Tool):
 # --- Shopping list ---
 
 class AddShoppingItemTool(Tool):
+    requires_network = False
     name = "add_shopping_item"
     description = "Add an item to the shopping list."
     input_schema = {
@@ -140,6 +146,7 @@ class AddShoppingItemTool(Tool):
 
 
 class ListShoppingListTool(Tool):
+    requires_network = False
     name = "list_shopping_list"
     description = "List everything currently on the shopping list."
     input_schema = {"type": "object", "properties": {}}
@@ -155,6 +162,7 @@ class ListShoppingListTool(Tool):
 
 
 class ClearShoppingListTool(Tool):
+    requires_network = False
     name = "clear_shopping_list"
     description = "Clear the entire shopping list, e.g. after the user has gone shopping."
     input_schema = {"type": "object", "properties": {}}
@@ -170,6 +178,7 @@ class ClearShoppingListTool(Tool):
 # --- Reminders / timers ---
 
 class SetReminderTool(Tool):
+    requires_network = False
     name = "set_reminder"
     description = (
         "Set a reminder or timer that will notify the user later. Provide either 'in' "
@@ -204,6 +213,7 @@ class SetReminderTool(Tool):
 
 
 class ListRemindersTool(Tool):
+    requires_network = False
     name = "list_reminders"
     description = "List all pending (not yet delivered) reminders and timers."
     input_schema = {"type": "object", "properties": {}}
@@ -221,6 +231,7 @@ class ListRemindersTool(Tool):
 
 
 class CancelReminderTool(Tool):
+    requires_network = False
     name = "cancel_reminder"
     description = "Cancel a pending reminder or timer by its id (from list_reminders)."
     input_schema = {

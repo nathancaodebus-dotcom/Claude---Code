@@ -48,6 +48,7 @@ def _run_ffmpeg(args: list[str]) -> str | None:
 
 
 class TrimVideoTool(Tool):
+    requires_network = False
     name = "trim_video"
     description = "Cut a video to a specific time range, re-encoded into a clean standalone clip."
     input_schema = {
@@ -75,6 +76,7 @@ class TrimVideoTool(Tool):
 
 
 class ConcatenateVideosTool(Tool):
+    requires_network = False
     name = "concatenate_videos"
     description = (
         "Join multiple video files into one, in the given order. Re-encodes for reliability, so "
@@ -117,6 +119,7 @@ class ConcatenateVideosTool(Tool):
 
 
 class ExtractAudioFromVideoTool(Tool):
+    requires_network = False
     name = "extract_audio_from_video"
     description = "Extract a video's audio track as a standalone MP3 file."
     input_schema = {
@@ -137,6 +140,7 @@ class ExtractAudioFromVideoTool(Tool):
 
 
 class AddAudioToVideoTool(Tool):
+    requires_network = False
     name = "add_audio_to_video"
     description = "Replace a video's audio track with a different audio file (background music, a voiceover, ...)."
     input_schema = {
@@ -170,6 +174,7 @@ class AddAudioToVideoTool(Tool):
 
 
 class ConvertVideoFormatTool(Tool):
+    requires_network = False
     name = "convert_video_format"
     description = "Convert a video to a different container/format, e.g. .mov to .mp4."
     input_schema = {
@@ -194,6 +199,7 @@ class ConvertVideoFormatTool(Tool):
 
 
 class AddWatermarkToVideoTool(Tool):
+    requires_network = False
     name = "add_watermark_to_video"
     description = "Overlay an image (a logo or watermark) onto a video, in a corner or centered."
     input_schema = {
@@ -235,6 +241,7 @@ class AddWatermarkToVideoTool(Tool):
 
 
 class ChangeVideoSpeedTool(Tool):
+    requires_network = False
     name = "change_video_speed"
     description = "Speed up or slow down a video (and its audio pitch stays natural), e.g. 2.0 for double speed, 0.5 for half speed."
     input_schema = {
@@ -270,6 +277,7 @@ class ChangeVideoSpeedTool(Tool):
 
 
 class ExtractVideoFrameTool(Tool):
+    requires_network = False
     name = "extract_video_frame"
     description = "Grab a single frame from a video as a still image (e.g. for a thumbnail)."
     input_schema = {
@@ -294,6 +302,7 @@ class ExtractVideoFrameTool(Tool):
 
 
 class AddCaptionToVideoTool(Tool):
+    requires_network = False
     name = "add_caption_to_video"
     description = "Burn a text caption permanently onto a video (not a toggleable subtitle track)."
     input_schema = {

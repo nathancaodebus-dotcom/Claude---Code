@@ -8,6 +8,9 @@ from __future__ import annotations
 import threading
 import time
 
+import anthropic
+import httpx
+
 from core.agent import Agent
 from core.memory import Memory
 from tools.base import Tool, ToolRegistry
@@ -61,7 +64,10 @@ class _FakeMessagesAPI:
 
     def stream(self, **kwargs):
         self.stream_calls.append(kwargs)
-        deltas, final_message = self._turns.pop(0)
+        turn = self._turns.pop(0)
+        if isinstance(turn, Exception):
+            raise turn
+        deltas, final_message = turn
         return _FakeStreamContext(deltas, final_message)
 
 
@@ -207,3 +213,118 @@ def test_cached_tool_schemas_handles_empty_registry():
     agent, _ = _make_agent([], ToolRegistry())
 
     assert agent._cached_tool_schemas() == []
+
+
+# --- offline fallback ---
+
+
+def _fake_httpx_request() -> httpx.Request:
+    return httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+def _fake_httpx_response(status_code: int) -> httpx.Response:
+    return httpx.Response(status_code, request=_fake_httpx_request())
+
+
+class _FakeOfflineAgent:
+    def __init__(self, reply: str = "offline reply"):
+        self.reply = reply
+        self.calls: list[str] = []
+
+    def respond(self, user_message: str) -> str:
+        self.calls.append(user_message)
+        return self.reply
+
+
+def test_connection_error_falls_back_to_offline_agent(monkeypatch):
+    agent, memory = _make_agent([anthropic.APIConnectionError(request=_fake_httpx_request())])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: True)
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    reply = agent.respond("s1", "hi")
+
+    assert reply == "offline reply"
+    assert agent._offline.calls == ["hi"]
+    assert [m.content for m in memory.history("s1")] == ["hi", "offline reply"]
+
+
+def test_rate_limit_error_falls_back_to_offline_agent(monkeypatch):
+    error = anthropic.RateLimitError("rate limited", response=_fake_httpx_response(429), body=None)
+    agent, _ = _make_agent([error])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: True)
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    assert agent.respond("s1", "hi") == "offline reply"
+
+
+def test_internal_server_error_falls_back_to_offline_agent(monkeypatch):
+    error = anthropic.InternalServerError("outage", response=_fake_httpx_response(500), body=None)
+    agent, _ = _make_agent([error])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: True)
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    assert agent.respond("s1", "hi") == "offline reply"
+
+
+def test_credit_balance_error_falls_back_to_offline_agent(monkeypatch):
+    error = anthropic.BadRequestError(
+        "Your credit balance is too low to access the Anthropic API.",
+        response=_fake_httpx_response(400),
+        body=None,
+    )
+    agent, _ = _make_agent([error])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: True)
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    assert agent.respond("s1", "hi") == "offline reply"
+
+
+def test_unrelated_bad_request_error_does_not_fall_back():
+    error = anthropic.BadRequestError("max_tokens is too large.", response=_fake_httpx_response(400), body=None)
+    agent, _ = _make_agent([error])
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    try:
+        agent.respond("s1", "hi")
+        assert False, "expected the BadRequestError to propagate"
+    except anthropic.BadRequestError:
+        pass
+    assert agent._offline.calls == []
+
+
+def test_authentication_error_does_not_fall_back():
+    """A bad API key is a real misconfiguration the user needs to see and
+    fix -- silently degrading to a local model would hide it instead."""
+    error = anthropic.AuthenticationError("invalid x-api-key", response=_fake_httpx_response(401), body=None)
+    agent, _ = _make_agent([error])
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    try:
+        agent.respond("s1", "hi")
+        assert False, "expected the AuthenticationError to propagate"
+    except anthropic.AuthenticationError:
+        pass
+    assert agent._offline.calls == []
+
+
+def test_falls_back_gracefully_when_ollama_also_unreachable(monkeypatch):
+    agent, _ = _make_agent([anthropic.APIConnectionError(request=_fake_httpx_request())])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: False)
+    agent._offline = _FakeOfflineAgent("should not be used")
+
+    reply = agent.respond("s1", "hi")
+
+    assert "can't reach Claude" in reply
+    assert "Ollama" in reply
+    assert agent._offline.calls == []  # never actually called — unreachable check happens first
+
+
+def test_offline_reply_reaches_on_sentence_callback(monkeypatch):
+    agent, _ = _make_agent([anthropic.APIConnectionError(request=_fake_httpx_request())])
+    monkeypatch.setattr("core.agent.is_ollama_reachable", lambda host: True)
+    agent._offline = _FakeOfflineAgent("offline reply")
+
+    seen = []
+    agent.respond_streaming("s1", "hi", on_sentence=seen.append)
+
+    assert seen == ["offline reply"]

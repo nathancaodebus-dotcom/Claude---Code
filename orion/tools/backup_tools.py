@@ -13,6 +13,7 @@ from tools.base import Tool
 
 
 class RunBackupTool(Tool):
+    requires_network = False
     name = "run_backup"
     description = "Back up a directory to a destination (defaults to BACKUP_SOURCE_PATH/BACKUP_DEST_PATH from .env)."
     input_schema = {

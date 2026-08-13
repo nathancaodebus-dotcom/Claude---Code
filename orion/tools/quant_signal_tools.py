@@ -219,6 +219,7 @@ class BacktestQuantSignalTool(Tool):
 
 
 class SaveQuantSignalTool(Tool):
+    requires_network = False
     name = "save_quant_signal"
     description = "Save a quantitative signal that backtested well, so it can be found and reused later."
     input_schema = {
@@ -245,6 +246,7 @@ class SaveQuantSignalTool(Tool):
 
 
 class ListQuantSignalsTool(Tool):
+    requires_network = False
     name = "list_quant_signals"
     description = "List saved quantitative signals, best Rank IC first, optionally filtered to one ticker."
     input_schema = {

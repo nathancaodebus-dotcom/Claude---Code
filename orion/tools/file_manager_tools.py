@@ -20,6 +20,7 @@ def _file_hash(path: Path) -> str:
 
 
 class FindLargeFilesTool(Tool):
+    requires_network = False
     name = "find_large_files"
     description = "Find the largest files under a directory (recursively)."
     input_schema = {
@@ -51,6 +52,7 @@ class FindLargeFilesTool(Tool):
 
 
 class FindDuplicateFilesTool(Tool):
+    requires_network = False
     name = "find_duplicate_files"
     description = "Find duplicate files (by content) under a directory, grouped together."
     input_schema = {
@@ -88,6 +90,7 @@ class FindDuplicateFilesTool(Tool):
 
 
 class SummarizeDirectoryTool(Tool):
+    requires_network = False
     name = "summarize_directory"
     description = "Get an overview of a folder (e.g. Downloads): file count, total size, breakdown by extension."
     input_schema = {

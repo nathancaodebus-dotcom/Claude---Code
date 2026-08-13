@@ -8,6 +8,7 @@ from tools.base import Tool
 
 
 class IndexMemoryTool(Tool):
+    requires_network = False
     name = "index_memory"
     description = (
         "Save a piece of information into long-term semantic memory, so it can be found later "
@@ -33,6 +34,7 @@ class IndexMemoryTool(Tool):
 
 
 class SearchMemoryTool(Tool):
+    requires_network = False
     name = "search_memory"
     description = (
         "Search long-term semantic memory for anything related to a topic, by meaning rather "

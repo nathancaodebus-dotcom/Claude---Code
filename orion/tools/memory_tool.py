@@ -6,6 +6,7 @@ from tools.base import Tool
 
 
 class RememberFactTool(Tool):
+    requires_network = False
     name = "remember_fact"
     description = (
         "Save a durable fact about the user for future conversations (preferences, "
@@ -33,6 +34,7 @@ class RememberFactTool(Tool):
 
 
 class RecallFactsTool(Tool):
+    requires_network = False
     name = "recall_facts"
     description = "List every durable fact previously remembered about the user."
     input_schema = {"type": "object", "properties": {}}
