@@ -11,3 +11,9 @@ sounddevice>=0.4.6
 
 # Optional: expressive cloud TTS instead of Piper, if ELEVENLABS_API_KEY is set
 elevenlabs>=1.0.0
+
+# Optional: free, zero-setup cloud TTS fallback (no API key, no local voice
+# model file) used automatically if neither ElevenLabs nor a local Piper
+# model is configured. Needs ffmpeg on PATH (already a faster-whisper
+# prerequisite) to decode its mp3 output.
+edge-tts>=6.1.0

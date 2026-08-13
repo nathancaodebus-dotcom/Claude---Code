@@ -240,11 +240,13 @@ back** with a voice message of its own, not just text — this is the
    user id, put it in `TELEGRAM_ALLOWED_USER_ID` (this locks the bot to
    only you).
 3. For spoken replies (not just transcription of what you said), set up
-   text-to-speech: either `ELEVENLABS_API_KEY` (cloud, works anywhere this
-   bot runs, no local model needed), or a local Piper model as described
-   in §7 if this bot happens to run on the same machine as the voice loop.
-   Without either, voice messages still work — you just get a text reply
-   instead of a spoken one.
+   text-to-speech: `ELEVENLABS_API_KEY` (cloud, best quality, works
+   anywhere this bot runs, no local model needed), a local Piper model as
+   described in §7 if this bot happens to run on the same machine as the
+   voice loop, or — if you set up neither — Orion tries Edge TTS
+   automatically (free, no API key, no model file; just needs `edge-tts`
+   installed and internet). Without any of the three, voice messages still
+   work — you just get a text reply instead of a spoken one.
 4. Install [ffmpeg](https://ffmpeg.org/) (`apt install ffmpeg` on
    Debian/Raspberry Pi OS, `brew install ffmpeg` on macOS, `winget install
    ffmpeg` or `choco install ffmpeg` on Windows — or download a build from
@@ -289,6 +291,17 @@ voice model for your language into `~/.local/share/piper/` (e.g.
 same way, it's just not the OS-idiomatic location; create the folder
 manually (`mkdir $env:USERPROFILE\.local\share\piper` in PowerShell) and
 drop the `.onnx` file in.
+
+**Don't want to do the Piper download right now?** `python -m
+interfaces.voice.voice_loop` still works without it: with no
+`ELEVENLABS_API_KEY` and no Piper model found, Orion falls back to Edge
+TTS automatically — Microsoft's free cloud voice, no API key, no model
+file, just `pip install edge-tts` (already in `requirements-voice.txt`)
+and an internet connection. Lower priority than Piper once you do set a
+model up (Piper is fully offline; Edge TTS isn't), but a genuinely
+zero-setup way to hear Orion talk on a fresh install. `EDGE_TTS_VOICE`
+already defaults sensibly for `VOICE_LANGUAGE=fr`/`en`; set it directly to
+change the voice or use another language (`edge-tts --list-voices`).
 
 ```bash
 python -m interfaces.voice.voice_loop

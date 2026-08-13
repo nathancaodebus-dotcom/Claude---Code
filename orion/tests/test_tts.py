@@ -7,12 +7,20 @@ so this test doesn't need the real (large) piper-tts wheel installed.
 """
 from __future__ import annotations
 
+import dataclasses
 import sys
 import types
 
 import pytest
 
-from core.tts import PiperSynthesizer, _strip_markdown_for_speech
+from core.config import config as real_config
+from core.tts import (
+    EdgeTTSSynthesizer,
+    PiperSynthesizer,
+    _strip_markdown_for_speech,
+    get_synthesizer,
+    get_synthesizer_if_available,
+)
 
 
 class _FakeAudioChunk:
@@ -125,3 +133,127 @@ def test_pure_list_marker_fragment_becomes_empty():
 def test_leaves_plain_prose_untouched():
     text = "Bonjour ! Comment puis-je t'aider aujourd'hui ?"
     assert _strip_markdown_for_speech(text) == text
+
+
+# --- EdgeTTSSynthesizer ---
+
+
+class _FakeCommunicate:
+    def __init__(self, text, voice):
+        self.text = text
+        self.voice = voice
+
+    async def stream(self):
+        yield {"type": "audio", "data": b"mp3-part1-"}
+        yield {"type": "WordBoundary", "offset": 0, "duration": 1}  # non-audio events must be filtered out
+        yield {"type": "audio", "data": b"mp3-part2"}
+
+
+@pytest.fixture(autouse=True)
+def fake_edge_tts_module(monkeypatch):
+    fake_module = types.ModuleType("edge_tts")
+    fake_module.Communicate = _FakeCommunicate
+    monkeypatch.setitem(sys.modules, "edge_tts", fake_module)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def fake_ffmpeg(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, input, stdout, stderr, check):
+        calls.append({"cmd": cmd, "input": input})
+        return types.SimpleNamespace(stdout=b"pcm-bytes")
+
+    monkeypatch.setattr("core.tts.subprocess.run", fake_run)
+    return calls
+
+
+def test_edge_tts_synthesize_joins_audio_chunks_and_decodes_via_ffmpeg(fake_ffmpeg):
+    synth = EdgeTTSSynthesizer("fr-FR-HenriNeural")
+
+    result = synth.synthesize("Bonjour")
+
+    assert result == b"pcm-bytes"
+    assert fake_ffmpeg[0]["input"] == b"mp3-part1-mp3-part2"
+    assert "-ar" in fake_ffmpeg[0]["cmd"]
+
+
+def test_edge_tts_skips_ffmpeg_for_pure_list_marker_fragment(fake_ffmpeg):
+    synth = EdgeTTSSynthesizer("fr-FR-HenriNeural")
+
+    result = synth.synthesize("1.")
+
+    assert result == b""
+    assert fake_ffmpeg == []
+
+
+def test_edge_tts_sample_rate_is_24000():
+    assert EdgeTTSSynthesizer("fr-FR-HenriNeural").sample_rate == 24000
+
+
+# --- get_synthesizer / get_synthesizer_if_available selection chain ---
+
+
+def test_get_synthesizer_prefers_elevenlabs_over_everything(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "elevenlabs.client", types.SimpleNamespace(ElevenLabs=lambda api_key: object())
+    )
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key="key123", edge_tts_voice="fr-FR-HenriNeural")
+    monkeypatch.setattr("core.tts.config", cfg)
+
+    synth = get_synthesizer("some/piper/model.onnx")
+
+    assert type(synth).__name__ == "ElevenLabsSynthesizer"
+
+
+def test_get_synthesizer_prefers_piper_over_edge_when_no_elevenlabs(monkeypatch):
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="fr-FR-HenriNeural")
+    monkeypatch.setattr("core.tts.config", cfg)
+
+    synth = get_synthesizer("fake/model.onnx")
+
+    assert isinstance(synth, PiperSynthesizer)
+
+
+def test_get_synthesizer_falls_back_to_edge_tts_with_no_piper_model(monkeypatch):
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="fr-FR-HenriNeural")
+    monkeypatch.setattr("core.tts.config", cfg)
+
+    synth = get_synthesizer(None)
+
+    assert isinstance(synth, EdgeTTSSynthesizer)
+
+
+def test_get_synthesizer_raises_a_clear_error_when_nothing_is_configured(monkeypatch):
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="")
+    monkeypatch.setattr("core.tts.config", cfg)
+
+    with pytest.raises(RuntimeError, match="No TTS backend available"):
+        get_synthesizer(None)
+
+
+def test_get_synthesizer_falls_back_to_edge_tts_when_edge_package_missing(monkeypatch):
+    monkeypatch.delitem(sys.modules, "edge_tts", raising=False)
+    monkeypatch.setitem(sys.modules, "edge_tts", None)  # forces ImportError on `import edge_tts`
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="fr-FR-HenriNeural")
+    monkeypatch.setattr("core.tts.config", cfg)
+
+    with pytest.raises(RuntimeError, match="No TTS backend available"):
+        get_synthesizer(None)
+
+
+def test_get_synthesizer_if_available_returns_none_instead_of_raising(monkeypatch):
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="")
+    monkeypatch.setattr("core.tts.config", cfg)
+    monkeypatch.setattr("core.tts.find_local_piper_model", lambda: None)
+
+    assert get_synthesizer_if_available() is None
+
+
+def test_get_synthesizer_if_available_returns_edge_tts_as_the_zero_setup_default(monkeypatch):
+    cfg = dataclasses.replace(real_config, elevenlabs_api_key=None, edge_tts_voice="fr-FR-HenriNeural")
+    monkeypatch.setattr("core.tts.config", cfg)
+    monkeypatch.setattr("core.tts.find_local_piper_model", lambda: None)
+
+    assert isinstance(get_synthesizer_if_available(), EdgeTTSSynthesizer)

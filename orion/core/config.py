@@ -14,6 +14,18 @@ def _get(key: str, default: str | None = None) -> str | None:
     return value if value != "" else default
 
 
+# Per-language default Edge TTS voices, keyed by the same short code
+# VOICE_LANGUAGE already uses for Piper model matching. Only the languages
+# this project's other defaults (VOICE_LANGUAGE="fr") and README examples
+# actually cover; anything else needs EDGE_TTS_VOICE set explicitly (see
+# https://github.com/rany2/edge-tts for the full voice list, `edge-tts
+# --list-voices`).
+_EDGE_TTS_DEFAULT_VOICES = {
+    "fr": "fr-FR-HenriNeural",
+    "en": "en-US-GuyNeural",
+}
+
+
 @dataclass(frozen=True)
 class Config:
     anthropic_api_key: str | None = field(default_factory=lambda: _get("ANTHROPIC_API_KEY"))
@@ -118,6 +130,17 @@ class Config:
     elevenlabs_api_key: str | None = field(default_factory=lambda: _get("ELEVENLABS_API_KEY"))
     elevenlabs_voice_id: str = field(
         default_factory=lambda: _get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    )
+
+    # Edge TTS (core/tts.py's EdgeTTSSynthesizer) — the free, no-API-key,
+    # no-local-model cloud fallback used when neither ELEVENLABS_API_KEY nor
+    # a local Piper voice model is available. Defaults from VOICE_LANGUAGE so
+    # it works out of the box for fr/en without any extra .env entry; set
+    # EDGE_TTS_VOICE directly to override the voice or support another
+    # language.
+    edge_tts_voice: str = field(
+        default_factory=lambda: _get("EDGE_TTS_VOICE")
+        or _EDGE_TTS_DEFAULT_VOICES.get(_get("VOICE_LANGUAGE", "fr"), "en-US-GuyNeural")
     )
 
     kill_switch_phrase: str | None = field(default_factory=lambda: _get("KILL_SWITCH_PHRASE"))

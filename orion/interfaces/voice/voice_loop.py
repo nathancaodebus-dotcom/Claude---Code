@@ -23,7 +23,7 @@ from core.health_monitor import HealthMonitor
 from core.memory import Memory
 from core.scheduler import ReminderScheduler
 from core.store import Store
-from core.tts import get_synthesizer
+from core.tts import find_local_piper_model, get_synthesizer
 from tools.registry_builder import build_registry
 
 _BUNDLED_WAKE_MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "wake_word_models"
@@ -86,10 +86,12 @@ class VoiceLoop:
         self._agent = Agent(memory, build_registry(memory, store))
         self._wake_model = self._load_wake_model(WakeWordModel)
         self._stt = WhisperModel(config.whisper_model_size, device="cpu", compute_type="int8")
-        # Uses ElevenLabs if ELEVENLABS_API_KEY is set (expressive, cloud), else
-        # local Piper — expects a voice model matching config.voice_language, e.g.
-        # ~/.local/share/piper/fr_FR-siwis-medium.onnx — see README for setup.
-        self._tts = get_synthesizer(self._piper_model_path() if not config.elevenlabs_api_key else None)
+        # ElevenLabs if ELEVENLABS_API_KEY is set (expressive, cloud) > local
+        # Piper if a voice model matching config.voice_language is found (e.g.
+        # ~/.local/share/piper/fr_FR-siwis-medium.onnx — see README §7 for
+        # setup) > Edge TTS, a free cloud fallback needing no local model file
+        # at all, so a fresh install still has a working voice out of the box.
+        self._tts = get_synthesizer(find_local_piper_model())
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
         self._scheduler = ReminderScheduler(store, notify=lambda text: self._speak(text, urgent=True))
         self._health_monitor = HealthMonitor(store, notify=lambda text: self._speak(text, urgent=True))
@@ -144,18 +146,6 @@ class VoiceLoop:
                 "model while you do that.\n"
                 "See README §7 for details."
             ) from exc
-
-    def _piper_model_path(self) -> str:
-        from pathlib import Path
-
-        candidates = list(Path.home().glob(f".local/share/piper/{config.voice_language}*.onnx"))
-        if not candidates:
-            raise RuntimeError(
-                f"No Piper voice model found for language '{config.voice_language}' in "
-                "~/.local/share/piper/. Download one from "
-                "https://github.com/rhasspy/piper/blob/master/VOICES.md"
-            )
-        return str(candidates[0])
 
     def _audio_callback(self, indata, frames, time_info, status) -> None:  # noqa: ANN001
         self._audio_queue.put(indata.copy())

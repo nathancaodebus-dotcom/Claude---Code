@@ -1,19 +1,25 @@
 """Pluggable text-to-speech backend for the voice interface: Piper (local,
-default, flat but reliable and free) or ElevenLabs (cloud, optional,
-expressive/emotional voices with an 'urgent' tone variant for alerts).
+fully offline, but needs a voice model file downloaded once — see README §7
+for the exact friction that step caused on a fresh Windows setup), ElevenLabs
+(cloud, optional, expressive/emotional voices with an 'urgent' tone variant
+for alerts), or Edge TTS (cloud, free, no API key and no model file to fetch
+— the zero-setup fallback if neither of the above is configured).
 
-Neither backend is imported at module load time — only whichever one gets
-selected, so installing just one of piper-tts / elevenlabs is enough. This
-module itself deliberately has no numpy dependency (synthesize() returns raw
-16-bit PCM bytes) so it stays importable on platforms like Termux/Android
-where numpy has no prebuilt wheel — the Telegram interface needs this module
-just to write bytes into a WAV file, no numeric processing involved. Callers
-that do need an array (e.g. the Pi voice loop, for sounddevice playback)
-convert with np.frombuffer(..., dtype=np.int16) on their own end.
+None of the three backends is imported at module load time — only whichever
+one gets selected, so installing just one of piper-tts / elevenlabs / edge-tts
+is enough. This module itself deliberately has no numpy dependency
+(synthesize() returns raw 16-bit PCM bytes) so it stays importable on
+platforms like Termux/Android where numpy has no prebuilt wheel — the
+Telegram interface needs this module just to write bytes into a WAV file, no
+numeric processing involved. Callers that do need an array (e.g. the Pi voice
+loop, for sounddevice playback) convert with np.frombuffer(..., dtype=np.int16)
+on their own end.
 """
 from __future__ import annotations
 
+import asyncio
 import re
+import subprocess
 from pathlib import Path
 from typing import Protocol
 
@@ -99,19 +105,73 @@ class ElevenLabsSynthesizer:
         return b"".join(audio_chunks)
 
 
+class EdgeTTSSynthesizer:
+    """Microsoft Edge's free cloud TTS via the unofficial edge-tts package —
+    no API key, no local voice model to download. The zero-setup fallback:
+    useful as a working default on first install, before (or without ever)
+    doing Piper's one-time voice-model download. Requires internet and the
+    edge-tts package; its output is mp3, so ffmpeg (already a project
+    prerequisite for faster-whisper) decodes it to the raw PCM this module's
+    callers expect."""
+
+    sample_rate = 24000  # edge-tts's own output rate
+
+    def __init__(self, voice: str):
+        import edge_tts  # noqa: F401 -- import-checked here so a missing package fails at construction, not at first synthesize() call
+
+        self._voice = voice
+
+    def synthesize(self, text: str, urgent: bool = False) -> bytes:
+        text = _strip_markdown_for_speech(text)
+        if not text:
+            return b""
+        mp3_bytes = asyncio.run(self._synthesize_mp3(text))
+        if not mp3_bytes:
+            return b""
+        return self._decode_mp3_to_pcm(mp3_bytes)
+
+    async def _synthesize_mp3(self, text: str) -> bytes:
+        import edge_tts
+
+        communicate = edge_tts.Communicate(text, self._voice)
+        chunks = [chunk["data"] async for chunk in communicate.stream() if chunk["type"] == "audio"]
+        return b"".join(chunks)
+
+    def _decode_mp3_to_pcm(self, mp3_bytes: bytes) -> bytes:
+        result = subprocess.run(
+            ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-ar", str(self.sample_rate), "-ac", "1", "pipe:1"],
+            input=mp3_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return result.stdout
+
+
 def get_synthesizer(piper_model_path: str | None = None) -> Synthesizer:
     if config.elevenlabs_api_key:
         return ElevenLabsSynthesizer(config.elevenlabs_api_key, config.elevenlabs_voice_id)
 
-    if not piper_model_path:
-        raise RuntimeError("No Piper voice model path given and ELEVENLABS_API_KEY is not set.")
-    return PiperSynthesizer(piper_model_path)
+    if piper_model_path:
+        return PiperSynthesizer(piper_model_path)
+
+    if config.edge_tts_voice:
+        try:
+            return EdgeTTSSynthesizer(config.edge_tts_voice)
+        except ImportError:
+            pass
+
+    raise RuntimeError(
+        "No TTS backend available: set ELEVENLABS_API_KEY, download a Piper voice model "
+        "(see README §7), or run `pip install edge-tts` for the free cloud fallback that "
+        "needs no local model file."
+    )
 
 
 def find_local_piper_model() -> str | None:
-    """Non-raising lookup for callers that want to use TTS opportunistically
-    (e.g. the Telegram bot) rather than requiring it (the Pi voice loop,
-    which raises via its own _piper_model_path if none is found)."""
+    """Non-raising lookup, safe to call unconditionally — get_synthesizer()
+    itself decides what to do when this comes back None (fall through to
+    Edge TTS, or raise if nothing at all is configured)."""
     candidates = list(Path.home().glob(f".local/share/piper/{config.voice_language}*.onnx"))
     return str(candidates[0]) if candidates else None
 
@@ -120,16 +180,7 @@ def get_synthesizer_if_available() -> Synthesizer | None:
     """Like get_synthesizer, but returns None instead of raising/importing
     when no TTS backend is usable — for interfaces where voice replies are a
     nice-to-have, not a hard requirement."""
-    if config.elevenlabs_api_key:
-        try:
-            return get_synthesizer()
-        except ImportError:
-            return None  # elevenlabs package not installed
-
-    piper_path = find_local_piper_model()
-    if not piper_path:
-        return None
     try:
-        return get_synthesizer(piper_path)
-    except ImportError:
-        return None  # piper-tts package not installed
+        return get_synthesizer(find_local_piper_model())
+    except (ImportError, RuntimeError):
+        return None
