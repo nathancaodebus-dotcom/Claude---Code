@@ -121,6 +121,55 @@ def test_chat_surfaces_agent_exceptions_as_an_error_event(client, monkeypatch):
     assert events == [{"type": "error", "text": "Claude is unreachable"}]
 
 
+def test_chat_rejects_a_second_concurrent_request_for_the_same_session(client, monkeypatch):
+    """FastAPI runs sync path operations in a thread pool, so two open tabs
+    (or a rapid double-send) posting to /api/chat at once would otherwise
+    race Agent.respond_streaming's read-history/append-message sequence
+    against each other and can corrupt the shared conversation. Simulates
+    'a request is already in flight' by holding the session lock directly,
+    then checks a second request is rejected cleanly instead of proceeding."""
+    lock = app_module._chat_lock(app_module.SESSION_ID)
+    lock.acquire()
+    try:
+        fake_agent = _FakeAgent(["should not be reached"])
+        monkeypatch.setattr(app_module, "_agent", fake_agent)
+
+        response = client.post("/api/chat", json={"message": "salut"})
+
+        events = _parse_sse(response.text)
+        assert events == [
+            {
+                "type": "error",
+                "text": "Orion is still answering the previous message — wait for it to finish.",
+            }
+        ]
+        assert fake_agent.calls == []
+    finally:
+        lock.release()
+
+
+def test_chat_lock_is_released_after_completion_allowing_the_next_request(client, monkeypatch):
+    fake_agent = _FakeAgent(["ok"])
+    monkeypatch.setattr(app_module, "_agent", fake_agent)
+
+    first = client.post("/api/chat", json={"message": "un"})
+    second = client.post("/api/chat", json={"message": "deux"})
+
+    assert _parse_sse(first.text)[-1]["type"] == "done"
+    assert _parse_sse(second.text)[-1]["type"] == "done"
+    assert fake_agent.calls == [(app_module.SESSION_ID, "un"), (app_module.SESSION_ID, "deux")]
+
+
+def test_chat_lock_is_released_after_an_error_allowing_the_next_request(client, monkeypatch):
+    monkeypatch.setattr(app_module, "_agent", _FakeAgent([], error=RuntimeError("boom")))
+    client.post("/api/chat", json={"message": "un"})
+
+    monkeypatch.setattr(app_module, "_agent", _FakeAgent(["ok"]))
+    second = client.post("/api/chat", json={"message": "deux"})
+
+    assert _parse_sse(second.text)[-1]["type"] == "done"
+
+
 def test_outputs_mount_serves_generated_files(client):
     # The mount is registered against the real outputs/ dir at import time
     # (same directory every generation tool writes to, and the same

@@ -68,6 +68,14 @@ own initiative, no matter how confident you are in the analysis."""
 
 MAX_TOOL_ITERATIONS = 8
 
+# Caps how many tool calls from a single turn run concurrently. Without a
+# cap, a turn where the model reaches for a large batch of independent tools
+# at once would open that many threads (and, for network tools, that many
+# simultaneous outbound requests) in one burst — more likely to trip a
+# provider's rate limit than to actually finish faster, since most of these
+# tools are I/O-bound on the same handful of external APIs.
+MAX_CONCURRENT_TOOL_CALLS = 8
+
 # Chunk streamed text into sentences at ., !, ?, or … followed by whitespace,
 # so a voice interface can start synthesizing/speaking each sentence as soon
 # as it's complete instead of waiting for the whole reply.
@@ -102,6 +110,14 @@ class Agent:
         self._correction_synthesizer = CorrectionSynthesizer(
             memory, make_default_correction_summarizer(self._client, config.fast_model)
         )
+        # Non-blocking: guards against a burst of quick successive turns
+        # (rapid follow-up messages) each spawning their own background
+        # maintenance thread and racing to consolidate/synthesize the same
+        # overflow at once — harmless (last write wins) but wastes a real
+        # Claude call every time it happens. At most one maintenance run is
+        # ever in flight; a turn that finds one already running just skips
+        # its own, since the next turn's check covers the same ground.
+        self._maintenance_lock = threading.Lock()
         # Constructing this does no I/O (no import, no network call) — it's
         # only ever actually used, and only after checking is_ollama_reachable(),
         # inside _respond_via_offline_fallback below.
@@ -175,8 +191,13 @@ class Agent:
         # so it's safe to fire both in the background and return the user's
         # answer immediately.
         def _background_maintenance() -> None:
-            self._consolidator.maybe_consolidate(session_id)
-            self._correction_synthesizer.maybe_synthesize()
+            if not self._maintenance_lock.acquire(blocking=False):
+                return
+            try:
+                self._consolidator.maybe_consolidate(session_id)
+                self._correction_synthesizer.maybe_synthesize()
+            finally:
+                self._maintenance_lock.release()
 
         threading.Thread(target=_background_maintenance, daemon=True).start()
         return final_text
@@ -245,7 +266,9 @@ class Agent:
             # costs as long as its slowest tool call. executor.map preserves
             # input order, so results still line up with tool_use_blocks by
             # index for pairing with the right tool_use_id below.
-            with ThreadPoolExecutor(max_workers=max(1, len(tool_use_blocks))) as executor:
+            with ThreadPoolExecutor(
+                max_workers=max(1, min(MAX_CONCURRENT_TOOL_CALLS, len(tool_use_blocks)))
+            ) as executor:
                 results = list(
                     executor.map(lambda b: self._tools.dispatch(b.name, b.input), tool_use_blocks)
                 )

@@ -988,13 +988,52 @@ already done to close that gap as much as it can be:
   you've finished speaking dropped from 1.2s to 0.7s, now that it's backed
   by real ambient-noise calibration instead of a fixed threshold that
   needed the extra margin to avoid false cutoffs in a noisy room.
-- **Parallel tool calls**: when a single turn needs several independent
-  tools (e.g. weather and a crypto price), they used to run one after
-  another, paying every tool's latency in sequence. `core/agent.py` now
+- **Parallel tool calls, capped**: when a single turn needs several
+  independent tools (e.g. weather and a crypto price), they used to run one
+  after another, paying every tool's latency in sequence. `core/agent.py`
   dispatches a turn's tool calls concurrently (a thread pool), so the turn
-  only costs as long as its slowest tool — not their sum.
+  only costs as long as its slowest tool — not their sum. Capped at
+  `MAX_CONCURRENT_TOOL_CALLS` (8): a turn that happens to reach for a large
+  batch of tools at once opens at most that many threads/outbound requests
+  in one burst, rather than one per tool — more tools in a turn than that
+  is more likely to trip a provider's rate limit than to finish faster,
+  since most of them are I/O-bound on the same handful of external APIs.
+- **Telegram replies no longer block reminders/health alerts**: the bot's
+  reply generation, voice transcription, and TTS encoding are blocking
+  calls, often several seconds long — running them directly inside an
+  `async def` handler used to freeze the bot's single event loop for that
+  whole duration, which also stalls `JobQueue` (the same loop delivers
+  reminders and health alerts) and further incoming messages. They now run
+  via `asyncio.to_thread`, so the loop stays free to keep polling and firing
+  scheduled jobs while a reply is being generated.
 
 ## Reliability
+
+- **Concurrent requests to the same session can't corrupt the conversation**:
+  the web UI (§18) lets two browser tabs share one conversation by design.
+  Since FastAPI runs each request in a thread pool, two `/api/chat` calls
+  hitting the same session at once (two tabs, or a rapid double-send) used
+  to be able to race `Agent.respond_streaming`'s read-history/append-message
+  sequence against each other — worst case, two consecutive "user" turns
+  land with no assistant reply between them, which the Messages API's
+  strict role-alternation rejects outright. A per-session lock now rejects
+  the second request cleanly (a toast: "Orion is still answering the
+  previous message") instead of letting them interleave.
+- **No duplicate background maintenance under rapid-fire messages**: every
+  reply spawns a background thread to check whether conversation history or
+  corrections need consolidating (§ below and "How Orion learns"). A burst
+  of quick successive messages used to be able to spawn several of these at
+  once, racing to consolidate the same overflow and paying for the same
+  Claude call twice. A non-blocking lock now caps it at one maintenance run
+  in flight at a time; a turn that finds one already running just skips its
+  own; the next turn's check covers the same ground.
+- **Tool result cache can't grow unbounded**: `core/tool_cache.py`'s
+  in-memory cache used to only ever evict the *one* key it was asked for —
+  an entry for a query that's never repeated (a one-off `web_search`, say)
+  would sit in memory forever once expired. Every 200 writes it now sweeps
+  everything already expired in one pass, so memory stays bounded by live
+  entries, not all-time-ever-cached ones — matters over a long-running
+  process with heavy, varied lookup traffic.
 
 - **WAL mode on every SQLite store**: `core/memory.py`, `core/store.py`,
   and `core/vector_memory.py` share one `orion.db` file across several

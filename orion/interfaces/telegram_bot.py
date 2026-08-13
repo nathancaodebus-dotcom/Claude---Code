@@ -16,6 +16,7 @@ so a dead integration surfaces on its own instead of waiting to be asked.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 import tempfile
@@ -105,7 +106,15 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
     async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _is_authorized(update):
             return
-        reply = agent.respond(SESSION_ID, update.message.text)
+        # agent.respond() is a blocking call — often several Claude round
+        # trips plus tool calls, easily seconds long. Calling it directly
+        # here would freeze this bot's single asyncio event loop for that
+        # whole duration: no other update gets processed, and the JobQueue
+        # (reminders, health alerts, both scheduled on the same loop) stalls
+        # right along with it. asyncio.to_thread runs it on a worker thread
+        # instead, so the loop stays free to keep polling and firing jobs
+        # while a reply is being generated.
+        reply = await asyncio.to_thread(agent.respond, SESSION_ID, update.message.text)
         await update.message.reply_text(reply)
         await _send_attachments(update)
 
@@ -119,7 +128,9 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
         with tempfile.TemporaryDirectory() as tmp_dir:
             audio_path = Path(tmp_dir) / "voice.ogg"
             await telegram_file.download_to_drive(str(audio_path))
-            transcript = _transcribe(audio_path)
+            # CPU-bound (loads/runs a local Whisper model) — same event-loop-
+            # freezing concern as agent.respond() above.
+            transcript = await asyncio.to_thread(_transcribe, audio_path)
 
         if not transcript:
             await update.message.reply_text(
@@ -128,11 +139,12 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
             )
             return
 
-        reply = agent.respond(SESSION_ID, transcript)
+        reply = await asyncio.to_thread(agent.respond, SESSION_ID, transcript)
         await update.message.reply_text(f"\U0001f3a4 “{transcript}”\n\n{reply}")
 
         if tts is not None:
-            ogg_bytes = _synthesize_to_ogg_opus(tts, reply)
+            # Also blocking: TTS synthesis plus an ffmpeg subprocess call.
+            ogg_bytes = await asyncio.to_thread(_synthesize_to_ogg_opus, tts, reply)
             if ogg_bytes:
                 await update.message.reply_voice(voice=ogg_bytes)
 

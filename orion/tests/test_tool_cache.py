@@ -123,6 +123,30 @@ class _FailingCacheableTool(Tool):
         raise RuntimeError("network is down")
 
 
+def test_set_sweeps_expired_entries_after_enough_sets(monkeypatch):
+    """Without a sweep, an entry for a key that's never looked up again
+    after it expires would just sit in the dict forever — a slow, unbounded
+    memory leak over a long-running process with heavy, varied lookup
+    traffic (distinct web_search/fetch_webpage queries, say). Every
+    _SWEEP_INTERVAL sets, set() should pay a one-off pass to drop anything
+    already expired."""
+    from core.tool_cache import _SWEEP_INTERVAL
+
+    cache = ToolResultCache()
+    now = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now)
+    cache.set("define_word", {"word": "stale"}, "a stale definition")
+    stale_key = cache._key("define_word", {"word": "stale"})
+
+    monkeypatch.setattr(time, "time", lambda: now + 90000)  # past define_word's 86400s TTL
+    for i in range(_SWEEP_INTERVAL):  # enough further sets to trigger the sweep
+        cache.set("web_search", {"query": f"q{i}"}, "result")
+
+    assert stale_key not in cache._entries
+    # Freshly-set, still-valid entries from the sweep-triggering loop survive.
+    assert cache._key("web_search", {"query": "q0"}) in cache._entries
+
+
 def test_dispatch_does_not_cache_a_raised_exception():
     registry = ToolRegistry()
     registry.register(_FailingCacheableTool())

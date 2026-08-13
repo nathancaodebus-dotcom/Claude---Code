@@ -62,6 +62,24 @@ def _broadcast_event(text: str) -> None:
 _scheduler = ReminderScheduler(_store, notify=_broadcast_event)
 _health_monitor = HealthMonitor(_store, notify=_broadcast_event)
 
+# FastAPI runs sync path operations (chat() below) in a thread pool, so two
+# /api/chat requests for the same session — two open browser tabs, or a
+# rapid double-send — can genuinely run concurrently. Both would call
+# Agent.respond_streaming(SESSION_ID, ...) at once, racing its read-history/
+# append-message sequence against each other: worst case, two consecutive
+# "user" messages land in the same history with no assistant reply between
+# them, which the Messages API's strict role-alternation rejects outright.
+# One lock per session (there's only ever one, "web", today, but this keys
+# by session_id rather than hardcoding that) rejects the second request
+# cleanly instead of corrupting the shared conversation.
+_chat_locks: dict[str, threading.Lock] = {}
+_chat_locks_guard = threading.Lock()
+
+
+def _chat_lock(session_id: str) -> threading.Lock:
+    with _chat_locks_guard:
+        return _chat_locks.setdefault(session_id, threading.Lock())
+
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -99,6 +117,14 @@ def _stream_chat(message: str) -> Iterator[str]:
     events: queue.Queue = queue.Queue()
     _DONE = object()
 
+    lock = _chat_lock(SESSION_ID)
+    if not lock.acquire(blocking=False):
+        error = json.dumps(
+            {"type": "error", "text": "Orion is still answering the previous message — wait for it to finish."}
+        )
+        yield f"data: {error}\n\n"
+        return
+
     def on_sentence(text: str) -> None:
         events.put({"type": "sentence", "text": text})
 
@@ -109,6 +135,7 @@ def _stream_chat(message: str) -> Iterator[str]:
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI, never a crash
             events.put({"type": "error", "text": str(exc)})
         finally:
+            lock.release()
             events.put(_DONE)
 
     threading.Thread(target=run, daemon=True).start()

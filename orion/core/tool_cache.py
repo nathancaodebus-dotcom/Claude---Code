@@ -45,9 +45,20 @@ CACHEABLE_TOOLS: dict[str, int] = {
 }
 
 
+# get() only ever evicts the one key it was asked for, so an entry for a
+# query that's never repeated (e.g. a one-off web_search) would otherwise
+# just sit in memory forever once expired — over a long-running process
+# with heavy, varied lookup traffic that's a slow, unbounded leak. Every
+# _SWEEP_INTERVAL sets, set() pays a one-off O(n) pass to drop anything
+# that's expired, so memory stays bounded by *live* entries, not
+# all-time-ever-cached ones.
+_SWEEP_INTERVAL = 200
+
+
 class ToolResultCache:
     def __init__(self) -> None:
         self._entries: dict[tuple, tuple[float, str]] = {}
+        self._sets_since_sweep = 0
 
     def get(self, tool_name: str, kwargs: dict[str, Any]) -> str | None:
         if tool_name not in CACHEABLE_TOOLS:
@@ -77,6 +88,17 @@ class ToolResultCache:
         if key is None:
             return
         self._entries[key] = (time.time() + ttl, result)
+
+        self._sets_since_sweep += 1
+        if self._sets_since_sweep >= _SWEEP_INTERVAL:
+            self._sets_since_sweep = 0
+            self._sweep_expired()
+
+    def _sweep_expired(self) -> None:
+        now = time.time()
+        expired = [key for key, (expires_at, _) in self._entries.items() if now >= expires_at]
+        for key in expired:
+            self._entries.pop(key, None)
 
     @staticmethod
     def _key(tool_name: str, kwargs: dict[str, Any]) -> tuple | None:
