@@ -18,12 +18,15 @@ on their own end.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import subprocess
 from pathlib import Path
 from typing import Protocol
 
 from core.config import config
+
+logger = logging.getLogger("orion.tts")
 
 _HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 _LIST_MARKER_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])(?:\s+|$)", re.MULTILINE)
@@ -105,6 +108,9 @@ class ElevenLabsSynthesizer:
         return b"".join(audio_chunks)
 
 
+_EDGE_TTS_NETWORK_TIMEOUT_S = 15
+
+
 class EdgeTTSSynthesizer:
     """Microsoft Edge's free cloud TTS via the unofficial edge-tts package —
     no API key, no local voice model to download. The zero-setup fallback:
@@ -125,7 +131,25 @@ class EdgeTTSSynthesizer:
         text = _strip_markdown_for_speech(text)
         if not text:
             return b""
-        mp3_bytes = asyncio.run(self._synthesize_mp3(text))
+        try:
+            mp3_bytes = asyncio.run(
+                asyncio.wait_for(self._synthesize_mp3(text), timeout=_EDGE_TTS_NETWORK_TIMEOUT_S)
+            )
+        except (asyncio.TimeoutError, OSError) as exc:
+            # _decode_mp3_to_pcm below already learned this lesson for the
+            # ffmpeg subprocess step (see its own comment) -- this network
+            # call needed the same fix and didn't have it. A stalled Edge
+            # TTS connection (dead wifi, a DNS hiccup, Microsoft's endpoint
+            # not responding) hung here indefinitely with nothing bounding
+            # it, and since every caller of Synthesizer.synthesize() is
+            # synchronous, that froze whichever always-on interface hit it
+            # completely -- confirmed live: the Pi/laptop voice loop stopped
+            # responding to the wake word at all after one stalled request,
+            # because the single listening thread it needs to get back to
+            # was stuck in here instead. Times out and degrades to "nothing
+            # to say" instead, same as every other synthesize() failure.
+            logger.warning("Edge TTS request failed or timed out (%s) -- skipping this utterance.", exc)
+            return b""
         if not mp3_bytes:
             return b""
         return self._decode_mp3_to_pcm(mp3_bytes)

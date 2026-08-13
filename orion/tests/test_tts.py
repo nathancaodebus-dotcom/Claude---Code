@@ -7,6 +7,7 @@ so this test doesn't need the real (large) piper-tts wheel installed.
 """
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import sys
 import types
@@ -202,6 +203,38 @@ def test_edge_tts_skips_ffmpeg_for_pure_list_marker_fragment(fake_ffmpeg):
 
 def test_edge_tts_sample_rate_is_24000():
     assert EdgeTTSSynthesizer("fr-FR-HenriNeural").sample_rate == 24000
+
+
+class _HangingCommunicate:
+    """Simulates a stalled network connection to Edge TTS's endpoint (dead
+    wifi, a DNS hiccup, the service just not responding) -- stream() never
+    yields anything and never finishes on its own."""
+
+    def __init__(self, text, voice):
+        pass
+
+    async def stream(self):
+        await asyncio.sleep(3600)
+        yield {"type": "audio", "data": b"unreachable"}  # pragma: no cover
+
+
+def test_edge_tts_network_call_has_a_timeout(monkeypatch, fake_ffmpeg):
+    """Regression test: confirmed live -- a stalled Edge TTS request used to
+    hang here indefinitely with nothing bounding it, and because every
+    Synthesizer.synthesize() caller is synchronous, that froze the entire
+    always-on voice loop completely (it stopped responding to the wake word
+    at all, since the one thread that needed to get back to listening for
+    it was stuck in here instead). Patches the timeout down to keep this
+    test itself fast rather than actually waiting out the real 15s one."""
+    import core.tts as tts_module
+
+    monkeypatch.setattr(tts_module, "_EDGE_TTS_NETWORK_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(sys.modules["edge_tts"], "Communicate", _HangingCommunicate)
+
+    result = EdgeTTSSynthesizer("fr-FR-HenriNeural").synthesize("Bonjour")
+
+    assert result == b""
+    assert fake_ffmpeg == []  # never got far enough to even try decoding
 
 
 # --- get_synthesizer / get_synthesizer_if_available selection chain ---
