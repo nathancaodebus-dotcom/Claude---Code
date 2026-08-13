@@ -251,3 +251,64 @@ def test_outputs_mount_serves_generated_files(client):
 def test_outputs_mount_404s_for_a_missing_file(client):
     response = client.get("/outputs/does-not-exist.png")
     assert response.status_code == 404
+
+
+# --- /api/transcribe: push-to-talk mic input (faster-whisper server-side) ---
+
+
+class _FakeSegment:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _FakeWhisperModel:
+    def __init__(self, segments: list[str]):
+        self._segments = [_FakeSegment(s) for s in segments]
+        self.calls: list[tuple[str, str]] = []
+
+    def transcribe(self, path: str, language: str | None = None):
+        self.calls.append((path, language))
+        return self._segments, None
+
+
+def test_transcribe_returns_error_when_no_whisper_model_available(client, monkeypatch):
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: None)
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
+
+    assert response.status_code == 200
+    assert "requirements-voice.txt" in response.json()["error"]
+
+
+def test_transcribe_returns_joined_segment_text(client, monkeypatch):
+    fake_model = _FakeWhisperModel(["Bonjour", " le monde"])
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: fake_model)
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "Bonjour  le monde"}
+    assert len(fake_model.calls) == 1
+    called_path, called_language = fake_model.calls[0]
+    assert called_path.endswith(".webm")
+
+
+def test_transcribe_rejects_empty_audio(client, monkeypatch):
+    fake_model = _FakeWhisperModel(["should not be reached"])
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: fake_model)
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"", "audio/webm")})
+
+    assert response.status_code == 200
+    assert response.json() == {"error": "No audio received."}
+    assert fake_model.calls == []
+
+
+def test_transcribe_reports_when_nothing_was_understood(client, monkeypatch):
+    fake_model = _FakeWhisperModel([])  # no segments -- silence, or unintelligible audio
+    monkeypatch.setattr(app_module, "_get_whisper_model", lambda: fake_model)
+
+    response = client.post("/api/transcribe", files={"audio": ("clip.webm", b"fake audio bytes", "audio/webm")})
+
+    assert response.status_code == 200
+    assert "Didn't catch that" in response.json()["error"]

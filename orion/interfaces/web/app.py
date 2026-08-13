@@ -16,6 +16,7 @@ import base64
 import io
 import json
 import queue
+import tempfile
 import threading
 import wave
 from contextlib import asynccontextmanager
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import AsyncIterator, Iterator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, File
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -73,6 +74,29 @@ def _synthesize_wav_b64(text: str) -> str | None:
         wav_file.setframerate(_tts.sample_rate)
         wav_file.writeframes(pcm)
     return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+# Same faster-whisper model the Pi voice loop and Telegram voice messages
+# transcribe with, loaded once on first use rather than at import time —
+# it takes a couple of seconds to load, not worth paying on every process
+# start for a HUD session that might never touch the mic button. None if
+# requirements-voice.txt isn't installed, same optional-dependency shape
+# as _tts above.
+_whisper_model = None
+_whisper_model_lock = threading.Lock()
+
+
+def _get_whisper_model():
+    global _whisper_model
+    with _whisper_model_lock:
+        if _whisper_model is None:
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError:
+                return None
+            _whisper_model = WhisperModel(config.whisper_model_size, device="cpu", compute_type="int8")
+        return _whisper_model
+
 
 # Reminders due and health alerts arrive on their own background threads
 # (same notify-callback shape cli.py prints and voice_loop.py speaks) and
@@ -186,6 +210,35 @@ def chat(req: ChatRequest) -> StreamingResponse:
         error = json.dumps({"type": "error", "text": "Empty message."})
         return StreamingResponse(iter([f"data: {error}\n\n"]), media_type="text/event-stream")
     return StreamingResponse(_stream_chat(message), media_type="text/event-stream")
+
+
+@app.post("/api/transcribe")
+def transcribe(audio: bytes = File(...)) -> dict:
+    """Push-to-talk mic input for the HUD: the browser records a clip (any
+    container MediaRecorder produces — webm/opus in Chrome/Edge, ogg/opus
+    in Firefox) and posts the raw bytes here. faster-whisper decodes
+    whatever container it's given via PyAV, the same way telegram_bot.py
+    feeds it Telegram's .ogg voice notes directly with no manual
+    transcoding step — so this needs no ffmpeg conversion first, just a
+    file on disk for WhisperModel.transcribe() to open (it doesn't accept
+    raw bytes directly)."""
+    model = _get_whisper_model()
+    if model is None:
+        return {
+            "error": "Speech-to-text isn't available — install requirements-voice.txt (faster-whisper) first."
+        }
+    if not audio:
+        return {"error": "No audio received."}
+
+    with tempfile.NamedTemporaryFile(suffix=".webm") as tmp:
+        tmp.write(audio)
+        tmp.flush()
+        segments, _ = model.transcribe(tmp.name, language=config.voice_language)
+        text = " ".join(segment.text for segment in segments).strip()
+
+    if not text:
+        return {"error": "Didn't catch that — could you repeat?"}
+    return {"text": text}
 
 
 def _stream_events() -> Iterator[str]:

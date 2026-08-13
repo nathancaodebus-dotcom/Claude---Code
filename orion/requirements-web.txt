@@ -2,3 +2,8 @@
 # Install alongside requirements.txt: pip install -r requirements.txt -r requirements-web.txt
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
+# Needed for /api/transcribe's multipart file upload (the mic button's
+# recorded clip) even before faster-whisper (requirements-voice.txt) is
+# considered — FastAPI raises at import time without it, not just when the
+# route is actually called.
+python-multipart>=0.0.9

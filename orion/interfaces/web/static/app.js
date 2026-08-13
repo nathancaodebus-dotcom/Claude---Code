@@ -6,6 +6,7 @@
   const heroHintEl = document.getElementById("hero-hint");
   const inputEl = document.getElementById("input");
   const sendEl = document.getElementById("send");
+  const micEl = document.getElementById("mic");
   const notificationsEl = document.getElementById("notifications");
   const clockEl = document.getElementById("readout-clock");
   const coreReadoutEl = document.getElementById("readout-core");
@@ -344,6 +345,85 @@
     if (e.key === "Enter") sendMessage();
   });
   inputEl.focus();
+
+  // --- mic input: push-to-talk, not always-listening like the Raspberry
+  // Pi voice loop (a browser tab can't keep a mic open unattended with a
+  // wake word) — click to record, click again to stop, the clip goes to
+  // /api/transcribe (faster-whisper server-side, same model the Pi/
+  // Telegram use) and the resulting text is sent exactly like typing it
+  // in would be. ---
+
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
+  async function startRecording() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      showNotification(`Micro inaccessible (${err}).`, { isError: true });
+      return;
+    }
+
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.addEventListener("dataavailable", (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    });
+    mediaRecorder.addEventListener("stop", () => {
+      stream.getTracks().forEach((track) => track.stop());
+      micEl.classList.remove("recording");
+      micEl.textContent = "🎤";
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      transcribeAndSend(blob);
+    });
+
+    mediaRecorder.start();
+    micEl.classList.add("recording");
+    micEl.textContent = "■"; // ■ stop
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  }
+
+  async function transcribeAndSend(blob) {
+    setState("thinking");
+    heroHintEl.textContent = "TRANSCRIBING…";
+    inputEl.disabled = true;
+    sendEl.disabled = true;
+    micEl.disabled = true;
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", blob, "clip.webm");
+      const response = await fetch("/api/transcribe", { method: "POST", body: formData });
+      const data = await response.json();
+
+      if (data.error) {
+        showNotification(data.error, { isError: true });
+        return;
+      }
+      inputEl.value = data.text;
+      await sendMessage();
+    } catch (err) {
+      showNotification(`Transcription impossible (${err}).`, { isError: true });
+    } finally {
+      setState(null);
+      heroHintEl.textContent = "WAITING FOR COMMAND";
+      inputEl.disabled = false;
+      sendEl.disabled = false;
+      micEl.disabled = false;
+    }
+  }
+
+  micEl.addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  });
 
   // --- proactive notifications (reminders, health alerts) ---
 
