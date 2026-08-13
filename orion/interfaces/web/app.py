@@ -1,0 +1,169 @@
+"""Local web interface — a HUD-styled browser UI for the same Orion every
+other interface talks to (core/agent.py's Agent, shared Memory/Store/tool
+registry). This is a different way to look at Orion, not a different
+assistant: swap this for cli.py and everything (memory, tools, reminders)
+behaves identically.
+
+Single-user, single-session, matching cli.py's SESSION_ID convention — two
+browser tabs open at once share the same conversation, same as running the
+CLI twice would with the same ORION_DB_PATH.
+
+Run with: python -m interfaces.web.app
+"""
+from __future__ import annotations
+
+import json
+import queue
+import threading
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import AsyncIterator, Iterator
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from core import attachments
+from core.agent import Agent
+from core.config import config
+from core.health_monitor import HealthMonitor
+from core.logging_setup import configure_logging
+from core.memory import Memory
+from core.scheduler import ReminderScheduler
+from core.store import Store
+from tools.registry_builder import build_registry
+
+SESSION_ID = "web"
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_OUTPUTS_DIR = Path("outputs")
+
+_memory = Memory()
+_store = Store()
+_agent = Agent(_memory, build_registry(_memory, _store))
+
+# Reminders due and health alerts arrive on their own background threads
+# (same notify-callback shape cli.py prints and voice_loop.py speaks) and
+# get fanned out to every open browser tab as they happen, via one queue
+# per connected /api/events stream.
+_event_queues: list[queue.Queue] = []
+_event_queues_lock = threading.Lock()
+
+
+def _broadcast_event(text: str) -> None:
+    payload = {"type": "notification", "text": text}
+    with _event_queues_lock:
+        queues = list(_event_queues)
+    for q in queues:
+        q.put(payload)
+
+
+_scheduler = ReminderScheduler(_store, notify=_broadcast_event)
+_health_monitor = HealthMonitor(_store, notify=_broadcast_event)
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
+    _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _scheduler.start()
+    _health_monitor.start()
+    yield
+    _scheduler.stop()
+    _health_monitor.stop()
+
+
+app = FastAPI(title="Orion", lifespan=_lifespan)
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+@app.get("/api/status")
+def status() -> dict:
+    return {
+        "assistant_name": config.assistant_name,
+        "model": config.model,
+        "ready": bool(config.anthropic_api_key),
+    }
+
+
+def _stream_chat(message: str) -> Iterator[str]:
+    """Runs Agent.respond_streaming (a blocking call with an on_sentence
+    callback) on a background thread and relays each sentence to the
+    browser as a Server-Sent Event as soon as it's ready — the same
+    sentence-at-a-time responsiveness the voice interfaces get, just
+    rendered as text appearing progressively instead of spoken aloud."""
+    events: queue.Queue = queue.Queue()
+    _DONE = object()
+
+    def on_sentence(text: str) -> None:
+        events.put({"type": "sentence", "text": text})
+
+    def run() -> None:
+        try:
+            final_text = _agent.respond_streaming(SESSION_ID, message, on_sentence=on_sentence)
+            events.put({"type": "done", "text": final_text, "attachments": attachments.drain()})
+        except Exception as exc:  # noqa: BLE001 - surfaced to the UI, never a crash
+            events.put({"type": "error", "text": str(exc)})
+        finally:
+            events.put(_DONE)
+
+    threading.Thread(target=run, daemon=True).start()
+
+    while True:
+        item = events.get()
+        if item is _DONE:
+            return
+        yield f"data: {json.dumps(item)}\n\n"
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest) -> StreamingResponse:
+    message = req.message.strip()
+    if not message:
+        error = json.dumps({"type": "error", "text": "Empty message."})
+        return StreamingResponse(iter([f"data: {error}\n\n"]), media_type="text/event-stream")
+    return StreamingResponse(_stream_chat(message), media_type="text/event-stream")
+
+
+def _stream_events() -> Iterator[str]:
+    q: queue.Queue = queue.Queue()
+    with _event_queues_lock:
+        _event_queues.append(q)
+    try:
+        while True:
+            item = q.get()
+            yield f"data: {json.dumps(item)}\n\n"
+    finally:
+        with _event_queues_lock:
+            if q in _event_queues:
+                _event_queues.remove(q)
+
+
+@app.get("/api/events")
+def events() -> StreamingResponse:
+    return StreamingResponse(_stream_events(), media_type="text/event-stream")
+
+
+_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+# Generated files (images, documents, QR codes, ...) land under outputs/ —
+# mounted so the UI can show/download them directly by the relative path
+# attachments.drain() already returns. Registered before the catch-all
+# static mount below (Starlette matches routes in registration order; a
+# "/" mount added first would swallow every path under it, this one included).
+app.mount("/outputs", StaticFiles(directory=str(_OUTPUTS_DIR)), name="outputs")
+app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
+
+
+def main() -> None:
+    configure_logging()
+    if not config.anthropic_api_key:
+        raise SystemExit("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.")
+    uvicorn.run(app, host="127.0.0.1", port=config.web_port)
+
+
+if __name__ == "__main__":
+    main()

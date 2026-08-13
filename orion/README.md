@@ -6,12 +6,12 @@ A personal AI assistant you can talk to about anything, at any time — it
 reads your email, manages your calendar, controls your smart home, creates
 and edits PowerPoint/Word/Excel files on request, controls Spotify and casts
 video to your TV, and remembers things about you across conversations. One
-agent core, four interfaces (terminal, Telegram voice conversations on
+agent core, five interfaces (terminal, Telegram voice conversations on
 Android, a Termux tap-to-talk shortcut also on Android, always-listening
-voice on a Raspberry Pi) — anything you dictate out loud goes through the
-same tool-using loop as typed text. **Phone and Pi are both fully
-operational voice interfaces**, not one primary and one afterthought — see
-§6/§11 for the phone and §7 for the Pi.
+voice on a Raspberry Pi, and a HUD-styled local web UI) — anything you
+dictate out loud goes through the same tool-using loop as typed text.
+**Phone and Pi are both fully operational voice interfaces**, not one
+primary and one afterthought — see §6/§11 for the phone and §7 for the Pi.
 
 ## How it's built
 
@@ -29,6 +29,7 @@ orion/
     cli.py             # terminal chat, for local testing
     telegram_bot.py    # Telegram bot — this is your Android access point
     voice/voice_loop.py # wake word + local STT/TTS, for a Raspberry Pi
+    web/app.py         # HUD-styled local browser UI — see §18
   systemd/         # unit files to run interfaces as background services on the Pi
 ```
 
@@ -814,6 +815,42 @@ Tools (`core/offline_agent.py`, `tools/base.py`'s `Tool.requires_network`
 flag): no new tools — this reuses the existing registry, filtered to
 whichever tools have been explicitly reviewed and marked safe for a model
 that can't reach the network at all.
+
+## 18. HUD-styled local web UI
+
+The same Orion — same `Agent`, same tools, same memory — behind a browser
+tab instead of a plain terminal: a dark, glowing, sci-fi-HUD-inspired
+interface (`interfaces/web/`), for anyone who wants something nicer to
+look at than a scrolling `you>` prompt. This is an additional interface,
+not a replacement — the CLI, Telegram, and voice loop are unaffected and
+keep working exactly as before.
+
+```bash
+pip install -r requirements.txt -r requirements-web.txt
+python -m interfaces.web.app
+```
+
+Then open **http://127.0.0.1:8420** (port configurable via
+`ORION_WEB_PORT`). Type a message and it streams back sentence by
+sentence, the same responsiveness the voice interfaces get — the central
+emblem's glow speeds up while Orion is thinking, then pulses while it
+replies. Reminders and health alerts (§9/§10) pop up as HUD notifications
+the moment they fire, without needing to ask. Anything a tool generates
+(an image, a QR code, a document) shows up inline in the chat.
+
+Single-user, single-session, same as the CLI — two browser tabs open at
+once share one conversation, the same as running the CLI twice would with
+the same `ORION_DB_PATH`. No auth, no HTTPS: it binds to `127.0.0.1` only
+(not reachable from other devices on your network), which is the right
+tradeoff for a personal tool running on your own machine, not a public
+one.
+
+Pure vanilla HTML/CSS/JS on the frontend — no framework, no build step,
+no external font/CDN dependency (same philosophy as §13's website
+generator) — so it's one `pip install` away from running and there's
+nothing to break. The backend is a small FastAPI app that streams replies
+over Server-Sent Events; `requirements-web.txt` is the only new
+dependency (`fastapi`, `uvicorn`).
 
 ## What's deferred (from the full integration wishlist)
 
