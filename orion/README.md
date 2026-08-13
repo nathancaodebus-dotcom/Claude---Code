@@ -373,17 +373,20 @@ a half measuring the room's actual background noise and sets its
 silence-detection threshold from that, rather than a fixed value that's
 wrong for most rooms/mics.
 
-**Talking over Orion to interrupt it (barge-in) is off by default.**
-`VOICE_BARGE_IN_ENABLED=true` turns it on, but it's a plain volume check
-on the same mic Orion's own voice plays out of — with no real acoustic
-echo cancellation, a laptop's built-in speakers and mic (inches apart) or
-any external speaker close to the mic will make Orion reliably hear
-*itself* and cut its own reply off mid-sentence, not the user talking.
-This isn't a hypothetical edge case; it's what "keeps interrupting itself
-for no reason" almost always turns out to be, and there's no software fix
-for it without either headphones (so the mic never hears the speaker
-output at all) or an actual AEC pipeline, neither of which this project
-has. Only turn it on if your setup genuinely doesn't have this problem.
+**Saying the wake word again while Orion is talking interrupts it
+(barge-in) — off by default.** `VOICE_BARGE_IN_ENABLED=true` turns it on.
+It used to be a plain volume check on the same mic Orion's own voice
+plays out of, which — with no real acoustic echo cancellation — made a
+laptop's built-in speakers and mic (inches apart) reliably hear *Orion's
+own reply* as the user talking over it and cut itself off mid-sentence
+for no reason. Requiring the actual wake word instead of just "some
+noise" (the same openWakeWord model already used to wake Orion up in the
+first place, listening throughout playback instead of only when idle) is
+far less prone to that — Orion's own synthesized reply text essentially
+never sounds like "hey orion" to it — but it's not a hard guarantee
+against self-triggering the way headphones or real AEC would be, which
+is why it still needs an explicit opt-in rather than being on by
+default.
 
 **If replies feel slow to start**, the biggest lever on a CPU-only laptop
 is the transcription model: `WHISPER_MODEL_SIZE` in `.env` defaults to

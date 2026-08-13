@@ -91,18 +91,16 @@ class Config:
     # sluggish — each step down cuts transcription time roughly in half at
     # some cost to recognizing less common words/names. See README §7.
     whisper_model_size: str = field(default_factory=lambda: _get("WHISPER_MODEL_SIZE", "small"))
-    # Off by default: barge-in (talking over Orion to interrupt it) is a
-    # plain RMS check on the same mic Orion's own voice plays out of, with
-    # no real acoustic echo cancellation. On a laptop specifically, the
-    # built-in speakers and built-in mic are inches apart, so Orion's own
-    # voice reliably bleeds back into the mic loud enough to look like the
-    # user talking over it — a well-documented class of problem for any
-    # voice assistant without a proper AEC pipeline or headphones (see
-    # README §7's "keeps interrupting itself" note). Rather than get this
-    # wrong by default on the setup most people actually have, it needs an
-    # explicit opt-in from someone who knows their hardware doesn't have
-    # this problem (headphones, a mic physically far from the speakers, or
-    # real AEC upstream).
+    # Off by default: barge-in (saying the wake word again to interrupt
+    # Orion mid-reply) listens with the same wake-word model used for
+    # normal wake detection, which is far less prone to false-triggering
+    # on Orion's own synthesized voice than the plain RMS/volume check this
+    # used to be — that version reliably heard *itself* on a laptop's
+    # built-in speakers+mic (inches apart, no real acoustic echo
+    # cancellation) and cut its own replies off for no reason (see README
+    # §7). Still not a hard guarantee against self-triggering without real
+    # AEC or headphones, so it stays an explicit opt-in rather than a
+    # default.
     voice_barge_in_enabled: bool = field(
         default_factory=lambda: _get("VOICE_BARGE_IN_ENABLED", "false").lower() == "true"
     )

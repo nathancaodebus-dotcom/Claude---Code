@@ -80,16 +80,19 @@ MAX_CONVERSATION_TURNS = 20
 INITIAL_SILENCE_GRACE_S = 3.0
 STOP_PHRASES = {"stop", "stop listening", "arrête", "arrete", "au revoir", "stop orion", "goodbye"}
 
-# Barge-in: while Orion is talking, a loud-enough sound cuts playback short
-# so the user can interrupt instead of having to wait it out. The multiplier
-# is much stricter than the ordinary silence threshold on purpose — this is
-# a plain RMS check on the same microphone used for everything else, with no
-# acoustic echo cancellation, so it needs a real margin to avoid Orion's own
-# voice bleeding from the speaker into the mic (worse the closer they are,
-# e.g. both built into one Pi case) triggering a false interruption. This
-# reduces false positives; it does not eliminate them the way real AEC would.
-BARGE_IN_LOUDNESS_MULTIPLIER = 3.0
-BARGE_IN_CONSECUTIVE_CHUNKS = 2
+# Barge-in: while Orion is talking, saying the wake word again cuts
+# playback short so the user can interrupt instead of waiting it out. This
+# used to be a plain RMS/volume check on the same mic Orion's own voice
+# plays out of, which meant Orion reliably heard *itself* on any setup
+# without real acoustic echo cancellation (a laptop's built-in speakers +
+# mic being the obvious case) and cut its own replies off for no reason —
+# see VOICE_BARGE_IN_ENABLED in core/config.py. Requiring the actual wake
+# word instead of just "some noise" is far less prone to that: Orion's own
+# synthesized reply text essentially never sounds like "hey orion" to the
+# same wake-word model that already has to tell it apart from ordinary
+# room noise for wake detection in the first place — the same trigger for
+# a very different kind of false positive, not a volume threshold at all.
+WAKE_WORD_PREDICTION_THRESHOLD = 0.5
 
 
 def _rms(chunk: np.ndarray) -> float:
@@ -272,16 +275,18 @@ class VoiceLoop:
             return None
         return np.frombuffer(raw, dtype=np.int16)
 
+    def _heard_wake_word(self, chunk: np.ndarray) -> bool:
+        prediction = self._wake_model.predict(chunk.flatten())
+        return prediction.get(config.wake_word, 0.0) >= WAKE_WORD_PREDICTION_THRESHOLD
+
     def _play_audio(self, audio: np.ndarray) -> bool:
-        """Blocks until playback finishes. Returns True if the user talked
-        loudly enough, for long enough, to count as barging in — playback
+        """Blocks until playback finishes. Returns True if the wake word
+        was heard again during playback, counting as a barge-in — playback
         was cut short in that case rather than played to completion. Only
-        actually checks for that if VOICE_BARGE_IN_ENABLED is set (see
-        core/config.py) — off by default, since without real acoustic echo
-        cancellation this is a plain RMS check on the same mic Orion's own
-        voice plays out of, and on a laptop's built-in speakers+mic (inches
-        apart) that reliably means Orion hears itself and cuts itself off
-        mid-reply."""
+        actually listens for that if VOICE_BARGE_IN_ENABLED is set (see
+        core/config.py) — off by default, since even the wake-word check
+        isn't a hard guarantee against Orion hearing itself, just far less
+        prone to it than a plain volume threshold was."""
         self._drain_queue()
         sd.play(audio, samplerate=self._tts.sample_rate)
 
@@ -289,20 +294,14 @@ class VoiceLoop:
             sd.wait()
             return False
 
-        loud_chunks = 0
-        barge_in_level = self._silence_threshold * BARGE_IN_LOUDNESS_MULTIPLIER
         while sd.get_stream().active:
             try:
                 chunk = self._audio_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            if _rms(chunk) > barge_in_level:
-                loud_chunks += 1
-                if loud_chunks >= BARGE_IN_CONSECUTIVE_CHUNKS:
-                    sd.stop()
-                    return True
-            else:
-                loud_chunks = 0
+            if self._heard_wake_word(chunk):
+                sd.stop()
+                return True
         return False
 
     def _record_utterance(
@@ -421,8 +420,7 @@ class VoiceLoop:
             self._calibrate_silence_threshold()
             while True:
                 chunk = self._audio_queue.get()
-                prediction = self._wake_model.predict(chunk.flatten())
-                if prediction.get(config.wake_word, 0.0) < 0.5:
+                if not self._heard_wake_word(chunk):
                     continue
 
                 print("Wake word detected, listening...")
