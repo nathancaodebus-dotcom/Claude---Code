@@ -13,6 +13,17 @@
     core/config.py's load_dotenv() finds .env from the working directory the
     task sets, so there's no separate "EnvironmentFile=" step like on Linux.
 
+    Each task runs pythonw.exe (no console window) wrapped in "cmd /c ... >>
+    logs\<name>.log 2>&1". This isn't cosmetic: launched with no console and
+    no redirection, pythonw.exe's sys.stdout/sys.stderr are None, and the
+    first thing Orion (or any Python program) writes to them raises an
+    unhandled exception that kills the process instantly and completely
+    silently -- no traceback anywhere, not even in core/logging_setup.py's
+    own log file, since the crash can happen before or outside of anything
+    that goes through the logging module. Redirecting to a real file gives
+    pythonw valid handles, which avoids that failure mode entirely and
+    doubles as a per-task log to check if a task still won't start.
+
     Safe to re-run after `git pull` or editing .env -- Register-ScheduledTask
     overwrites an existing task of the same name instead of erroring.
 
@@ -53,6 +64,9 @@ $Modules = @{
     voice    = "interfaces.voice.voice_loop"
 }
 
+$LogsDir = Join-Path $RepoRoot "logs"
+New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+
 # Task Scheduler's nearest equivalent to systemd's Restart=on-failure /
 # RestartSec=5: retry up to 999 times, once a minute. IgnoreNew stops a
 # second copy piling up if the logon trigger fires while a manually-started
@@ -70,7 +84,12 @@ $Trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAM
 
 foreach ($name in $Interfaces) {
     $taskName = "Orion-" + (Get-Culture).TextInfo.ToTitleCase($name)
-    $action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m $($Modules[$name])" -WorkingDirectory $RepoRoot
+    $logFile = Join-Path $LogsDir "$name.log"
+    # >> appends rather than overwrites, so a restart (see RestartSettings
+    # above) doesn't erase the previous attempt's output right when you'd
+    # want to compare the two.
+    $cmdArgs = "/c `"`"$PythonExe`" -m $($Modules[$name]) >> `"$logFile`" 2>&1`""
+    $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\cmd.exe" -Argument $cmdArgs -WorkingDirectory $RepoRoot
 
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $Trigger `
         -Settings $RestartSettings `
