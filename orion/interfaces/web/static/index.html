@@ -67,12 +67,15 @@
 <footer class="hud-input">
   <span class="prompt-caret">&gt;</span>
   <input id="input" type="text" autocomplete="off" placeholder="Entrez une commande…" />
-  <!-- Click once, talk, recording stops itself on silence (app.js) — a
-       manual click while recording still stops it early too. Not always-
-       listening/wake-word like the Raspberry Pi voice loop, since that
-       needs a mic held open continuously, which a browser tab can't do
-       unattended. -->
-  <button id="mic" type="button" title="Parler à Orion — s'arrête tout seul quand tu as fini">🎤</button>
+  <!-- Click once to start a whole spoken back-and-forth, not one
+       recording: each utterance auto-stops on silence, gets transcribed
+       and answered, then the mic reopens on its own for the next turn —
+       no re-clicking between turns (app.js). Click again any time to end
+       the conversation. Not always-listening/wake-word like the
+       Raspberry Pi voice loop, since that needs a mic held open
+       continuously, which a browser tab can't do unattended — this still
+       needs the one initial click. -->
+  <button id="mic" type="button" title="Parler à Orion — clique pour démarrer/arrêter la conversation">🎤</button>
   <button id="send" type="button">ENVOYER</button>
 </footer>
 

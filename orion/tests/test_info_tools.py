@@ -1,6 +1,6 @@
 import datetime
 
-from tools.info_tools import CryptoPriceTool, CurrencyConversionTool, HistoricalWeatherTool
+from tools.info_tools import CryptoPriceTool, CurrencyConversionTool, HistoricalWeatherTool, WeatherTool
 
 
 class _FakeResponse:
@@ -87,3 +87,90 @@ def test_historical_weather_skips_a_leap_day_year_instead_of_crashing(monkeypatc
     # 29 and are skipped without raising, instead of crashing the whole call.
     assert calls == ["2024-02-29"]
     assert "No historical data" not in result
+
+
+def _fake_weather_forecast(num_days: int) -> dict:
+    return {
+        "current": {
+            "temperature_2m": 15.0,
+            "relative_humidity_2m": 60,
+            "weather_code": 2,
+            "wind_speed_10m": 10.0,
+        },
+        "daily": {
+            "time": [f"2026-08-{13 + i:02d}" for i in range(num_days)],
+            "temperature_2m_max": [20.0 + i for i in range(num_days)],
+            "temperature_2m_min": [10.0 + i for i in range(num_days)],
+            "weather_code": [0, 61, 3, 95, 1, 2, 71][:num_days],
+            "precipitation_probability_max": [5, 80, 20, 90, 10, 15, 40][:num_days],
+        },
+    }
+
+
+def _fake_geo_and_forecast(monkeypatch, forecast_response: dict):
+    def fake_get(url, params=None, timeout=None):
+        if "geocoding" in url:
+            return _FakeResponse({"results": [{"name": "Geneva", "country": "Switzerland", "latitude": 46.2, "longitude": 6.15}]})
+        return _FakeResponse(forecast_response)
+
+    monkeypatch.setattr("tools.info_tools.client.get", fake_get)
+
+
+def test_weather_default_forecast_days_is_today_only(monkeypatch):
+    _fake_geo_and_forecast(monkeypatch, _fake_weather_forecast(1))
+
+    result = WeatherTool().run(city="Geneva")
+
+    assert "Today:" in result
+    assert "Tomorrow:" not in result
+
+
+def test_weather_multi_day_forecast_includes_tomorrow_labeled_explicitly(monkeypatch):
+    """Regression test: the tool used to only ever report today's range
+    (daily[...][0]) even though Open-Meteo already returns a full week by
+    default — Orion telling the user it "couldn't look at tomorrow's
+    weather" was a tool-description/parameter gap, not a real API
+    limitation."""
+    _fake_geo_and_forecast(monkeypatch, _fake_weather_forecast(3))
+
+    result = WeatherTool().run(city="Geneva", forecast_days=3)
+
+    assert "Today:" in result
+    assert "Tomorrow:" in result
+    assert "10.0°C to 20.0°C" in result  # today's (index 0) min/max
+    assert "11.0°C to 21.0°C" in result  # tomorrow's (index 1) min/max, distinct from today's
+
+
+def test_weather_includes_rain_chance_and_condition_description(monkeypatch):
+    _fake_geo_and_forecast(monkeypatch, _fake_weather_forecast(2))
+
+    result = WeatherTool().run(city="Geneva", forecast_days=2)
+
+    assert "80% chance of rain" in result  # tomorrow's precipitation_probability_max
+    assert "slight rain" in result  # weather_code 61 for tomorrow
+
+
+def test_weather_forecast_days_is_clamped_not_rejected(monkeypatch):
+    calls = []
+
+    def fake_get(url, params=None, timeout=None):
+        if "geocoding" in url:
+            return _FakeResponse({"results": [{"name": "Geneva", "country": "CH", "latitude": 1, "longitude": 2}]})
+        calls.append(params["forecast_days"])
+        return _FakeResponse(_fake_weather_forecast(7))
+
+    monkeypatch.setattr("tools.info_tools.client.get", fake_get)
+
+    WeatherTool().run(city="Geneva", forecast_days=30)
+
+    assert calls == [7]  # clamped to the 7-day cap, not passed through or rejected
+
+
+def test_weather_unknown_weather_code_degrades_gracefully(monkeypatch):
+    forecast = _fake_weather_forecast(1)
+    forecast["current"]["weather_code"] = 9999  # not in the WMO table
+    _fake_geo_and_forecast(monkeypatch, forecast)
+
+    result = WeatherTool().run(city="Geneva")
+
+    assert "unknown conditions" in result

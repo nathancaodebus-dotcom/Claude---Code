@@ -956,20 +956,25 @@ To keep it running in the background instead of a foreground terminal,
 `systemd/orion-web.service` follows the same pattern as the Telegram/voice
 units — see §8.
 
-**Talking to it instead of typing**: click the 🎤 button once, then just
-talk — recording stops itself as soon as you go quiet (client-side
-silence detection in the browser, the same idea as §7's Raspberry Pi
-voice loop's calibrated silence detection, reimplemented in the Web Audio
-API since there's no way to reuse that server-side Python against a live
-browser mic stream), so there's no second click needed to end it. A
-manual click while it's recording still stops it early too, as a
-fallback. The clip is then transcribed server-side (faster-whisper, needs
-`requirements-voice.txt` installed per §7) and sent exactly like typing
-the same text would be. This is still not always-listening like §7's
-voice loop — a browser tab can't keep a mic open unattended waiting for a
-wake word the way a dedicated process can, so the initial click is still
-needed; for genuinely hands-free use, run `interfaces.voice.voice_loop`
-instead (§7), separately from the web UI.
+**Talking to it instead of typing**: click the 🎤 button once to start a
+whole spoken back-and-forth, not just one recording. Each utterance stops
+itself as soon as you go quiet — client-side silence detection in the
+browser, the same idea as §7's Raspberry Pi voice loop's calibrated
+silence detection, reimplemented in the Web Audio API since there's no
+way to reuse that server-side Python against a live browser mic stream —
+gets transcribed (faster-whisper, needs `requirements-voice.txt` per §7)
+and sent exactly like typing it would be, and the mic reopens on its own
+for the next turn once Orion's done replying. No re-clicking between
+turns; click the 🎤 again any time to end the conversation (a manual click
+while it's actively recording also stops that one utterance early, same
+as before). Three failed turns in a row ends the conversation
+automatically with an explanation rather than silently retrying forever
+against something consistently broken. This is still not always-listening
+like §7's voice loop — a browser tab can't keep a mic open unattended
+waiting for a wake word the way a dedicated process can, so the initial
+click is still needed; for genuinely hands-free use with no click at all,
+run `interfaces.voice.voice_loop` instead (§7), separately from the web
+UI.
 
 The browser will ask for microphone permission the first time — if it
 never asks, or the mic button shows an error immediately on click, check,

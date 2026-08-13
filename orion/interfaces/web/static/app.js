@@ -361,9 +361,19 @@
   const SILENCE_CALIBRATION_MS = 400; // brief ambient-level sample before judging silence, mirrors voice_loop.py's calibration
   const SILENCE_MARGIN_MULTIPLIER = 2.5; // threshold = ambient RMS * this
   const MIN_SILENCE_RMS = 0.015; // floor, in case the room is closer to silent than any mic's noise floor
-  const TRAILING_SILENCE_MS = 1200; // how long you can pause before it decides you're done
+  // 2s, not the 1.2s this started at: a longer sentence has ordinary
+  // thinking/breathing pauses *inside* it that are longer than 1.2s, and
+  // those used to get misread as "done talking," cutting the recording
+  // off mid-sentence. 2s is closer to how long a real listener waits
+  // before assuming someone's finished, at some cost to how snappy the
+  // auto-stop feels on short utterances.
+  const TRAILING_SILENCE_MS = 2000;
   const MAX_INITIAL_SILENCE_MS = 6000; // give up if nothing is said at all
-  const MAX_RECORDING_MS = 20000; // hard cap regardless of silence detection
+  // 2 minutes: not a normal constraint, a safety net for if silence
+  // detection itself somehow never fires (e.g. a very noisy room) --
+  // without this, that failure mode records forever instead of eventually
+  // giving up and letting the turn fail cleanly.
+  const MAX_RECORDING_MS = 120000;
 
   let audioContext = null;
   let silenceCheckInterval = null;
@@ -449,6 +459,25 @@
   // separate streams instead of being treated as "already starting."
   let micBusy = false;
 
+  // A full spoken back-and-forth (multiple turns without re-clicking the
+  // mic each time), not one-shot push-to-talk: click starts the session,
+  // each utterance auto-stops on silence and gets transcribed+sent+
+  // answered, then the mic reopens on its own for the next turn -- until
+  // the user clicks again to end it, or MAX_CONSECUTIVE_FAILURES worth of
+  // back-to-back failed turns ends it automatically rather than silently
+  // hammering the transcription endpoint forever on something that's
+  // consistently broken (e.g. faster-whisper genuinely not installed).
+  const MAX_CONSECUTIVE_FAILURES = 3;
+  let conversationActive = false;
+  let consecutiveFailures = 0;
+
+  function endConversation(reason) {
+    conversationActive = false;
+    consecutiveFailures = 0;
+    if (reason) showNotification(reason, { isError: true });
+    if (mediaRecorder && mediaRecorder.state === "recording") stopRecording();
+  }
+
   const micSupported =
     typeof navigator !== "undefined" &&
     !!navigator.mediaDevices &&
@@ -483,6 +512,7 @@
           : "";
       showNotification(`Micro inaccessible (${err}).${hint}`, { isError: true });
       micBusy = false;
+      conversationActive = false; // nothing to retry here without fixing mic access itself
       return;
     }
 
@@ -533,6 +563,7 @@
     inputEl.disabled = true;
     sendEl.disabled = true;
     micEl.disabled = true;
+    let turnSucceeded = false;
 
     try {
       const formData = new FormData();
@@ -560,6 +591,7 @@
       }
       inputEl.value = data.text;
       await sendMessage();
+      turnSucceeded = true;
     } catch (err) {
       showNotification(`Transcription impossible (${err}).`, { isError: true });
     } finally {
@@ -568,14 +600,36 @@
       inputEl.disabled = false;
       sendEl.disabled = false;
       micEl.disabled = false;
+
+      if (conversationActive) {
+        if (turnSucceeded) {
+          consecutiveFailures = 0;
+          startRecording(); // next turn, no click needed
+        } else {
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            endConversation(
+              `Conversation arrêtée après ${MAX_CONSECUTIVE_FAILURES} échecs consécutifs — clique sur le micro pour réessayer.`
+            );
+          } else {
+            startRecording(); // give it another try before giving up on the session
+          }
+        }
+      }
     }
   }
 
   if (micSupported) {
     micEl.addEventListener("click", () => {
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        stopRecording();
+      if (conversationActive) {
+        // Ends the whole back-and-forth, not just the current utterance
+        // -- if a recording is in progress it still finishes that turn
+        // (transcribed and sent, same as any other stop), it just won't
+        // reopen the mic afterward.
+        endConversation();
       } else {
+        conversationActive = true;
+        consecutiveFailures = 0;
         startRecording();
       }
     });

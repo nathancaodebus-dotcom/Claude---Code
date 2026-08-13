@@ -13,16 +13,57 @@ from core.http import client
 from tools.base import Tool
 
 
+# WMO weather interpretation codes (the same table Open-Meteo's API docs
+# publish for its weather_code field, and what every "daily" forecast day
+# comes back tagged with) — condensed to the phrasing that actually matters
+# for a spoken/read-aloud summary rather than the full meteorological detail.
+_WMO_WEATHER_DESCRIPTIONS = {
+    0: "clear sky", 1: "mostly clear", 2: "partly cloudy", 3: "overcast",
+    45: "fog", 48: "depositing rime fog",
+    51: "light drizzle", 53: "moderate drizzle", 55: "dense drizzle",
+    56: "light freezing drizzle", 57: "dense freezing drizzle",
+    61: "slight rain", 63: "moderate rain", 65: "heavy rain",
+    66: "light freezing rain", 67: "heavy freezing rain",
+    71: "slight snow", 73: "moderate snow", 75: "heavy snow", 77: "snow grains",
+    80: "slight rain showers", 81: "moderate rain showers", 82: "violent rain showers",
+    85: "slight snow showers", 86: "heavy snow showers",
+    95: "thunderstorm", 96: "thunderstorm with slight hail", 99: "thunderstorm with heavy hail",
+}
+
+
+def _describe_weather_code(code: int | None) -> str:
+    if code is None:
+        return "unknown conditions"
+    return _WMO_WEATHER_DESCRIPTIONS.get(code, "unknown conditions")
+
+
 class WeatherTool(Tool):
     name = "get_weather"
-    description = "Get the current weather and today's forecast for a city."
+    description = (
+        "Get the current weather for a city, plus a daily forecast — pass forecast_days "
+        "(1 = today only, up to 7 = a week ahead) to answer 'what's the weather tomorrow/"
+        "this weekend/next week' instead of only today."
+    )
     input_schema = {
         "type": "object",
-        "properties": {"city": {"type": "string", "description": "City name, e.g. 'Paris' or 'Montreal'."}},
+        "properties": {
+            "city": {"type": "string", "description": "City name, e.g. 'Paris' or 'Montreal'."},
+            "forecast_days": {
+                "type": "integer",
+                "description": "How many days ahead to include, starting today (index 0 = today, "
+                "1 = tomorrow, ...). Default 1 (today only). Open-Meteo supports up to 16; capped "
+                "at 7 here since anything further out is low-confidence.",
+            },
+        },
         "required": ["city"],
     }
 
-    def run(self, city: str) -> str:
+    def run(self, city: str, forecast_days: int = 1) -> str:
+        # Clamped rather than rejected: Claude asking for "the next two
+        # weeks" shouldn't error out, it should just get the most it
+        # reasonably can (day-8+ forecasts are low-confidence anyway).
+        forecast_days = max(1, min(forecast_days, 7))
+
         geo = client.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": city, "count": 1},
@@ -39,20 +80,43 @@ class WeatherTool(Tool):
                 "latitude": place["latitude"],
                 "longitude": place["longitude"],
                 "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
-                "daily": "temperature_2m_max,temperature_2m_min",
+                "daily": "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max",
+                "forecast_days": forecast_days,
                 "timezone": "auto",
+                # Open-Meteo's default model-selection mode: for any given
+                # coordinate it automatically picks the highest-resolution
+                # model actually covering that location — for Switzerland
+                # specifically that's MeteoSwiss's own ICON-CH1/CH2 model
+                # (1-2km resolution), not a generic global model. Passed
+                # explicitly here (it's already the default) so this
+                # behavior doesn't silently change if that default ever
+                # does.
+                "models": "best_match",
             },
             timeout=10,
         ).json()
 
         current = weather["current"]
         daily = weather["daily"]
-        return (
-            f"Weather in {place['name']}, {place.get('country', '')}: "
-            f"{current['temperature_2m']}°C now (feels via humidity {current['relative_humidity_2m']}%), "
-            f"wind {current['wind_speed_10m']} km/h. "
-            f"Today's range: {daily['temperature_2m_min'][0]}°C to {daily['temperature_2m_max'][0]}°C."
-        )
+        location = f"{place['name']}, {place.get('country', '')}"
+
+        lines = [
+            f"Weather in {location}: {current['temperature_2m']}°C now "
+            f"(humidity {current['relative_humidity_2m']}%), wind {current['wind_speed_10m']} km/h, "
+            f"{_describe_weather_code(current.get('weather_code'))}."
+        ]
+
+        dates = daily.get("time", [])
+        for i in range(len(dates)):
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else dates[i])
+            rain_chance = daily.get("precipitation_probability_max", [None] * len(dates))[i]
+            rain_note = f", {rain_chance}% chance of rain" if rain_chance is not None else ""
+            lines.append(
+                f"{label}: {daily['temperature_2m_min'][i]}°C to {daily['temperature_2m_max'][i]}°C, "
+                f"{_describe_weather_code(daily['weather_code'][i])}{rain_note}."
+            )
+
+        return " ".join(lines)
 
 
 class SunTimesTool(Tool):
