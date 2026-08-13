@@ -59,6 +59,51 @@ def test_create_website_requires_at_least_one_page(store):
     assert store.get_document("empty") is None
 
 
+def test_create_website_refuses_to_silently_overwrite_an_existing_site(store):
+    """Regression test: two titles that slugify to the same site_name
+    (e.g. 'Q3 Report' and 'Q3 Report!' both -> 'q3-report') used to
+    silently replace the manifest/index page of the earlier site with no
+    warning, and any old page not present in the new manifest became an
+    orphaned, still-reachable-by-URL file."""
+    from pathlib import Path
+
+    CreateWebsiteTool(store).run(
+        title="My Site",
+        pages=[
+            {"slug": "index", "title": "Home", "content_html": "<p>Home v1</p>"},
+            {"slug": "details", "title": "Details", "content_html": "<p>Details v1</p>"},
+        ],
+    )
+
+    result = CreateWebsiteTool(store).run(title="My Site", pages=_pages(index_content="<p>Home v2</p>"))
+
+    assert "already exists" in result
+    site_dir = Path(store.get_document("my-site").path)
+    assert "Home v1" in (site_dir / "index.html").read_text()
+    assert (site_dir / "details.html").exists()  # not orphaned/removed either
+
+
+def test_create_website_overwrite_true_replaces_it_and_drops_old_pages(store):
+    from pathlib import Path
+
+    CreateWebsiteTool(store).run(
+        title="My Site",
+        pages=[
+            {"slug": "index", "title": "Home", "content_html": "<p>Home v1</p>"},
+            {"slug": "details", "title": "Details", "content_html": "<p>Details v1</p>"},
+        ],
+    )
+
+    result = CreateWebsiteTool(store).run(
+        title="My Site", pages=_pages(index_content="<p>Home v2</p>"), overwrite=True
+    )
+
+    assert "Created website" in result
+    site_dir = Path(store.get_document("my-site").path)
+    assert "Home v2" in (site_dir / "index.html").read_text()
+    assert not (site_dir / "details.html").exists()  # old page from the previous manifest is gone, not orphaned
+
+
 def test_add_website_page_appears_on_every_nav(store):
     CreateWebsiteTool(store).run(title="My Site", pages=_pages())
     AddWebsitePageTool(store).run(

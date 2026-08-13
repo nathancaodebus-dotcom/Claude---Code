@@ -1,3 +1,7 @@
+import stat
+import threading
+import time
+
 import pytest
 
 import tools.microsoft_auth as microsoft_auth
@@ -106,6 +110,50 @@ def test_writes_token_cache_to_disk_when_state_changed(monkeypatch, tmp_path):
     microsoft_auth.get_access_token()
 
     assert (tmp_path / "token.json").exists()
+
+
+def test_token_file_is_written_with_restrictive_permissions(monkeypatch, tmp_path):
+    """Regression test: this file holds a live OAuth token — a plain
+    write_text() used to inherit the process umask, commonly leaving it
+    group/world-readable."""
+    monkeypatch.setattr(microsoft_auth.msal, "SerializableTokenCache", _FakeCache)
+    monkeypatch.setattr(microsoft_auth.msal, "PublicClientApplication", _FakeApp)
+
+    microsoft_auth.get_access_token()
+
+    mode = stat.S_IMODE((tmp_path / "token.json").stat().st_mode)
+    assert mode == 0o600
+
+
+def test_concurrent_calls_do_not_race_to_start_two_device_flows(monkeypatch, tmp_path):
+    """Regression test: core/agent.py dispatches a turn's tool calls
+    concurrently — without a lock, two threads hitting a not-yet-cached
+    token at once could both start an independent device code flow at the
+    same time, printing two different codes and blocking two worker
+    threads on human input simultaneously."""
+    concurrent_starts = {"count": 0, "max": 0}
+    lock = threading.Lock()
+
+    class _SlowFlowApp(_FakeApp):
+        def initiate_device_flow(self, scopes):
+            with lock:
+                concurrent_starts["count"] += 1
+                concurrent_starts["max"] = max(concurrent_starts["max"], concurrent_starts["count"])
+            time.sleep(0.1)
+            with lock:
+                concurrent_starts["count"] -= 1
+            return super().initiate_device_flow(scopes)
+
+    monkeypatch.setattr(microsoft_auth.msal, "SerializableTokenCache", _FakeCache)
+    monkeypatch.setattr(microsoft_auth.msal, "PublicClientApplication", _SlowFlowApp)
+
+    threads = [threading.Thread(target=microsoft_auth.get_access_token) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert concurrent_starts["max"] == 1, "more than one device flow was started at the same time"
 
 
 def test_reads_existing_token_cache_from_disk(monkeypatch, tmp_path):

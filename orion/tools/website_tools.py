@@ -217,6 +217,10 @@ class CreateWebsiteTool(Tool):
                 "type": "string",
                 "description": "Optional stable name for this site. Derived from the title if omitted.",
             },
+            "overwrite": {
+                "type": "boolean",
+                "description": "Replace an existing site with the same name. Default false.",
+            },
         },
         "required": ["title", "pages"],
     }
@@ -231,12 +235,33 @@ class CreateWebsiteTool(Tool):
         footer_text: str = "",
         lang: str = "en",
         site_name: str | None = None,
+        overwrite: bool = False,
     ) -> str:
         if not pages:
             return "A website needs at least one page."
 
         site_name = site_name or slugify(title)
         site_dir = _site_dir(site_name)
+
+        if site_dir.exists() and not overwrite:
+            # Two titles that slugify to the same site_name (e.g. 'Q3
+            # Report' and 'Q3 Report!' both -> 'q3-report') used to
+            # silently replace the manifest and index page of the earlier
+            # site with no warning — kind_collision_warning only fires
+            # across *different* document kinds, so a website replacing
+            # another website was invisible. Any page from the old
+            # manifest not present in the new one also became an orphaned,
+            # still-reachable-by-URL file, since only pages *in* the new
+            # manifest get (re)written.
+            return (
+                f"A website named '{site_name}' already exists. Use add_website_page/edit_website_page "
+                "to change it, or pass overwrite=true to replace it entirely."
+            )
+        if site_dir.exists():
+            # Actually replacing it: clear out the old manifest's pages
+            # first so none of them survive as orphans just because the
+            # new manifest doesn't happen to mention that slug.
+            shutil.rmtree(site_dir)
         site_dir.mkdir(parents=True, exist_ok=True)
 
         (site_dir / "style.css").write_text(_CSS_BASELINE, encoding="utf-8")
