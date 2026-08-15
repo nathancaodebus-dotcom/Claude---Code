@@ -1,0 +1,4 @@
+# Extra dependency for connecting to external MCP (Model Context Protocol)
+# servers (core/mcp_client.py). Only needed if MCP_SERVERS_CONFIG_PATH is set.
+# Install alongside requirements.txt: pip install -r requirements.txt -r requirements-mcp.txt
+mcp>=1.0.0

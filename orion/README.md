@@ -1043,6 +1043,53 @@ after 3 rounds, Orion escalates to Sonnet for the rest of that turn rather
 than riding Haiku's weaker judgement through an increasingly complex
 tool-use chain.
 
+## 20. MCP (connecting to external tool servers)
+
+Orion can connect to external [MCP](https://modelcontextprotocol.io) (Model
+Context Protocol) servers and use their tools alongside every hand-written
+integration above — the same idea as OpenJarvis's `mcp_adapter.py`, adapted
+to this project's own tool registry (`tools/registry_builder.py`) instead
+of theirs.
+
+Setup:
+
+```bash
+pip install -r requirements-mcp.txt
+cp mcp_servers.example.json mcp_servers.json   # then edit it
+```
+
+Set `MCP_SERVERS_CONFIG_PATH=./mcp_servers.json` in `.env`. The file uses
+the same `"mcpServers"` shape as Claude Desktop/Cursor/etc., so an existing
+config from another MCP client usually works unchanged:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/Documents"]
+    },
+    "some-remote-server": { "url": "https://example.com/mcp" }
+  }
+}
+```
+
+Each entry is either a local subprocess speaking MCP over stdio (`command`
++ `args`, optionally `env`) or a remote server speaking MCP over
+Streamable HTTP (`url`). On startup, Orion connects to every configured
+server once, lists its tools, and registers each one into the same
+registry every other tool lives in — Claude can call an MCP tool exactly
+like `get_weather` or `send_gmail`, with no special-casing anywhere in
+`core/agent.py`. Each connection stays open for the process's lifetime
+(not reconnected per call) so a stateful server keeps its state between
+turns, and closes cleanly on shutdown.
+
+A server that's misconfigured or unreachable is logged and skipped —
+never blocks the others, and never blocks the rest of Orion's own tools
+from registering, matching every other optional integration in
+`tools/registry_builder.py`. Leave `MCP_SERVERS_CONFIG_PATH` unset (the
+default) to skip MCP entirely.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:

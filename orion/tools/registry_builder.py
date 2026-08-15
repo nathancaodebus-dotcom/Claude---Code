@@ -11,6 +11,7 @@ doesn't install on this platform' a one-feature loss instead of a crash.
 """
 from __future__ import annotations
 
+import atexit
 import logging
 
 from core.config import config
@@ -738,5 +739,34 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
             registry.register(PlayYoutubeVideoTool())
 
     _register_safe(registry, "Chromecast/YouTube casting", _casting)
+
+    if config.mcp_servers_config_path:
+        def _mcp() -> None:
+            # Imported here (rather than left to core/mcp_client.py's own
+            # lazy import) so a missing `mcp` package produces the same
+            # "Skipping 'MCP (external servers)' tools" message every other
+            # optional dependency does, instead of a per-server connection
+            # warning for every configured server.
+            import mcp  # noqa: F401
+
+            from core.mcp_client import MCPManager, load_mcp_server_configs
+            from tools.mcp_tools import build_mcp_tools
+
+            configs = load_mcp_server_configs(config.mcp_servers_config_path)
+            if not configs:
+                return
+
+            manager = MCPManager(configs)
+            tools_by_server = manager.connect_all()
+            for tool in build_mcp_tools(manager, tools_by_server):
+                registry.register(tool)
+            if tools_by_server:
+                # Keeps each server's subprocess/connection alive for the
+                # rest of the process instead of reconnecting per call --
+                # see core/mcp_client.py's module docstring. Only worth
+                # registering once something actually connected.
+                atexit.register(manager.shutdown)
+
+        _register_safe(registry, "MCP (external servers)", _mcp)
 
     return registry

@@ -151,6 +151,12 @@ class Config:
 
     tmdb_api_key: str | None = field(default_factory=lambda: _get("TMDB_API_KEY"))
 
+    # Path to a Claude-Desktop-style {"mcpServers": {...}} JSON file
+    # (core/mcp_client.py) -- lets Orion connect to external MCP servers
+    # and use their tools alongside the hand-written registry. Off unless
+    # set, see README §20 and mcp_servers.example.json.
+    mcp_servers_config_path: str | None = field(default_factory=lambda: _get("MCP_SERVERS_CONFIG_PATH"))
+
     backup_source_path: str | None = field(default_factory=lambda: _get("BACKUP_SOURCE_PATH"))
     backup_dest_path: str | None = field(default_factory=lambda: _get("BACKUP_DEST_PATH"))
 
