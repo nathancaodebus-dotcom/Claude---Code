@@ -1,0 +1,9 @@
+# Extra dependency for browser automation tools (core/browser_session.py,
+# tools/browser_tools.py) -- click/fill/navigate on sites with no API.
+# Install alongside requirements.txt: pip install -r requirements.txt -r requirements-browser.txt
+playwright>=1.40.0
+# Playwright itself is just the Python driver -- it also needs an actual
+# browser binary. Either run `playwright install chromium` once after
+# installing this file, or set BROWSER_CHROMIUM_EXECUTABLE_PATH to an
+# already-installed system Chromium (e.g. `apt install chromium-browser`
+# on a Raspberry Pi, much smaller than Playwright's own ~300MB download).

@@ -1152,6 +1152,57 @@ instead of crashing and resume as soon as you message Orion again
 unaffected either way — that limitation only applies to messages Orion
 sends unprompted.
 
+## 22. Browser automation (sites with no API)
+
+Playwright-backed navigate/click/fill/read tools for sites that don't have
+an API — inspired by OpenJarvis's `browser.py`/`browser_axtree.py`. Prefer
+a proper API-backed tool (`web_search`, `fetch_webpage`, Gmail, Calendar,
+...) whenever one exists; this is for the rest: a site that only has a web
+UI.
+
+Setup:
+
+```bash
+pip install -r requirements-browser.txt
+playwright install chromium
+```
+
+On a Raspberry Pi or other low-resource device, `apt install
+chromium-browser` and set `BROWSER_CHROMIUM_EXECUTABLE_PATH` to its path
+instead — Playwright's own bundled Chromium download is ~300MB, unnecessary
+if a system one is already available.
+
+No further configuration is required to start using it — five tools appear
+automatically once the dependency is installed: `browser_navigate` opens a
+URL and returns the page's title, URL, and a numbered list of interactive
+elements (links, buttons, inputs) to act on next; `browser_click` and
+`browser_fill` act on a specific element by that number; `browser_get_text`
+reads the page's visible text (for articles, results, anything that isn't
+a list of things to click); `browser_screenshot` saves an image of the
+current page, sent back the same way a generated chart or QR code is.
+
+**Safety, by design, not by asking the model nicely**:
+
+- **Every session starts from a fresh, logged-out browser profile** — no
+  cookies, saved passwords, or autofill/payment data carried over from
+  anywhere. Whatever Orion does in this browser, it can only do starting
+  from an empty state; it can't silently ride an existing logged-in
+  session to complete a purchase. This isn't configurable — it's how the
+  session is built.
+- **`BROWSER_ALLOWED_DOMAINS`** (optional, comma-separated hostnames):
+  when set, `browser_navigate` refuses any URL outside that list, the same
+  "pre-approved, not arbitrary" shape §10's `run_deploy_command` already
+  uses for shell commands. Unrestricted (browse anywhere) if left unset,
+  matching `web_search`/`fetch_webpage`'s existing unrestricted behavior.
+  Set it to scope Orion to specific trusted sites for click/fill workflows.
+- `browser_click`'s own tool description tells Claude never to click
+  something that submits a purchase, payment, deletion, or message without
+  the user's explicit go-ahead in the conversation first — the same
+  propose-before-acting instruction §12's crypto trade tools and this
+  project's other consequential tools already rely on, since no code-level
+  check can reliably tell "an ordinary click" apart from "the click that
+  finalizes an order" on an arbitrary third-party page.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:

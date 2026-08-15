@@ -769,4 +769,35 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
         _register_safe(registry, "MCP (external servers)", _mcp)
 
+    def _browser() -> None:
+        # Imported here (rather than left to core/browser_session.py's own
+        # lazy import) for the same reason as the MCP block above: a
+        # missing `playwright` package should produce one clear "Skipping
+        # 'browser automation' tools" message, not a per-call failure the
+        # first time a browser tool actually runs.
+        import playwright  # noqa: F401
+
+        from core.browser_session import BrowserSession
+        from tools.browser_tools import (
+            BrowserClickTool,
+            BrowserFillTool,
+            BrowserGetTextTool,
+            BrowserNavigateTool,
+            BrowserScreenshotTool,
+        )
+
+        session = BrowserSession()
+        registry.register(BrowserNavigateTool(session))
+        registry.register(BrowserClickTool(session))
+        registry.register(BrowserFillTool(session))
+        registry.register(BrowserGetTextTool(session))
+        registry.register(BrowserScreenshotTool(session))
+        # Chromium only actually launches on first real use (see
+        # core/browser_session.py) -- close() is a no-op if that never
+        # happened, so this is safe to register unconditionally rather
+        # than tracking whether the session was ever touched.
+        atexit.register(session.close)
+
+    _register_safe(registry, "browser automation", _browser)
+
     return registry

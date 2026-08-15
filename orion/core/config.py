@@ -183,6 +183,20 @@ class Config:
     # set, see README §20 and mcp_servers.example.json.
     mcp_servers_config_path: str | None = field(default_factory=lambda: _get("MCP_SERVERS_CONFIG_PATH"))
 
+    # core/browser_session.py / tools/browser_tools.py -- Playwright-backed
+    # browser automation. Comma-separated hostnames; when set, browser_navigate
+    # refuses any URL outside this list. Off (unrestricted) by default,
+    # matching tools/web_tools.py's existing unrestricted fetch_webpage. See
+    # README §22.
+    browser_allowed_domains: str | None = field(default_factory=lambda: _get("BROWSER_ALLOWED_DOMAINS"))
+    # Points at a system-installed Chromium instead of downloading
+    # Playwright's own bundled copy -- useful on a Raspberry Pi or other
+    # low-resource device. None (default) uses Playwright's normal browser
+    # resolution.
+    browser_chromium_executable_path: str | None = field(
+        default_factory=lambda: _get("BROWSER_CHROMIUM_EXECUTABLE_PATH")
+    )
+
     backup_source_path: str | None = field(default_factory=lambda: _get("BACKUP_SOURCE_PATH"))
     backup_dest_path: str | None = field(default_factory=lambda: _get("BACKUP_DEST_PATH"))
 
