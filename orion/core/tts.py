@@ -36,22 +36,67 @@ _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 _ITALIC_RE = re.compile(r"(?<!\*)\*(.+?)\*(?!\*)")
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 
+# Units/symbols that read fine on screen (tools/info_tools.py's WeatherTool,
+# tools/system_tool.py, tools/crypto_tools.py, ... all format numbers this
+# way for every text interface) but that a TTS engine either mispronounces
+# or reads as a bare letter/symbol instead of a word -- "23°C" comes out as
+# "23 degrees C" instead of "23 degrees Celsius", "12%" as "12 percent sign"
+# or similar, depending on the backend. Expanded to natural spoken words
+# right before synthesis only; every other interface still sees "23°C".
+_TEMPERATURE_RE = re.compile(r"(-?\d[\d.,]*)\s*°\s*([CF])\b")
+_PERCENT_RE = re.compile(r"(\d[\d.,]*)\s*%")
+_KMH_RE = re.compile(r"\bkm/h\b", re.IGNORECASE)
+_MPH_RE = re.compile(r"\bmph\b", re.IGNORECASE)
+_CURRENCY_CODE_RE = re.compile(r"\b(USD|EUR|GBP|CHF|JPY)\b")
+
+_TEMPERATURE_UNIT_WORDS = {
+    "fr": {"C": "degrés Celsius", "F": "degrés Fahrenheit"},
+    "en": {"C": "degrees Celsius", "F": "degrees Fahrenheit"},
+}
+_PERCENT_WORD = {"fr": "pour cent", "en": "percent"}
+_KMH_WORD = {"fr": "kilomètres par heure", "en": "kilometers per hour"}
+_MPH_WORD = {"fr": "miles par heure", "en": "miles per hour"}
+_CURRENCY_WORDS = {
+    "fr": {
+        "USD": "dollars américains", "EUR": "euros", "GBP": "livres sterling",
+        "CHF": "francs suisses", "JPY": "yens",
+    },
+    "en": {
+        "USD": "US dollars", "EUR": "euros", "GBP": "British pounds",
+        "CHF": "Swiss francs", "JPY": "Japanese yen",
+    },
+}
+
+
+def _normalize_units_for_speech(text: str) -> str:
+    lang = config.voice_language if config.voice_language in _TEMPERATURE_UNIT_WORDS else "en"
+    temp_words = _TEMPERATURE_UNIT_WORDS[lang]
+    currency_words = _CURRENCY_WORDS[lang]
+    text = _TEMPERATURE_RE.sub(lambda m: f"{m.group(1)} {temp_words[m.group(2).upper()]}", text)
+    text = _PERCENT_RE.sub(lambda m: f"{m.group(1)} {_PERCENT_WORD[lang]}", text)
+    text = _KMH_RE.sub(_KMH_WORD[lang], text)
+    text = _MPH_RE.sub(_MPH_WORD[lang], text)
+    text = _CURRENCY_CODE_RE.sub(lambda m: currency_words[m.group(1)], text)
+    return text
+
 
 def _strip_markdown_for_speech(text: str) -> str:
     """Replies are written once and reused across every interface — plain
     text for CLI, markdown-rendering for Telegram, and spoken for voice —
-    so nothing upstream avoids markdown. Left alone, a numbered list item
-    like '1. Buy milk' gets treated by the sentence-splitter in
-    core/agent.py as its own complete "sentence" ('1.'), which a TTS engine
-    then dutifully pronounces literally; **bold**/`code` markers get read
-    as literal asterisks/backticks too. Strips that formatting immediately
-    before either TTS backend touches the text, without changing what
-    other interfaces receive."""
+    so nothing upstream avoids markdown or formats numbers for speech. Left
+    alone, a numbered list item like '1. Buy milk' gets treated by the
+    sentence-splitter in core/agent.py as its own complete "sentence"
+    ('1.'), which a TTS engine then dutifully pronounces literally;
+    **bold**/`code` markers get read as literal asterisks/backticks; units
+    like '23°C' get read as a bare letter instead of the word "Celsius".
+    All of that is fixed immediately before either TTS backend touches the
+    text, without changing what other interfaces receive."""
     text = _HEADER_RE.sub("", text)
     text = _LIST_MARKER_RE.sub("", text)
     text = _BOLD_RE.sub(r"\1", text)
     text = _ITALIC_RE.sub(r"\1", text)
     text = _INLINE_CODE_RE.sub(r"\1", text)
+    text = _normalize_units_for_speech(text)
     return text.strip()
 
 

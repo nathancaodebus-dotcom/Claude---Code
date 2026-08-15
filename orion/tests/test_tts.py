@@ -136,6 +136,52 @@ def test_leaves_plain_prose_untouched():
     assert _strip_markdown_for_speech(text) == text
 
 
+# --- unit normalization for speech (config.voice_language defaults to "fr") ---
+
+
+def test_temperature_celsius_expands_to_the_full_word():
+    assert _strip_markdown_for_speech("Il fait 23°C dehors.") == "Il fait 23 degrés Celsius dehors."
+
+
+def test_temperature_fahrenheit_expands_to_the_full_word():
+    assert _strip_markdown_for_speech("It's 70°F today.") == "It's 70 degrés Fahrenheit today."
+
+
+def test_temperature_handles_decimal_and_negative_values():
+    assert _strip_markdown_for_speech("-3.5°C") == "-3.5 degrés Celsius"
+
+
+def test_percent_expands_to_the_full_word():
+    assert _strip_markdown_for_speech("Humidité 82%") == "Humidité 82 pour cent"
+
+
+def test_kmh_expands_to_the_full_phrase():
+    assert _strip_markdown_for_speech("vent 12 km/h") == "vent 12 kilomètres par heure"
+
+
+def test_currency_code_expands_to_the_full_word():
+    assert _strip_markdown_for_speech("Bitcoin at 65000 USD") == "Bitcoin at 65000 dollars américains"
+    assert _strip_markdown_for_speech("12.50 EUR") == "12.50 euros"
+    assert _strip_markdown_for_speech("100 CHF") == "100 francs suisses"
+
+
+def test_english_voice_language_uses_english_unit_words(monkeypatch):
+    from core.config import config
+
+    object.__setattr__(config, "voice_language", "en")
+    try:
+        assert _strip_markdown_for_speech("23°C, 80% humidity, 12 km/h") == (
+            "23 degrees Celsius, 80 percent humidity, 12 kilometers per hour"
+        )
+        assert _strip_markdown_for_speech("100 USD") == "100 US dollars"
+    finally:
+        object.__setattr__(config, "voice_language", "fr")
+
+
+def test_unit_normalization_does_not_touch_unrelated_numbers():
+    assert _strip_markdown_for_speech("Reminder set for 15h.") == "Reminder set for 15h."
+
+
 # --- EdgeTTSSynthesizer ---
 
 

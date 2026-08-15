@@ -17,7 +17,8 @@ from core.correction_synthesis import CorrectionSynthesizer, make_default_correc
 from core.memory import Memory
 from core.offline_agent import OfflineAgent, is_ollama_reachable
 from core.routing import select_model
-from tools.base import ToolRegistry
+from core.tool_selection import select_relevant_tools
+from tools.base import Tool, ToolRegistry
 
 # Static instructions only — never changes across users, sessions, or turns,
 # which is what makes it worth prompt-caching (see _system_blocks below).
@@ -151,15 +152,14 @@ class Agent:
             blocks.append({"type": "text", "text": dynamic_text})
         return blocks
 
-    def _cached_tool_schemas(self) -> list[dict[str, Any]]:
+    def _cached_tool_schemas(self, tools: list[Tool]) -> list[dict[str, Any]]:
         """Marks a cache breakpoint after the tool definitions (by far the
         largest and most stable part of every request — over a hundred tool
         schemas that never change between calls) so Claude reuses them
         instead of reprocessing the full list on every single turn."""
-        schemas = self._tools.anthropic_schemas()
+        schemas = [t.to_anthropic_schema() for t in tools]
         if not schemas:
             return schemas
-        schemas = list(schemas)
         schemas[-1] = {**schemas[-1], "cache_control": {"type": "ephemeral"}}
         return schemas
 
@@ -243,6 +243,14 @@ class Agent:
         else:
             model = config.model
 
+        # Same one-shot-guess-then-escalate reasoning as model routing above:
+        # a keyword read of the opening message is a reasonable guess at what
+        # a *single* tool call needs (see core/tool_selection.py), but not for
+        # an unpredictable further chain of tool calls -- iteration 0 gets the
+        # filtered set, every iteration after that gets the full registry.
+        all_tools = self._tools.all()
+        first_call_tools = select_relevant_tools(user_message, all_tools)
+
         for iteration in range(MAX_TOOL_ITERATIONS):
             buffer = ""
             with self._client.messages.stream(
@@ -255,7 +263,7 @@ class Agent:
                 # across iterations rather than needing one huge one.
                 max_tokens=1024,
                 system=self._system_blocks(session_id),
-                tools=self._cached_tool_schemas(),
+                tools=self._cached_tool_schemas(all_tools if iteration > 0 else first_call_tools),
                 messages=messages,
             ) as stream:
                 for delta in stream.text_stream:

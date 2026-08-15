@@ -437,6 +437,92 @@ def test_routing_escalates_off_the_fast_model_after_several_tool_use_rounds():
     assert stream_calls[ROUTING_ESCALATION_ITERATION]["model"] == config.model
 
 
+class _NamedTool(Tool):
+    def __init__(self, name: str, description: str):
+        self.name = name
+        self.description = description
+        self.input_schema = {"type": "object", "properties": {}}
+
+    def run(self, **kwargs) -> str:
+        return f"{self.name} ran"
+
+
+def _large_registry_with_weather_cluster() -> ToolRegistry:
+    """40 tools total: 7 sharing 'weather' keywords, 33 unrelated fillers --
+    clears core/tool_selection.py's _MIN_TOOLS_TO_BOTHER and _MIN_MATCHED_TOOLS
+    thresholds so a weather query actually gets filtered rather than falling
+    back to everything (see tests/test_tool_selection.py for that boundary
+    behavior in isolation)."""
+    registry = ToolRegistry()
+    weather_tools = [
+        ("get_weather", "Get the current weather forecast for a city."),
+        ("get_historical_weather", "Compare today's weather to historical averages."),
+        ("get_sun_times", "Get sunrise and sunset times for a weather location."),
+        ("check_weather_alert", "Check for severe weather alerts in a region."),
+        ("get_weather_radar", "Fetch a weather radar image for a city."),
+        ("get_uv_index", "Get today's weather UV index forecast."),
+        ("get_wind_speed", "Get the current weather wind speed for a city."),
+    ]
+    for name, desc in weather_tools:
+        registry.register(_NamedTool(name, desc))
+    for i in range(33):
+        registry.register(_NamedTool(f"filler_tool_{i}", f"Placeholder capability number {i} for testing purposes."))
+    return registry
+
+
+def test_first_call_of_a_turn_sends_only_keyword_relevant_tools():
+    registry = _large_registry_with_weather_cluster()
+    final = _FakeMessage([_TextBlock("It's sunny.")], "end_turn")
+    agent, _ = _make_agent([(["It's sunny."], final)], registry)
+
+    agent.respond("s1", "what's the weather like today")
+
+    sent_tool_names = {t["name"] for t in agent._client.messages.stream_calls[0]["tools"]}
+    assert "get_weather" in sent_tool_names
+    assert "filler_tool_0" not in sent_tool_names
+    assert len(sent_tool_names) < len(registry.all())
+
+
+def test_later_calls_of_a_turn_get_the_full_registry_not_the_filtered_set():
+    """Mirrors ROUTING_ESCALATION_ITERATION's reasoning: a keyword read of
+    the opening message is a fine guess for one tool call, not for a
+    further chain of them -- the second API call in the same turn must see
+    every tool, including ones the first call's filter excluded."""
+    registry = _large_registry_with_weather_cluster()
+    tool_round = _FakeMessage(
+        [_ToolUseBlock("call_1", "get_weather", {})], "tool_use"
+    )
+    final_round = _FakeMessage([_TextBlock("Done.")], "end_turn")
+    agent, _ = _make_agent([([], tool_round), (["Done."], final_round)], registry)
+
+    agent.respond("s1", "what's the weather like today")
+
+    stream_calls = agent._client.messages.stream_calls
+    assert len(stream_calls) == 2
+    first_call_names = {t["name"] for t in stream_calls[0]["tools"]}
+    second_call_names = {t["name"] for t in stream_calls[1]["tools"]}
+    assert len(first_call_names) < len(registry.all())
+    assert len(second_call_names) == len(registry.all())
+    assert "filler_tool_0" in second_call_names
+
+
+def test_small_registry_is_never_filtered_regardless_of_query():
+    """Below core/tool_selection.py's _MIN_TOOLS_TO_BOTHER, every existing
+    test in this file relies on the full tool list always being sent --
+    this pins that down explicitly for a query that would otherwise be a
+    plausible filtering candidate."""
+    tool = _EchoTool()
+    registry = ToolRegistry()
+    registry.register(tool)
+    final = _FakeMessage([_TextBlock("ok")], "end_turn")
+    agent, _ = _make_agent([(["ok"], final)], registry)
+
+    agent.respond("s1", "completely unrelated query about nothing in particular")
+
+    sent_tool_names = {t["name"] for t in agent._client.messages.stream_calls[0]["tools"]}
+    assert sent_tool_names == {"echo"}
+
+
 def test_background_maintenance_skips_when_a_run_is_already_in_flight():
     """Rapid successive turns each spawn their own background maintenance
     thread (see respond_streaming). Without the lock, two of those could
@@ -495,7 +581,7 @@ def test_cached_tool_schemas_marks_only_the_last_schema():
     registry.register(_EchoTool())
     agent, _ = _make_agent([], registry)
 
-    schemas = agent._cached_tool_schemas()
+    schemas = agent._cached_tool_schemas(registry.all())
 
     assert len(schemas) == 1
     assert schemas[-1]["cache_control"] == {"type": "ephemeral"}
@@ -504,7 +590,7 @@ def test_cached_tool_schemas_marks_only_the_last_schema():
 def test_cached_tool_schemas_handles_empty_registry():
     agent, _ = _make_agent([], ToolRegistry())
 
-    assert agent._cached_tool_schemas() == []
+    assert agent._cached_tool_schemas([]) == []
 
 
 # --- offline fallback ---

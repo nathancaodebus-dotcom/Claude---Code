@@ -388,6 +388,17 @@ against self-triggering the way headphones or real AEC would be, which
 is why it still needs an explicit opt-in rather than being on by
 default.
 
+**Units are expanded to natural spoken words before Orion says them out
+loud.** Weather/system/crypto tools all format numbers for reading on
+screen — "23°C", "82%", "12 km/h", "65000 USD" — which most TTS engines
+read back oddly (a bare letter instead of the unit, or the symbol itself)
+when spoken literally. `core/tts.py` rewrites these immediately before
+synthesis only — "23°C" becomes "23 degrés Celsius" spoken, in
+`VOICE_LANGUAGE`-appropriate French or English, while every text interface
+(Telegram, the web HUD, ...) still shows the original "23°C". Covers
+temperature, percent, km/h, mph, and the currency codes Orion's own tools
+actually output (USD, EUR, GBP, CHF, JPY).
+
 **If replies feel slow to start**, the biggest lever on a CPU-only laptop
 is the transcription model: `WHISPER_MODEL_SIZE` in `.env` defaults to
 `small` (the most accurate that's still reasonably fast); try `base` or
@@ -1286,6 +1297,30 @@ already done to close that gap as much as it can be:
   turn — [Anthropic's own guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
   puts the latency reduction from this at up to 85% for long, mostly-static
   prompts, which the tool list here is.
+- **Per-query tool filtering**: the registry has grown past 150 tools (MCP
+  and browser automation among the largest additions) — sent in full on
+  every Claude call regardless of whether the query needs one, which is
+  ~15K tokens of schema JSON even before the actual question. Prompt
+  caching (above) only amortizes that within a burst of consecutive turns;
+  Anthropic's cache has a 5-minute TTL, and Orion's real usage pattern —
+  asked something once every 10-20 minutes — mostly misses it anyway.
+  `core/tool_selection.py` keyword-matches the turn's opening message
+  against each tool's name/description (bilingual: a small hand-curated
+  French→English alias layer, since Orion's tools are named in English but
+  its user writes in French) and sends only the matching subset on that
+  first API call — falling back to the full registry whenever the registry
+  is small, the query matches nothing, or too few tools matched to trust
+  the result, so an incomplete alias mapping costs a missed optimization,
+  never a missed tool. Only the turn's *first* call is filtered; if Claude
+  asks for a tool and the loop continues, every later call in that turn
+  reverts to the full, unfiltered registry — the same reasoning
+  `ROUTING_ESCALATION_ITERATION` already applies to model selection: a
+  one-shot guess at what one tool call needs is reasonable, trusting it for
+  an unpredictable further chain of calls is not. Inspired by
+  [isair/jarvis](https://github.com/isair/jarvis)'s tool-selection strategies
+  — its embedding/LLM-router strategies were left out since both cost a
+  network round trip of their own before the real request even starts,
+  which would fight the goal.
 - **Lookup caching**: read-only lookups (weather, web search, dictionary,
   currency conversion, ...) are cached in memory per process, each for as
   long as that kind of answer stays valid (`core/tool_cache.py` — minutes
