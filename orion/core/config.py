@@ -71,6 +71,32 @@ class Config:
         default_factory=lambda: _get("TELEGRAM_ALLOWED_USER_ID")
     )
 
+    # interfaces/whatsapp_bot.py — WhatsApp Cloud API (Meta's official
+    # Business API), webhook-based rather than polling like python-telegram-
+    # bot above. See README §21 for the full setup (Meta app, phone number,
+    # webhook URL).
+    whatsapp_access_token: str | None = field(default_factory=lambda: _get("WHATSAPP_ACCESS_TOKEN"))
+    whatsapp_phone_number_id: str | None = field(
+        default_factory=lambda: _get("WHATSAPP_PHONE_NUMBER_ID")
+    )
+    # Arbitrary string you choose yourself when configuring the webhook in
+    # the Meta dashboard -- proves the GET verification request is the one
+    # you set up, not a guess by someone else who found the URL.
+    whatsapp_verify_token: str | None = field(default_factory=lambda: _get("WHATSAPP_VERIFY_TOKEN"))
+    # Meta App Secret, used to verify the X-Hub-Signature-256 header on every
+    # inbound webhook POST -- without this, anyone who finds the webhook URL
+    # could POST a fake message claiming to be from whatsapp_allowed_number
+    # and have Orion treat it as the owner. Not optional the way the other
+    # WhatsApp settings are; see interfaces/whatsapp_bot.py.
+    whatsapp_app_secret: str | None = field(default_factory=lambda: _get("WHATSAPP_APP_SECRET"))
+    # E.164 phone number without the leading '+' (matches the "wa_id" format
+    # WhatsApp's webhook payloads use), e.g. "41791234567".
+    whatsapp_allowed_number: str | None = field(default_factory=lambda: _get("WHATSAPP_ALLOWED_NUMBER"))
+    whatsapp_api_version: str = field(default_factory=lambda: _get("WHATSAPP_API_VERSION", "v21.0"))
+    whatsapp_webhook_port: int = field(
+        default_factory=lambda: int(_get("WHATSAPP_WEBHOOK_PORT", "8422"))
+    )
+
     google_credentials_path: str = field(
         default_factory=lambda: _get("GOOGLE_CREDENTIALS_PATH", "./credentials.json")
     )

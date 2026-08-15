@@ -18,9 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 import tempfile
-import wave
 from pathlib import Path
 
 from telegram import Update
@@ -36,6 +34,7 @@ from core.outputs_cleanup import purge_old_outputs
 from core.stt import join_confident_segments
 from core.store import Store
 from core.tts import Synthesizer, get_synthesizer_if_available
+from core.tts import synthesize_to_ogg_opus as _synthesize_to_ogg_opus
 from tools.registry_builder import build_registry
 
 logger = logging.getLogger("orion.telegram")
@@ -63,35 +62,6 @@ def _transcribe(audio_path: Path) -> str | None:
     model = WhisperModel("small", device="cpu", compute_type="int8")
     segments, _ = model.transcribe(str(audio_path), language=config.voice_language)
     return join_confident_segments(segments)
-
-
-def _synthesize_to_ogg_opus(synthesizer: Synthesizer, text: str, urgent: bool = False) -> bytes | None:
-    """Telegram voice notes need OGG/Opus to render as a playable voice
-    bubble; ffmpeg does the PCM -> Opus conversion. Returns None (falls back
-    to text-only) if ffmpeg isn't installed or the conversion fails."""
-    audio = synthesizer.synthesize(text, urgent=urgent)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        wav_path = Path(tmp_dir) / "reply.wav"
-        with wave.open(str(wav_path), "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(synthesizer.sample_rate)
-            wav_file.writeframes(audio)
-
-        ogg_path = Path(tmp_dir) / "reply.ogg"
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", str(wav_path), "-c:a", "libopus", "-b:a", "32k", str(ogg_path)],
-                capture_output=True,
-                timeout=30,
-                check=True,
-            )
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            logger.warning("Could not encode voice reply to Opus (%s) — sending text only.", exc)
-            return None
-
-        return ogg_path.read_bytes()
 
 
 async def _send_attachments(update: Update) -> None:

@@ -1090,6 +1090,68 @@ from registering, matching every other optional integration in
 `tools/registry_builder.py`. Leave `MCP_SERVERS_CONFIG_PATH` unset (the
 default) to skip MCP entirely.
 
+## 21. WhatsApp interface
+
+Same idea as §6's Telegram interface — voice-in, voice-out, owner-only,
+proactive reminders/health alerts — but through Meta's official WhatsApp
+Cloud API instead of Telegram's bot API. Mirrors `interfaces/telegram_bot.py`'s
+shape closely (`interfaces/whatsapp_bot.py`), with one structural difference:
+WhatsApp is webhook-based (Meta pushes messages to a URL you register)
+rather than polling, so this needs a real, internet-reachable HTTPS
+endpoint in front of it — more setup than Telegram's "paste a token and
+run it."
+
+Setup:
+
+1. Create a [Meta Developer app](https://developers.facebook.com/apps)
+   with the WhatsApp product added, and a WhatsApp Business phone number
+   (Meta provides a free test number for development). From the app
+   dashboard: `WHATSAPP_ACCESS_TOKEN` (a temporary token works for testing;
+   generate a permanent one via a System User for real use) and
+   `WHATSAPP_PHONE_NUMBER_ID`.
+2. Set `WHATSAPP_VERIFY_TOKEN` to any string you make up yourself, and
+   `WHATSAPP_APP_SECRET` from the app's Basic Settings — this one isn't
+   optional the way it might look: it's what proves an inbound webhook
+   request actually came from Meta (see the security note below).
+3. Set `WHATSAPP_ALLOWED_NUMBER` to your own WhatsApp number in E.164
+   without the leading `+` (e.g. `41791234567`) — only messages from this
+   number get answered.
+4. Install the same dependencies the web HUD uses (FastAPI + uvicorn):
+   `pip install -r requirements-web.txt`.
+5. Run it: `python -m interfaces.whatsapp_bot` — listens locally on
+   `WHATSAPP_WEBHOOK_PORT` (default 8422).
+6. Expose that port to the internet over HTTPS — a reverse proxy (nginx +
+   Let's Encrypt) if this runs on a server with a domain, or a tunnel
+   (ngrok, Cloudflare Tunnel) for development/testing. Meta requires HTTPS
+   for the webhook URL; this project doesn't set that part up for you, same
+   as §18's web HUD deliberately staying HTTP-only for local use.
+7. In the Meta app dashboard, configure the webhook: URL =
+   `https://<your-domain>/webhook`, verify token = whatever you put in
+   `WHATSAPP_VERIFY_TOKEN`, subscribe to the `messages` field.
+8. Message your WhatsApp Business number from your phone. Text in gets
+   text back; a voice message in gets transcribed *and* answered with a
+   spoken voice message back (plus the text), same as Telegram.
+
+**Security note**: every inbound webhook POST is authenticated via the
+`X-Hub-Signature-256` header (HMAC-SHA256 over the raw body, keyed by
+`WHATSAPP_APP_SECRET`) before anything in it — including the sender's
+number, which the owner-only check depends on — is trusted. Without this,
+anyone who discovered the webhook URL could POST a fake message claiming
+to be from your number and have Orion act on it. This check fails closed:
+no `WHATSAPP_APP_SECRET` configured means every request is rejected, not
+"verification skipped."
+
+**Honest limitation**: the Cloud API only allows free-form,
+business-initiated messages (reminders, health alerts) within the 24-hour
+window after you last messaged Orion — outside that window, an unprompted
+push needs a pre-approved message template, which this project doesn't set
+up. In practice this means proactive pushes work as long as you talk to
+Orion at least once a day; if you go quiet for longer, they log a failure
+instead of crashing and resume as soon as you message Orion again
+(reopening the window). Text/voice replies to something you sent are
+unaffected either way — that limitation only applies to messages Orion
+sends unprompted.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:

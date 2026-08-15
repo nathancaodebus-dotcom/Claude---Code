@@ -21,6 +21,8 @@ import asyncio
 import logging
 import re
 import subprocess
+import tempfile
+import wave
 from pathlib import Path
 from typing import Protocol
 
@@ -179,6 +181,37 @@ class EdgeTTSSynthesizer:
             timeout=30,
         )
         return result.stdout
+
+
+def synthesize_to_ogg_opus(synthesizer: Synthesizer, text: str, urgent: bool = False) -> bytes | None:
+    """Encodes a synthesizer's raw PCM output to OGG/Opus via ffmpeg — the
+    format both Telegram voice notes and WhatsApp Cloud API audio messages
+    need (shared by interfaces/telegram_bot.py and interfaces/whatsapp_bot.py).
+    Returns None (callers fall back to text-only) if ffmpeg isn't installed
+    or the conversion fails."""
+    audio = synthesizer.synthesize(text, urgent=urgent)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        wav_path = Path(tmp_dir) / "reply.wav"
+        with wave.open(str(wav_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(synthesizer.sample_rate)
+            wav_file.writeframes(audio)
+
+        ogg_path = Path(tmp_dir) / "reply.ogg"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(wav_path), "-c:a", "libopus", "-b:a", "32k", str(ogg_path)],
+                capture_output=True,
+                timeout=30,
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            logger.warning("Could not encode voice reply to Opus (%s) — sending text only.", exc)
+            return None
+
+        return ogg_path.read_bytes()
 
 
 def get_synthesizer(piper_model_path: str | None = None) -> Synthesizer:
