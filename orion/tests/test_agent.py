@@ -11,7 +11,8 @@ import time
 import anthropic
 import httpx
 
-from core.agent import Agent
+from core.agent import ROUTING_ESCALATION_ITERATION, Agent
+from core.config import config
 from core.memory import Memory
 from tools.base import Tool, ToolRegistry
 
@@ -364,6 +365,76 @@ def test_tool_dispatch_caps_concurrency_at_max_concurrent_tool_calls():
     agent.respond("s1", "run them all")
 
     assert state["peak"] <= MAX_CONCURRENT_TOOL_CALLS
+
+
+def test_respond_routes_trivial_query_to_the_fast_model():
+    final = _FakeMessage([_TextBlock("Hi!")], "end_turn")
+    agent, _ = _make_agent([(["Hi!"], final)])
+
+    agent.respond("s1", "Hi")
+
+    assert agent._client.messages.stream_calls[0]["model"] == config.fast_model
+
+
+def test_respond_routes_complex_query_to_the_strong_model():
+    final = _FakeMessage([_TextBlock("Here you go.")], "end_turn")
+    agent, _ = _make_agent([(["Here you go."], final)])
+
+    query = (
+        "Explain step by step why this architecture is slower, then compare it "
+        "against three alternatives and give me the tradeoffs for each. 1. cost? "
+        "2. latency? 3. maintainability? Also draft a short report on your findings."
+    )
+    agent.respond("s1", query)
+
+    assert agent._client.messages.stream_calls[0]["model"] == config.model
+
+
+def test_respond_routes_code_query_to_the_strong_model_even_if_short():
+    final = _FakeMessage([_TextBlock("Here's the fix.")], "end_turn")
+    agent, _ = _make_agent([(["Here's the fix."], final)])
+
+    agent.respond("s1", "fix `x = 1/0`")
+
+    assert agent._client.messages.stream_calls[0]["model"] == config.model
+
+
+def test_model_routing_disabled_always_uses_the_strong_model():
+    object.__setattr__(config, "model_routing_enabled", False)
+    try:
+        final = _FakeMessage([_TextBlock("Hi!")], "end_turn")
+        agent, _ = _make_agent([(["Hi!"], final)])
+
+        agent.respond("s1", "Hi")
+
+        assert agent._client.messages.stream_calls[0]["model"] == config.model
+    finally:
+        object.__setattr__(config, "model_routing_enabled", True)
+
+
+def test_routing_escalates_off_the_fast_model_after_several_tool_use_rounds():
+    """A trivial-looking query ("Hi") routes to the fast model, but if the
+    conversation keeps calling tools well past what a one-shot text
+    classification anticipated, the loop should stop trusting Haiku's
+    judgement and escalate to the strong model for the rest of the turn."""
+    tool = _EchoTool()
+    registry = ToolRegistry()
+    registry.register(tool)
+
+    rounds = [
+        ([], _FakeMessage([_ToolUseBlock(f"call_{i}", "echo", {"text": str(i)})], "tool_use"))
+        for i in range(ROUTING_ESCALATION_ITERATION)
+    ]
+    rounds.append((["Done."], _FakeMessage([_TextBlock("Done.")], "end_turn")))
+    agent, _ = _make_agent(rounds, registry)
+
+    agent.respond("s1", "Hi")
+
+    stream_calls = agent._client.messages.stream_calls
+    assert len(stream_calls) == ROUTING_ESCALATION_ITERATION + 1
+    for call in stream_calls[:ROUTING_ESCALATION_ITERATION]:
+        assert call["model"] == config.fast_model
+    assert stream_calls[ROUTING_ESCALATION_ITERATION]["model"] == config.model
 
 
 def test_background_maintenance_skips_when_a_run_is_already_in_flight():

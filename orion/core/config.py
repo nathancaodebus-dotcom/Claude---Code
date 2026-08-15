@@ -37,6 +37,15 @@ class Config:
     fast_model: str = field(
         default_factory=lambda: _get("ORION_FAST_MODEL", "claude-haiku-4-5-20251001")
     )
+    # On by default: routes each user message to fast_model (Haiku) or
+    # model (Sonnet) by heuristic complexity (core/routing.py) instead of
+    # always paying Sonnet's latency/cost for questions that don't need
+    # it — "what time is it" doesn't need the same model as "compare these
+    # two approaches and explain the tradeoffs." Cloud-only (both tiers are
+    # still Claude) — not a switch to a local/offline model, see README §19.
+    model_routing_enabled: bool = field(
+        default_factory=lambda: _get("ORION_MODEL_ROUTING_ENABLED", "true").lower() == "true"
+    )
     assistant_name: str = field(default_factory=lambda: _get("ORION_NAME", "Orion"))
     db_path: str = field(default_factory=lambda: _get("ORION_DB_PATH", "./orion.db"))
     # core/logging_setup.py: a rotating file log alongside console output, so

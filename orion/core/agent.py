@@ -16,6 +16,7 @@ from core.consolidation import Consolidator, make_default_summarizer
 from core.correction_synthesis import CorrectionSynthesizer, make_default_correction_summarizer
 from core.memory import Memory
 from core.offline_agent import OfflineAgent, is_ollama_reachable
+from core.routing import select_model
 from tools.base import ToolRegistry
 
 # Static instructions only — never changes across users, sessions, or turns,
@@ -67,6 +68,14 @@ they've confirmed it and confirm_crypto_trade has actually run. Never call confi
 own initiative, no matter how confident you are in the analysis."""
 
 MAX_TOOL_ITERATIONS = 8
+
+# If model routing (core/routing.py) picked the fast model but the turn is
+# still asking for more tools after this many rounds, the heuristic guessed
+# wrong -- a genuinely simple question doesn't chain this many tool calls.
+# Escalating to the strong model for the rest of the turn trades a bit of
+# latency on a minority of misrouted turns for not leaving Haiku to muddle
+# through something it was never meant to handle.
+ROUTING_ESCALATION_ITERATION = 3
 
 # Caps how many tool calls from a single turn run concurrently. Without a
 # cap, a turn where the model reaches for a large batch of independent tools
@@ -174,7 +183,7 @@ class Agent:
         ]
 
         try:
-            final_text = self._respond_via_claude(session_id, messages, on_sentence)
+            final_text = self._respond_via_claude(session_id, messages, on_sentence, user_message)
         except Exception as exc:
             if not _is_offline_fallback_eligible(exc):
                 raise
@@ -221,12 +230,23 @@ class Agent:
         session_id: str,
         messages: list[dict[str, Any]],
         on_sentence: Callable[[str], None] | None,
+        user_message: str,
     ) -> str:
         final_text = ""
-        for _ in range(MAX_TOOL_ITERATIONS):
+        # Routed once per turn, from the user's own message text -- a fast
+        # model picked here can still escalate mid-turn below if the tool-use
+        # loop runs longer than the router's one-shot classification expected.
+        if config.model_routing_enabled:
+            model, _routing = select_model(
+                user_message, strong_model=config.model, fast_model=config.fast_model
+            )
+        else:
+            model = config.model
+
+        for iteration in range(MAX_TOOL_ITERATIONS):
             buffer = ""
             with self._client.messages.stream(
-                model=config.model,
+                model=model,
                 # Generation is sequential — every output token adds directly to
                 # response latency, so this stays only as large as a fast,
                 # conversational reply actually needs (~750 words). If a single
@@ -254,6 +274,13 @@ class Agent:
 
             if response.stop_reason != "tool_use":
                 break
+
+            # A turn that's still calling tools after several rounds is doing
+            # more multi-step work than the router's one-shot text
+            # classification anticipated -- escalate off the fast model so a
+            # long tool chain doesn't ride Haiku's weaker judgement to the end.
+            if model == config.fast_model and iteration + 1 >= ROUTING_ESCALATION_ITERATION:
+                model = config.model
 
             messages.append({"role": "assistant", "content": response.content})
 

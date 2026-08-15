@@ -999,6 +999,50 @@ A `NotFoundError` toast instead means no microphone was found at all
 (disabled/disconnected device, or a laptop's built-in mic disabled in
 Windows Device Manager) — different fix than the permission cases above.
 
+## 19. Cloud model routing (Haiku/Sonnet)
+
+Every reply used to go through Sonnet, even "what time is it" or "hi" —
+correct, but paying Sonnet's latency and cost for a question that doesn't
+need it. Orion now scores each incoming message for complexity and routes
+it to Claude Haiku (fast, cheap) or Sonnet (the default, stronger model)
+accordingly, on by default (`ORION_MODEL_ROUTING_ENABLED=true` in
+`.env.example`; set to `false` to always use Sonnet like before).
+
+This is **cloud-only routing between two Claude tiers** — not a switch to
+a local/offline model. Orion already has a genuinely local fallback for
+when Claude is unreachable at all (§17, via Ollama); this is a separate,
+unrelated feature that only ever calls Claude, just picking which size.
+
+The scorer (`core/routing.py`) is a weighted heuristic — length, code/math
+domain signals, reasoning/multi-step phrasing, question/subtask count, and
+creative-writing signals, each contributing to a 0.0–1.0 complexity score —
+directly adapted from [OpenJarvis](https://github.com/open-jarvis/OpenJarvis)'s
+own query-complexity router (`src/openjarvis/learning/routing/`), a Stanford
+Hazy Research project. Two differences from their design: every pattern is
+bilingual (French + English, matching how Orion is actually used) where
+theirs is English-only, and since Orion only ever has two cloud tiers
+instead of an open-ended local-model registry, the router is a binary
+threshold rather than a model-registry search. The rules, in order:
+
+1. **Code or math signals → Sonnet**, regardless of how short the message
+   looks ("fix `x=1/0`" is four words but exactly the kind of message where
+   a wrong-but-confident Haiku answer is worse than a slower Sonnet one).
+2. **Low complexity score, no code/math → Haiku** ("hi", "what time is
+   it", "merci").
+3. **High complexity, multi-step phrasing, or explicit reasoning language
+   → Sonnet** ("explain step by step why... then compare... 1. cost? 2.
+   latency?").
+4. **Everything else (the ambiguous middle) → Sonnet** — ties go to the
+   model whose failure mode is "a bit slower," not "confidently wrong."
+
+The model is picked once per turn from the user's message text, but a
+reply that turns out to need several rounds of tool calls is doing more
+work than a one-shot text classification could have predicted from the
+first message alone — if a turn routed to Haiku is still asking for tools
+after 3 rounds, Orion escalates to Sonnet for the rest of that turn rather
+than riding Haiku's weaker judgement through an increasingly complex
+tool-use chain.
+
 ## What's deferred (from the full integration wishlist)
 
 Some requested integrations aren't in yet, on purpose:
