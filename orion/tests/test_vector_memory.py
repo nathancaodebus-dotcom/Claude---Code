@@ -16,6 +16,42 @@ def _row(text: str, vec: list[float]) -> tuple[str, str, bytes]:
     return (text, "test", np.array(vec, dtype=np.float32).tobytes())
 
 
+def test_model_is_not_constructed_until_first_real_use(tmp_path, monkeypatch):
+    """Regression test for a real bug found during a full-codebase audit:
+    unlike every other optional integration in registry_builder.py (gated
+    behind a config check before being attempted), semantic memory loaded
+    its SentenceTransformer model unconditionally in __init__ -- paying the
+    full model-load cost (real disk I/O + weight init) on every interface's
+    startup whenever sentence-transformers merely happened to be installed,
+    even for a session that never calls index/search. The import itself
+    must still happen eagerly (registry_builder.py relies on ImportError at
+    construction time to decide whether to register these tools at all),
+    but the model constructor call must not."""
+    construction_calls = []
+
+    class _FakeSentenceTransformer:
+        def __init__(self, model_name):
+            construction_calls.append(model_name)
+
+        def encode(self, text, normalize_embeddings=True):
+            return np.array([1.0, 0.0], dtype=np.float32)
+
+    fake_module = types.ModuleType("sentence_transformers")
+    fake_module.SentenceTransformer = _FakeSentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
+
+    from core.vector_memory import VectorMemory
+
+    memory = VectorMemory(db_path=str(tmp_path / "test.db"))
+    assert construction_calls == []  # not built yet, just constructed the wrapper object
+
+    memory.index("hello", source="test")
+    assert construction_calls == ["all-MiniLM-L6-v2"]  # built on first real use
+
+    memory.search("hello")
+    assert construction_calls == ["all-MiniLM-L6-v2"]  # still just once -- cached, not rebuilt
+
+
 def test_uses_wal_journal_mode_for_safer_concurrent_access(tmp_path, monkeypatch):
     """VectorMemory shares its db file with Memory/Store — see their tests
     of the same name for why this matters. sentence-transformers is a heavy

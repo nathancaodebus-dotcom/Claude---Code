@@ -47,6 +47,7 @@ ROUTING_ESCALATION_ITERATION already applies to model selection.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -161,9 +162,21 @@ def _tokenize_with_aliases(text: str) -> set[str]:
     return tokens | aliased
 
 
-def _tool_keywords(tool: "Tool") -> set[str]:
-    name_tokens = {t for t in tool.name.split("_") if len(t) >= 2}
-    return name_tokens | _tokenize(tool.description)
+@lru_cache(maxsize=512)
+def _tool_keywords_cached(name: str, description: str) -> frozenset[str]:
+    # A tool's name/description never changes for the life of the process
+    # (found during a full-codebase audit: select_relevant_tools() re-ran
+    # this tokenization from scratch for all 150+ tools on every single
+    # turn -- pure repeated work). Cached by (name, description) rather
+    # than the Tool object itself so it stays correct even if two Tool
+    # instances happen to share a name/description (e.g. across tests),
+    # and doesn't need Tool to be hashable.
+    name_tokens = {t for t in name.split("_") if len(t) >= 2}
+    return frozenset(name_tokens | _tokenize(description))
+
+
+def _tool_keywords(tool: "Tool") -> frozenset[str]:
+    return _tool_keywords_cached(tool.name, tool.description)
 
 
 def select_relevant_tools(query: str, tools: list["Tool"]) -> list["Tool"]:

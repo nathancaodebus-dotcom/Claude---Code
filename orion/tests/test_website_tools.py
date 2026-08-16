@@ -138,6 +138,47 @@ def test_add_website_page_missing_site_gives_clear_error(store):
     assert "No website named" in result
 
 
+def test_add_website_page_rejects_a_path_traversal_slug(store, tmp_path):
+    """Regression test: slug used to be joined onto site_dir with no
+    sanitization ('../../../../home/user/.bashrc' would write outside the
+    site's own directory). A traversal slug must land safely inside the
+    site directory instead."""
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    escape_target = tmp_path / "escaped"
+
+    AddWebsitePageTool(store).run(
+        site_name="my-site",
+        slug="../../../../escaped",
+        title="Evil",
+        content_html="<p>pwned</p>",
+    )
+
+    assert not escape_target.with_suffix(".html").exists()
+    from pathlib import Path
+
+    site_dir = Path(store.get_document("my-site").path)
+    written = list(site_dir.glob("*escaped*.html"))
+    assert len(written) == 1
+    assert written[0].parent == site_dir
+
+
+def test_delete_website_page_with_traversal_slug_cannot_delete_outside_the_site(store, tmp_path):
+    """Same traversal risk as the write path above, but for the delete
+    path -- DeleteWebsitePageTool must never be able to unlink a file
+    outside the site's own directory."""
+    outside_file = tmp_path / "important.html"
+    outside_file.write_text("do not delete me")
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    AddWebsitePageTool(store).run(
+        site_name="my-site", slug="about", title="About", content_html="<p>x</p>"
+    )
+
+    DeleteWebsitePageTool(store).run(site_name="my-site", slug="../../../../important")
+
+    assert outside_file.exists()
+    assert outside_file.read_text() == "do not delete me"
+
+
 def test_edit_website_page_updates_content_and_rebuilds_nav_titles(store):
     CreateWebsiteTool(store).run(title="My Site", pages=_pages())
     AddWebsitePageTool(store).run(
@@ -237,6 +278,29 @@ def test_add_website_image_uses_custom_file_name(store, tmp_path):
 
     doc = store.get_document("my-site")
     assert (Path(doc.path) / "images" / "hero.png").exists()
+
+
+def test_add_website_image_rejects_a_path_traversal_file_name(store, tmp_path):
+    """Regression test: file_name used to be joined onto images_dir with
+    no sanitization -- '../../../../.ssh/known_hosts' would copy the
+    source image's bytes to an arbitrary writable path."""
+    from pathlib import Path
+
+    CreateWebsiteTool(store).run(title="My Site", pages=_pages())
+    image_path = tmp_path / "source.png"
+    Image.new("RGB", (20, 20)).save(image_path)
+    escape_target = tmp_path / "escaped.png"
+
+    AddWebsiteImageTool(store).run(
+        site_name="my-site", image_path=str(image_path), file_name="../../../../escaped.png"
+    )
+
+    assert not escape_target.exists()
+    doc = store.get_document("my-site")
+    images_dir = Path(doc.path) / "images"
+    written = list(images_dir.glob("*escaped*"))
+    assert len(written) == 1
+    assert written[0].parent == images_dir
 
 
 def test_add_website_image_missing_source(store):

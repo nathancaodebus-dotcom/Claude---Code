@@ -36,10 +36,24 @@ def test_server(tmp_path_factory):
     def handler(*args, **kwargs):
         return http.server.SimpleHTTPRequestHandler(*args, directory=str(site_dir), **kwargs)
 
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    # Bound to 0.0.0.0 (not just 127.0.0.1) specifically so the same server
+    # is reachable under two different hostname strings -- "127.0.0.1" and
+    # "localhost" -- which the domain-allowlist test below needs: a click
+    # that lands on the exact same physical server, but a hostname _domain_
+    # _allowed() (a plain string check, not real DNS) doesn't recognize.
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", 0), handler)
     port = httpd.server_address[1]
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
+    # index.html's own content is served identically regardless of which
+    # hostname reached it -- the cross-origin-link test below writes its
+    # own page directly rather than relying on relative links inheriting
+    # whichever hostname the test happens to navigate through first.
+    (site_dir / "cross_origin_link.html").write_text(
+        f'<!DOCTYPE html><html><head><title>Link Page</title></head><body>'
+        f'<a href="http://localhost:{port}/index.html">Off-allowlist link</a>'
+        f"</body></html>"
+    )
     yield f"http://127.0.0.1:{port}"
     httpd.shutdown()
 
@@ -104,6 +118,31 @@ def test_navigate_allows_domains_on_the_allowlist(test_server):
         except BrowserError as exc:
             pytest.skip(f"Playwright browser not launchable in this environment: {exc}")
         assert state.title == "Test Page"
+        s.close()
+    finally:
+        object.__setattr__(config, "browser_allowed_domains", None)
+
+
+def test_click_cannot_navigate_past_the_domain_allowlist(test_server):
+    """Regression test for a real bug found during a full-codebase audit:
+    the allowlist was only enforced in navigate()'s pre-check, so a link on
+    an otherwise-allowed page could click() its way to a non-allowlisted
+    domain with no check at all. "127.0.0.1" and "localhost" resolve to
+    the exact same physical test server here, but are different hostname
+    strings -- the allowlist only names "127.0.0.1", so following the
+    localhost link must be blocked."""
+    object.__setattr__(config, "browser_allowed_domains", "127.0.0.1")
+    try:
+        s = BrowserSession()
+        try:
+            state = s.navigate(f"{test_server}/cross_origin_link.html")
+        except BrowserError as exc:
+            pytest.skip(f"Playwright browser not launchable in this environment: {exc}")
+        link_ref = next(e.ref for e in state.elements if e.text == "Off-allowlist link")
+
+        with pytest.raises(BrowserError, match="not on the configured browser domain allowlist"):
+            s.click(link_ref)
+
         s.close()
     finally:
         object.__setattr__(config, "browser_allowed_domains", None)

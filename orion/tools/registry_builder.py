@@ -681,10 +681,12 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     if config.home_assistant_url and config.home_assistant_token:
         def _home_assistant() -> None:
-            from tools.home_assistant_tool import CallServiceTool, ListDevicesTool
+            from tools.home_assistant_tool import CallServiceTool, ConfirmSmartHomeActionTool, ListDevicesTool
 
             registry.register(ListDevicesTool())
-            registry.register(CallServiceTool())
+            call_service_tool = CallServiceTool()
+            registry.register(call_service_tool)
+            registry.register(ConfirmSmartHomeActionTool(call_service_tool))
 
         _register_safe(registry, "Home Assistant", _home_assistant)
 

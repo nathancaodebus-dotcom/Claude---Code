@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+import threading
 from pathlib import Path
 
 from telegram import Update
@@ -51,15 +52,34 @@ def _is_authorized(update: Update) -> bool:
     return str(update.effective_user.id) == str(config.telegram_allowed_user_id)
 
 
+_whisper_model = None
+_whisper_model_lock = threading.Lock()
+
+
+def _get_whisper_model():
+    """Lazily-loaded, cached singleton -- same pattern interfaces/web/app.py
+    and interfaces/whatsapp_bot.py already use. This used to construct a
+    fresh WhisperModel on every single voice message (a couple of seconds
+    of disk I/O + weight init paid again and again), found during a
+    full-codebase audit; those two sibling interfaces had already fixed it,
+    this one just hadn't gone through the same pass yet."""
+    global _whisper_model
+    with _whisper_model_lock:
+        if _whisper_model is None:
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError:
+                return None
+            _whisper_model = WhisperModel(config.whisper_model_size, device="cpu", compute_type="int8")
+        return _whisper_model
+
+
 def _transcribe(audio_path: Path) -> str | None:
     """Best-effort local transcription of voice messages using faster-whisper,
     if the optional voice dependencies (requirements-voice.txt) are installed."""
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
+    model = _get_whisper_model()
+    if model is None:
         return None
-
-    model = WhisperModel("small", device="cpu", compute_type="int8")
     segments, _ = model.transcribe(str(audio_path), language=config.voice_language)
     return join_confident_segments(segments)
 
@@ -138,7 +158,14 @@ def build_application(agent: Agent, store: Store, tts: Synthesizer | None) -> Ap
                 chat_id=config.telegram_allowed_user_id, text=f"⏰ Reminder: {reminder.text}"
             )
             if tts is not None:
-                ogg_bytes = _synthesize_to_ogg_opus(tts, reminder.text, urgent=True)
+                # Blocking (TTS network call + an ffmpeg subprocess) --
+                # handle_voice already offloads the identical call via
+                # asyncio.to_thread a few lines up; this one didn't, so
+                # every reminder with TTS configured froze the bot's single
+                # event loop (no other update processed, and this same
+                # JobQueue polling loop stalls) for the full synth+encode
+                # duration. Found during a full-codebase audit.
+                ogg_bytes = await asyncio.to_thread(_synthesize_to_ogg_opus, tts, reminder.text, urgent=True)
                 if ogg_bytes:
                     await context.bot.send_voice(chat_id=config.telegram_allowed_user_id, voice=ogg_bytes)
             store.mark_reminder_delivered(reminder.id)

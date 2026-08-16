@@ -2,6 +2,7 @@
 Telegram or the voice loop, and works identically on the Pi or a laptop."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from core import attachments
@@ -14,6 +15,8 @@ from core.outputs_cleanup import purge_old_outputs
 from core.scheduler import ReminderScheduler
 from core.store import Store
 from tools.registry_builder import build_registry
+
+logger = logging.getLogger("orion.cli")
 
 SESSION_ID = "cli"
 
@@ -50,7 +53,18 @@ def main() -> None:
         if user_input.lower() in {"exit", "quit"}:
             break
 
-        reply = agent.respond(SESSION_ID, user_input)
+        try:
+            reply = agent.respond(SESSION_ID, user_input)
+        except Exception:
+            # Every other interface (voice_loop.py's run() loop, web/app.py's
+            # _stream_chat) already catches around this same call and keeps
+            # going -- an uncaught exception here (a SQLite hiccup, a
+            # malformed tool schema, anything unexpected) used to take the
+            # whole CLI process down and lose the session instead of just
+            # failing the one turn.
+            logger.exception("Turn failed.")
+            print(f"{config.assistant_name}> Something went wrong on my end — try again?\n")
+            continue
         print(f"{config.assistant_name}> {reply}\n")
 
         for path in attachments.drain():

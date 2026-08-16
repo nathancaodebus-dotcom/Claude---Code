@@ -1,4 +1,5 @@
-from tools.web_tools import WebSearchTool
+import tools.web_tools as web_tools_module
+from tools.web_tools import FetchWebpageTool, WebSearchTool
 
 
 class _FakeResponse:
@@ -61,3 +62,33 @@ def test_web_search_reports_no_results(monkeypatch):
     monkeypatch.setattr("tools.web_tools.client.get", lambda *a, **kw: _FakeResponse("<html></html>"))
     result = WebSearchTool().run(query="nothing")
     assert result == "No results found."
+
+
+# --- FetchWebpageTool SSRF guard -----------------------------------------
+
+
+def test_fetch_webpage_refuses_a_private_address_without_making_a_request(monkeypatch):
+    calls = []
+    monkeypatch.setattr(web_tools_module.client, "get", lambda *a, **kw: calls.append((a, kw)))
+
+    result = FetchWebpageTool().run(url="http://169.254.169.254/latest/meta-data/")
+
+    assert calls == []  # never even tried to make the request
+    assert "private/internal address" in result
+
+
+def test_fetch_webpage_fetches_a_safe_url_normally(monkeypatch):
+    class _FakeResp:
+        text = "<html><body><p>Hello world</p></body></html>"
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        web_tools_module, "require_public_http_url", lambda url: None
+    )
+    monkeypatch.setattr(web_tools_module.client, "get", lambda *a, **kw: _FakeResp())
+
+    result = FetchWebpageTool().run(url="https://example.com/")
+
+    assert "Hello world" in result

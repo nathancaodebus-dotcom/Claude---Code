@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from core.http import client
+from core.http import UnsafeUrlError, client, require_public_http_url
 from tools.base import Tool
 
 _USER_AGENT = "Mozilla/5.0 (compatible; OrionAssistant/1.0)"
@@ -88,6 +88,10 @@ class FetchWebpageTool(Tool):
     }
 
     def run(self, url: str, max_chars: int = 4000) -> str:
+        try:
+            require_public_http_url(url)
+        except UnsafeUrlError as exc:
+            return f"Can't fetch '{url}': {exc}"
         response = client.get(
             url, headers={"User-Agent": _USER_AGENT}, timeout=15, follow_redirects=True
         )

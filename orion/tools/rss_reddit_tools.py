@@ -24,6 +24,16 @@ class ReadRssFeedTool(Tool):
     }
 
     def run(self, feed_url: str, max_results: int = 10) -> str:
+        # feedparser treats any string with no http/https/ftp/file/feed
+        # scheme as a local filename and does a plain open() on it (found
+        # during a full-codebase audit) -- a feed_url like "/etc/hosts"
+        # would read that file's contents rather than fetching a feed.
+        # Requiring an explicit scheme closes that off without touching
+        # this tool's actual purpose (any real RSS/Atom URL already has
+        # one); LAN-hosted feeds still work fine, unlike fetch_webpage this
+        # deliberately isn't further restricted to public addresses.
+        if not feed_url.lower().startswith(("http://", "https://")):
+            return f"'{feed_url}' isn't a http:// or https:// URL — feed_url must be an actual feed URL."
         parsed = feedparser.parse(feed_url)
         if not parsed.entries:
             return f"No entries found for feed '{feed_url}'."

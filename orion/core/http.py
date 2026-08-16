@@ -27,6 +27,9 @@ as an independent request anyway.
 from __future__ import annotations
 
 import atexit
+import ipaddress
+import socket
+from urllib.parse import urlparse
 
 import httpx
 
@@ -46,3 +49,48 @@ client = httpx.Client(
 # until the OS reclaims them at process exit. Not incorrect, just not clean;
 # atexit makes sure they're actually released as part of a normal shutdown.
 atexit.register(client.close)
+
+
+class UnsafeUrlError(ValueError):
+    """Raised by require_public_http_url() for a URL a tool shouldn't fetch."""
+
+
+def require_public_http_url(url: str) -> None:
+    """SSRF guard for tools that fetch a fully model/user-suppliable URL and
+    return its content to the model (tools/web_tools.py's fetch_webpage is
+    the motivating case, found during a full-codebase audit: nothing
+    stopped a prompt-injected page or a jailbroken request from pointing it
+    at http://169.254.169.254/... — a cloud metadata endpoint — or an
+    internal LAN admin panel, with the full response handed back to Claude
+    either way). Raises UnsafeUrlError with a human-readable reason instead
+    of returning a bool, so callers can surface *why* a URL was refused.
+
+    Deliberately not applied to every URL-fetching tool: some (uptime
+    monitoring, RSS feeds) have a legitimate reason to reach a
+    self-hosted/LAN service, which this would break. Scoped to the tool
+    whose entire job is "return this page's content to the model."
+
+    Best-effort, not a hardened defense: checks the scheme and the
+    hostname's *currently* resolved address(es), which blocks a URL that
+    directly names a private/loopback/link-local target. Two gaps this
+    doesn't close: DNS rebinding (a hostname whose DNS record changes
+    between this check and the actual connection), and a redirect chain
+    that starts at a public URL but hops to a private one (fetch_webpage
+    calls this once, up front, then still fetches with
+    follow_redirects=True) — both would need a custom httpx transport with
+    connection-time IP pinning on every hop to close fully."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise UnsafeUrlError(f"Unsupported URL scheme '{parsed.scheme or '(none)'}' — only http/https are allowed.")
+    if not parsed.hostname:
+        raise UnsafeUrlError("URL has no hostname.")
+    try:
+        addr_info = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror as exc:
+        raise UnsafeUrlError(f"Couldn't resolve '{parsed.hostname}': {exc}") from exc
+    for *_rest, sockaddr in addr_info:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise UnsafeUrlError(
+                f"'{parsed.hostname}' resolves to a private/internal address ({ip}) — refusing to fetch it."
+            )

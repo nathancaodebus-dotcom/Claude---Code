@@ -47,9 +47,12 @@ class _FakeAgent:
     def __init__(self, reply: str = "ok"):
         self.reply = reply
         self.calls: list[tuple[str, str]] = []
+        self.error: Exception | None = None
 
     def respond(self, session_id: str, message: str) -> str:
         self.calls.append((session_id, message))
+        if self.error:
+            raise self.error
         return self.reply
 
 
@@ -157,6 +160,21 @@ def test_handle_text_message_sends_the_agent_reply(fake_client):
     assert sent_bodies[0]["to"] == "41791234567"
 
 
+def test_handle_text_message_reports_a_failure_instead_of_vanishing_silently(fake_client):
+    """Regression test for a real bug found during a full-codebase audit:
+    agent.respond() used to run unguarded here -- a transient Anthropic
+    error or an uncaught tool exception meant the inbound message just
+    vanished with no reply and no error shown to the owner."""
+    agent = _FakeAgent()
+    agent.error = RuntimeError("boom")
+
+    whatsapp_bot._handle_text_message(agent, "41791234567", "hi")
+
+    sent_bodies = [kwargs["json"] for url, kwargs in fake_client.posts if url.endswith("/messages")]
+    assert len(sent_bodies) == 1
+    assert "went wrong" in sent_bodies[0]["text"]["body"]
+
+
 def test_handle_unsupported_message_explains_the_limitation(fake_client):
     whatsapp_bot._handle_unsupported_message("41791234567", "image")
 
@@ -174,6 +192,18 @@ def test_handle_audio_message_transcribes_and_replies(fake_client, monkeypatch):
     sent_bodies = [kwargs["json"] for url, kwargs in fake_client.posts if url.endswith("/messages")]
     assert "The weather is nice." in sent_bodies[0]["text"]["body"]
     assert "what's the weather" in sent_bodies[0]["text"]["body"]
+
+
+def test_handle_audio_message_reports_a_failure_instead_of_vanishing_silently(fake_client, monkeypatch):
+    agent = _FakeAgent()
+    agent.error = RuntimeError("boom")
+    monkeypatch.setattr(whatsapp_bot, "_transcribe", lambda path: "what's the weather")
+
+    whatsapp_bot._handle_audio_message(agent, None, "41791234567", "media-123")
+
+    sent_bodies = [kwargs["json"] for url, kwargs in fake_client.posts if url.endswith("/messages")]
+    assert len(sent_bodies) == 1
+    assert "went wrong" in sent_bodies[0]["text"]["body"]
 
 
 def test_handle_audio_message_reports_when_transcription_is_unconfident(fake_client, monkeypatch):

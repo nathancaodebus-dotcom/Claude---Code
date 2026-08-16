@@ -11,6 +11,7 @@ sentence-transformers is installed (requirements-memory.txt).
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,7 +68,14 @@ def _top_k_matches(
 
 class VectorMemory:
     def __init__(self, db_path: str | None = None):
-        from sentence_transformers import SentenceTransformer
+        # Import-checked here (not deferred to _ensure_model() below) so
+        # that constructing this class still raises ImportError immediately
+        # when sentence-transformers isn't installed -- tools/registry_builder.py's
+        # _semantic_memory() group relies on exactly that to decide whether
+        # to register index_memory/search_memory at all (see _register_safe).
+        # Only the actual model weight load (the expensive part -- disk I/O
+        # + init, ~1-2s) is deferred; importing the module itself is cheap.
+        import sentence_transformers  # noqa: F401
 
         path = db_path or config.db_path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +86,15 @@ class VectorMemory:
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
-        self._model = SentenceTransformer(_MODEL_NAME)
+        # Loaded on first real use (_ensure_model()), not here -- found
+        # during a full-codebase audit: unlike every other optional
+        # integration in registry_builder.py (gated behind a config check
+        # before being attempted), this ran unconditionally for every
+        # interface's startup whenever sentence-transformers merely happened
+        # to be installed, paying the model's full load cost even for a
+        # session that never calls index_memory/search_memory.
+        self._model = None
+        self._model_lock = threading.Lock()
         # search() used to re-fetch every row from SQLite and re-decode each
         # embedding's raw bytes back into an array on every single call, even
         # for two searches back to back with nothing indexed in between —
@@ -89,8 +105,17 @@ class VectorMemory:
         # rather than re-querying.
         self._rows_cache: list[tuple[str, str, bytes]] | None = None
 
+    def _ensure_model(self):
+        if self._model is None:
+            with self._model_lock:
+                if self._model is None:
+                    from sentence_transformers import SentenceTransformer
+
+                    self._model = SentenceTransformer(_MODEL_NAME)
+        return self._model
+
     def _embed(self, text: str) -> np.ndarray:
-        return self._model.encode(text, normalize_embeddings=True)
+        return self._ensure_model().encode(text, normalize_embeddings=True)
 
     def index(self, text: str, source: str) -> None:
         embedding = self._embed(text)

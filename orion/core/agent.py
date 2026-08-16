@@ -248,8 +248,21 @@ class Agent:
         # a *single* tool call needs (see core/tool_selection.py), but not for
         # an unpredictable further chain of tool calls -- iteration 0 gets the
         # filtered set, every iteration after that gets the full registry.
+        #
+        # Both schema lists are built once here, not inside the loop below --
+        # found during a full-codebase audit: rebuilding ~150 tool schema
+        # dicts on every one of up to MAX_TOOL_ITERATIONS iterations was pure
+        # repeated work, since neither all_tools nor first_call_tools change
+        # partway through a turn. select_relevant_tools() returns the same
+        # list object unfiltered when it doesn't narrow anything down (small
+        # registry, sparse match, ...) -- reusing full_tool_schemas in that
+        # case instead of building an identical second copy.
         all_tools = self._tools.all()
         first_call_tools = select_relevant_tools(user_message, all_tools)
+        full_tool_schemas = self._cached_tool_schemas(all_tools)
+        first_call_schemas = (
+            full_tool_schemas if first_call_tools is all_tools else self._cached_tool_schemas(first_call_tools)
+        )
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             buffer = ""
@@ -263,7 +276,7 @@ class Agent:
                 # across iterations rather than needing one huge one.
                 max_tokens=1024,
                 system=self._system_blocks(session_id),
-                tools=self._cached_tool_schemas(all_tools if iteration > 0 else first_call_tools),
+                tools=full_tool_schemas if iteration > 0 else first_call_schemas,
                 messages=messages,
             ) as stream:
                 for delta in stream.text_stream:

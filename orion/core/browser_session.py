@@ -224,7 +224,30 @@ class BrowserSession:
             ) from exc
         return self._page
 
+    def _enforce_domain_allowlist(self, page) -> None:
+        """navigate()'s own pre-check (before this session ever requests
+        the URL) only validates the *requested* string -- it can't catch a
+        server-side redirect to a different domain, and click() has no
+        pre-check at all, since a click's destination isn't known until
+        after it navigates. Calling this from _extract_state(), which
+        every action method (_navigate/_click/_fill) routes through after
+        the page has settled, catches the *actual resulting* page.url
+        regardless of how it got there -- found during a full-codebase
+        audit: a link on an otherwise-allowlisted page could navigate the
+        shared, persistent session to any non-allowlisted domain with
+        click() alone, silently defeating BROWSER_ALLOWED_DOMAINS."""
+        allowed = _allowed_domains()
+        if not allowed or _domain_allowed(page.url, allowed):
+            return
+        blocked_url = page.url
+        page.goto("about:blank")
+        raise BrowserError(
+            f"Blocked: ended up on '{blocked_url}', which is not on the configured browser domain "
+            f"allowlist ({', '.join(allowed)}). Navigated to a blank page."
+        )
+
     def _extract_state(self, page) -> PageState:
+        self._enforce_domain_allowlist(page)
         raw_elements = page.evaluate(_EXTRACT_ELEMENTS_JS)
         truncated = len(raw_elements) > _MAX_ELEMENTS
         elements = [

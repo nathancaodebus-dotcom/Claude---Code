@@ -16,6 +16,7 @@ import base64
 import io
 import json
 import queue
+import re
 import tempfile
 import threading
 import wave
@@ -24,10 +25,10 @@ from pathlib import Path
 from typing import AsyncIterator, Iterator
 
 import uvicorn
-from fastapi import FastAPI, File
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, File, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core import attachments
 from core.agent import Agent
@@ -149,11 +150,56 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     _health_monitor.stop()
 
 
+# Found during a full-codebase audit: this app has no auth of any kind
+# (README §18 documents that as a deliberate tradeoff for a single-user
+# local tool) and binding to 127.0.0.1 only stops *network*-external
+# access, not a browser-based CSRF from the owner's own machine -- any
+# webpage the owner has open in another tab can silently POST to this
+# port. multipart/form-data (what /api/transcribe's mic upload uses) is a
+# CORS-*safelisted* content type, so a hidden auto-submitting form on any
+# site reaches it with no preflight at all, forcing the local process to
+# run Whisper transcription on attacker-supplied bytes. Browsers reliably
+# set Origin on a cross-origin POST and JS on the attacker's page cannot
+# spoof it, so rejecting a present-but-mismatched Origin blocks exactly
+# that vector without needing any change to the (same-origin) browser
+# client this UI actually ships. A *missing* Origin header is allowed
+# through -- that's the non-browser case (curl, a local script), which is
+# already the trusted baseline this loopback-only process assumes.
+_ALLOWED_ORIGIN_RE = re.compile(r"^https?://(127\.0\.0\.1|localhost):\d+$")
+# Generous for a real recorded voice clip (the mic button's own
+# MAX_RECORDING_MS caps a browser-side recording at 2 minutes) while still
+# bounding how much an oversized request forces this process to buffer in
+# memory before a route even runs.
+_MAX_REQUEST_BODY_BYTES = 15 * 1024 * 1024
+# Generous for a long dictated request; bounds a single turn's own text
+# size independent of the transport-level cap above.
+_MAX_CHAT_MESSAGE_CHARS = 8000
+
+
+def _verify_same_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if origin is not None and not _ALLOWED_ORIGIN_RE.match(origin):
+        raise HTTPException(status_code=403, detail="Cross-origin request rejected.")
+
+
 app = FastAPI(title="Orion", lifespan=_lifespan)
 
 
+@app.middleware("http")
+async def _limit_request_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            too_large = int(content_length) > _MAX_REQUEST_BODY_BYTES
+        except ValueError:
+            too_large = False
+        if too_large:
+            return Response(status_code=413, content="Request body too large.")
+    return await call_next(request)
+
+
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=_MAX_CHAT_MESSAGE_CHARS)
 
 
 @app.get("/api/status")
@@ -204,7 +250,7 @@ def _stream_chat(message: str) -> Iterator[str]:
         yield f"data: {json.dumps(item)}\n\n"
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Depends(_verify_same_origin)])
 def chat(req: ChatRequest) -> StreamingResponse:
     message = req.message.strip()
     if not message:
@@ -213,7 +259,7 @@ def chat(req: ChatRequest) -> StreamingResponse:
     return StreamingResponse(_stream_chat(message), media_type="text/event-stream")
 
 
-@app.post("/api/transcribe")
+@app.post("/api/transcribe", dependencies=[Depends(_verify_same_origin)])
 def transcribe(audio: bytes = File(...)) -> dict:
     """Push-to-talk mic input for the HUD: the browser records a clip (any
     container MediaRecorder produces — webm/opus in Chrome/Edge, ogg/opus

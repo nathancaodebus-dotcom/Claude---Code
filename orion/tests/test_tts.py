@@ -288,7 +288,9 @@ def test_edge_tts_network_call_has_a_timeout(monkeypatch, fake_ffmpeg):
 
 def test_get_synthesizer_prefers_elevenlabs_over_everything(monkeypatch):
     monkeypatch.setitem(
-        sys.modules, "elevenlabs.client", types.SimpleNamespace(ElevenLabs=lambda api_key: object())
+        sys.modules,
+        "elevenlabs.client",
+        types.SimpleNamespace(ElevenLabs=lambda api_key, timeout=None: object()),
     )
     cfg = dataclasses.replace(real_config, elevenlabs_api_key="key123", edge_tts_voice="fr-FR-HenriNeural")
     monkeypatch.setattr("core.tts.config", cfg)

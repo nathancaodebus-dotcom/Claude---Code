@@ -33,7 +33,7 @@ from pathlib import Path
 from core.attachments import push as push_attachment
 from core.store import Store
 from tools.base import Tool
-from tools.document_utils import kind_collision_warning, slugify
+from tools.document_utils import kind_collision_warning, sanitize_path_component, slugify
 
 WEBSITES_DIR = Path("outputs") / "websites"
 
@@ -132,7 +132,15 @@ def _save_manifest(site_dir: Path, manifest: dict) -> None:
 
 
 def _page_filename(slug: str) -> str:
-    return "index.html" if slug == "index" else f"{slug}.html"
+    # slug is model/user-suppliable (CreateWebsiteTool/AddWebsitePageTool's
+    # own input_schema) and every call site below joins the result onto
+    # site_dir with no other check — sanitizing here, once, is what stops a
+    # slug like '../../../../home/user/.bashrc' from writing (or, via
+    # DeleteWebsitePageTool, deleting) a file outside this site's own
+    # directory. Same fix already applied to resolve_path() for docx/pptx/
+    # xlsx; this module just hadn't gone through it yet.
+    safe_slug = sanitize_path_component(slug)
+    return "index.html" if safe_slug == "index" else f"{safe_slug}.html"
 
 
 def _render_nav(pages: list[dict], current_slug: str) -> str:
@@ -425,7 +433,11 @@ class AddWebsiteImageTool(Tool):
 
         images_dir = Path(doc.path) / "images"
         images_dir.mkdir(exist_ok=True)
-        dest_name = file_name or source.name
+        # source.name is already just a basename (Path.name strips any
+        # directory components), so only the explicit file_name override
+        # needs sanitizing -- a file_name like '../../../../.ssh/known_hosts'
+        # would otherwise copy into an arbitrary writable path.
+        dest_name = sanitize_path_component(file_name) if file_name else source.name
         dest = images_dir / dest_name
         shutil.copyfile(source, dest)
 

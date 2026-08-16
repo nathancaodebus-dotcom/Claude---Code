@@ -124,6 +124,9 @@ class PiperSynthesizer:
         return b"".join(chunk.audio_int16_bytes for chunk in self._voice.synthesize(text))
 
 
+_ELEVENLABS_NETWORK_TIMEOUT_S = 15
+
+
 class ElevenLabsSynthesizer:
     """Expressive cloud TTS. The exact ElevenLabs SDK call shape has changed
     across versions; this targets the elevenlabs>=1.0 client API — adjust
@@ -134,7 +137,14 @@ class ElevenLabsSynthesizer:
     def __init__(self, api_key: str, voice_id: str):
         from elevenlabs.client import ElevenLabs
 
-        self._client = ElevenLabs(api_key=api_key)
+        # The SDK's own default is 240s -- EdgeTTSSynthesizer.synthesize()
+        # below already learned the lesson that an unbounded (or
+        # near-unbounded) network call inside Synthesizer.synthesize()
+        # freezes whichever always-on voice interface hits it, since every
+        # caller here is synchronous; ElevenLabs is the higher-priority
+        # backend (get_synthesizer() picks it first when configured) so it
+        # needs the same bound, not a longer one.
+        self._client = ElevenLabs(api_key=api_key, timeout=_ELEVENLABS_NETWORK_TIMEOUT_S)
         self._voice_id = voice_id
 
     def synthesize(self, text: str, urgent: bool = False) -> bytes:
@@ -146,13 +156,17 @@ class ElevenLabsSynthesizer:
             if urgent
             else {"stability": 0.6, "similarity_boost": 0.75, "style": 0.2}
         )
-        audio_chunks = self._client.text_to_speech.convert(
-            voice_id=self._voice_id,
-            text=text,
-            voice_settings=voice_settings,
-            output_format="pcm_44100",
-        )
-        return b"".join(audio_chunks)
+        try:
+            audio_chunks = self._client.text_to_speech.convert(
+                voice_id=self._voice_id,
+                text=text,
+                voice_settings=voice_settings,
+                output_format="pcm_44100",
+            )
+            return b"".join(audio_chunks)
+        except Exception as exc:  # noqa: BLE001 - the SDK's exception shape varies by version (see class docstring); any failure here must degrade, not propagate and take the voice loop down with it
+            logger.warning("ElevenLabs TTS request failed or timed out (%s) -- skipping this utterance.", exc)
+            return b""
 
 
 _EDGE_TTS_NETWORK_TIMEOUT_S = 15

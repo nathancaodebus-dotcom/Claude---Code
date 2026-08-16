@@ -215,8 +215,26 @@ def _try_send_text(to: str, text: str) -> None:
         logger.warning("Failed to send WhatsApp reply to %s: %s", to, exc)
 
 
+def _respond_or_report_failure(agent: Agent, from_number: str, text: str) -> str | None:
+    """agent.respond() used to run unguarded here -- a transient Anthropic
+    error or an uncaught tool exception meant the inbound message just
+    vanished with no reply and no error shown to the owner, unlike every
+    outbound Graph API call in this module (which all go through
+    _try_send_text and degrade the same way). Found during a full-codebase
+    audit. Returns None (having already told the owner) on failure, so
+    callers can just check for that instead of duplicating the try/except."""
+    try:
+        return agent.respond(SESSION_ID, text)
+    except Exception as exc:  # noqa: BLE001 - must degrade to a visible message, never vanish silently
+        logger.exception("agent.respond() failed for a WhatsApp message from %s: %s", from_number, exc)
+        _try_send_text(from_number, "Something went wrong on my end — try again?")
+        return None
+
+
 def _handle_text_message(agent: Agent, from_number: str, text: str) -> None:
-    reply = agent.respond(SESSION_ID, text)
+    reply = _respond_or_report_failure(agent, from_number, text)
+    if reply is None:
+        return
     _try_send_text(from_number, reply)
     try:
         _send_attachments(from_number)
@@ -247,7 +265,9 @@ def _handle_audio_message(agent: Agent, tts: Synthesizer | None, from_number: st
         _try_send_text(from_number, "Didn't catch that — could you send it again?")
         return
 
-    reply = agent.respond(SESSION_ID, transcript)
+    reply = _respond_or_report_failure(agent, from_number, transcript)
+    if reply is None:
+        return
     _try_send_text(from_number, f"\U0001f3a4 “{transcript}”\n\n{reply}")
     try:
         if tts is not None:
