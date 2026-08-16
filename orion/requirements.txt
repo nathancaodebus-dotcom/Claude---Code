@@ -62,6 +62,13 @@ bandit>=1.7.0
 # otherwise falls back to a plain subprocess automatically.
 docker>=7.0.0
 
+# Optional: unified read-only market data (order book depth, cross-exchange
+# price comparison) straight from real exchanges — tools/exchange_tools.py
+# degrades gracefully without it (registry_builder.py skips just that group).
+# Public endpoints only, no API key; see tools/crypto_tools.py for why this
+# project never uses ccxt's authenticated/trading endpoints.
+ccxt>=4.4.0
+
 # Website publishing to Infomaniak (SFTP) — tools/website_publish_tools.py
 # degrades gracefully without it. Pulls in cryptography (Rust), so it can
 # be slow/fail to build on Termux the same way jiter/pydantic-core can —

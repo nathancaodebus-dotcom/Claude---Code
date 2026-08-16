@@ -117,26 +117,38 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
 
     def _crypto_trading() -> None:
         from tools.crypto_tools import (
+            CheckCryptoExitConditionsTool,
             CompareCryptoAssetsTool,
             ConfirmCryptoTradeTool,
+            GetCryptoLossStreakStatusTool,
             GetCryptoMarketDataTool,
             GetCryptoTechnicalIndicatorsTool,
+            GetCryptoTrendSignalTool,
             ListCryptoHoldingsTool,
             ListPendingCryptoTradesTool,
             ProposeCryptoTradeTool,
             RejectCryptoTradeTool,
+            ScreenCryptoCandidatesTool,
+            SetCryptoExitRuleTool,
+            SuggestPortfolioRebalanceTool,
             SuggestPositionSizeTool,
         )
 
         registry.register(GetCryptoMarketDataTool())
         registry.register(CompareCryptoAssetsTool())
         registry.register(GetCryptoTechnicalIndicatorsTool())
+        registry.register(GetCryptoTrendSignalTool())
+        registry.register(ScreenCryptoCandidatesTool())
         registry.register(ProposeCryptoTradeTool(store))
         registry.register(ConfirmCryptoTradeTool(store))
         registry.register(RejectCryptoTradeTool(store))
         registry.register(ListPendingCryptoTradesTool(store))
         registry.register(ListCryptoHoldingsTool(store))
         registry.register(SuggestPositionSizeTool())
+        registry.register(SetCryptoExitRuleTool(store))
+        registry.register(CheckCryptoExitConditionsTool(store))
+        registry.register(GetCryptoLossStreakStatusTool(store))
+        registry.register(SuggestPortfolioRebalanceTool(store))
 
     _register_safe(registry, "crypto trading (research + paper portfolio)", _crypto_trading)
 
@@ -148,6 +160,21 @@ def build_registry(memory: Memory, store: Store | None = None) -> ToolRegistry:
         registry.register(ListQuantSignalsTool(store))
 
     _register_safe(registry, "quantitative signal research", _quant_signals)
+
+    def _crypto_backtest() -> None:
+        from tools.crypto_backtest_tool import BacktestCryptoSignalTool
+
+        registry.register(BacktestCryptoSignalTool())
+
+    _register_safe(registry, "crypto signal backtesting", _crypto_backtest)
+
+    def _exchange_market_data() -> None:
+        from tools.exchange_tools import CompareCryptoPriceAcrossExchangesTool, GetCryptoOrderBookTool
+
+        registry.register(GetCryptoOrderBookTool())
+        registry.register(CompareCryptoPriceAcrossExchangesTool())
+
+    _register_safe(registry, "exchange market data (ccxt)", _exchange_market_data)
 
     def _rss_reddit() -> None:
         from tools.rss_reddit_tools import ReadRssFeedTool, RedditTopPostsTool

@@ -59,7 +59,7 @@ Around 90-160 tools depending on configuration, registered in
 | **Music** *(needs Spotify setup, §4)* | search, play, pause, resume, skip, volume, create/fill playlists, list Spotify Connect devices |
 | **Video / casting** *(needs Chromecast setup, §5)* | discover Chromecasts, search & play YouTube videos, launch Netflix/Disney+/Spotify/YouTube Music on the TV — see the caveat in §5 |
 | Live info | weather (+ historical comparison), sunrise/sunset, Wikipedia, dictionary, currency, stocks, crypto, news, RSS, Reddit, GitHub watching, upcoming movies |
-| **Crypto trading & quant research** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order; fee-aware P&L, fixed-fractional position sizing (`suggest_position_size`); **quantitative signal backtesting** (Rank IC + Sharpe/Sortino/win-rate/drawdown against real historical stock prices, run in the sandbox) |
+| **Crypto trading & quant research** *(§12 — research/paper-tracking only, see the caveat there)* | market data, side-by-side comparison, technical indicators (SMA/RSI/volatility), persistence-filtered trend signal, candidate screening; a two-portfolio paper tracker with **propose → user confirms → applies** for every position change — never places a real order; fee-aware P&L, fixed-fractional position sizing, exit-rule watching (stop-loss/take-profit/time-limit), a loss-streak guardrail, portfolio rebalance suggestions; **quantitative signal backtesting** for stocks and crypto (Rank IC + Sharpe/Sortino/win-rate/drawdown, run in the sandbox); optional read-only order-book depth and cross-exchange price comparison via ccxt |
 | Open web | web search, fetch & read a webpage, shorten a URL, public IP, service uptime checks |
 | Utilities | calculator, unit conversion, password generator, QR codes, ambient noise generator, **flashcard/quiz generator** (real Anki .apkg files, basic question/answer or cloze-deletion cards) |
 | **Dev tools** *(§10)* | **natural-language SQL queries** (read-only by default), **code security audit** (bandit + OSV vulnerability lookup), **named build/deploy commands**, **sub-agent delegation** (researcher/coder/writer/critic) |
@@ -657,6 +657,32 @@ or API key required:
   to: risk a small, fixed slice of the portfolio per trade, sized so
   hitting the stop costs exactly that slice. No network call, no coin
   reference — just the calculation, informational only.
+- `screen_crypto_candidates` — filter the top coins by market cap for ones
+  matching simple thresholds (min market cap, min 24h volume, 24h change
+  range) — the same idea as Freqtrade's dynamic pairlist filters, for
+  finding candidates worth a closer look without already knowing which
+  coins to check.
+- `get_crypto_trend_signal` — a persistence-filtered SMA7/SMA30 crossover:
+  rather than reacting to every single crossover (noisy in choppy
+  markets), it reports how many consecutive days the current bullish/
+  bearish state has actually held and whether that meets your requested
+  threshold — the same debounce idea MACD-style strategies use to avoid
+  whipsaws.
+- `set_crypto_exit_rule` / `check_crypto_exit_conditions` — annotate a
+  holding with a stop-loss price, take-profit price, and/or a time limit,
+  then check them against live prices on demand. Purely informational,
+  same as everything else here: nothing auto-sells when a threshold is
+  crossed, it just flags it so you can decide whether to propose a sell.
+- **Loss-streak guardrail** — `propose_crypto_trade` automatically warns
+  (never blocks) when a portfolio has 3+ consecutive losing confirmed
+  sells in a row, the same "protections" idea Freqtrade uses to flag a
+  losing streak, just softer since this is paper money.
+  `get_crypto_loss_streak_status` checks the same thing on demand.
+- `suggest_portfolio_rebalance` — compare current holdings (by live value)
+  against target percentages you give it and report the drift, e.g.
+  "bitcoin is 65% but your target is 50%, overweight by 15pp" — the same
+  inventory-skew-to-target math Hummingbot's market-making strategies use
+  internally, repurposed here as a read-only rebalance suggestion.
 
 **Why it stops there.** No LLM-driven system — this one included — has a
 track record of reliably beating the market autonomously; markets are
@@ -699,14 +725,36 @@ in conversation.
 - `save_quant_signal` / `list_quant_signals` — keep the formulas that
   backtested well, ranked by IC, for later reuse.
 
+`backtest_crypto_signal` is the crypto counterpart: same signal format,
+same Rank IC / Sharpe / Sortino / win-rate / drawdown report, but against
+real crypto OHLCV from Binance's public market data (no account, no key)
+instead of stooq — CoinGecko's free tier only gives daily prices capped at
+~90 days, not enough history for a meaningful backtest, and Binance's
+klines endpoint has neither limit, plus hourly/4h bars for intraday
+signals. Shares its sandboxed harness (`tools/signal_backtest.py`) with
+`backtest_quant_signal` above rather than duplicating it.
+
+**Exchange market data** (`tools/exchange_tools.py`, optional — needs
+`pip install ccxt`, degrades gracefully without it): read-only data
+straight from real exchanges that CoinGecko simply doesn't have —
+`get_crypto_order_book_depth` (live bid/ask depth, for gauging how liquid
+a market actually is right now) and `compare_crypto_price_across_exchanges`
+(the same coin's price on Binance/Kraken/Coinbase/Bitstamp/OKX side by
+side, to spot unusual spreads). Every call is a bare, keyless
+`ccxt.<exchange>()` instance — ccxt makes authenticated trading endpoints
+(`create_order`, `fetch_balance`, `withdraw`...) just as easy to reach,
+which is exactly why this module never touches them.
+
 Pure research: nothing here places a trade, same as everything else in
 this section. These additions borrow specific, safe ideas from mature
-open-source trading projects (Freqtrade's fee realism and risk-per-trade
-sizing, Backtrader/QuantConnect's standard performance metrics) — never
-their live-execution engines. Freqtrade, Hummingbot, and StockSharp are
-built around actually placing orders on an exchange; Nautilus Trader's
-core value is a real-time event engine for live trading. None of that fits
-here, on purpose, for the same reason stated above.
+open-source trading projects — Freqtrade's fee realism, risk-per-trade
+sizing, and dynamic pairlist filters; Backtrader/QuantConnect's standard
+performance metrics; Hummingbot's inventory-skew rebalance math; ccxt's
+unified read-only market-data access — never any live-execution engine.
+Freqtrade, Hummingbot, and StockSharp are built around actually placing
+orders on an exchange; Nautilus Trader's core value is a real-time event
+engine for live trading. None of that fits here, on purpose, for the same
+reason stated above.
 
 ## 13. Website creation
 

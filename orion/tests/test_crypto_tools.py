@@ -1,17 +1,27 @@
+import time
+
 import httpx
 import pytest
 
 from core.store import Store
 from tools.crypto_tools import (
+    CheckCryptoExitConditionsTool,
     CompareCryptoAssetsTool,
     ConfirmCryptoTradeTool,
+    GetCryptoLossStreakStatusTool,
     GetCryptoMarketDataTool,
     GetCryptoTechnicalIndicatorsTool,
+    GetCryptoTrendSignalTool,
     ListCryptoHoldingsTool,
     ListPendingCryptoTradesTool,
     ProposeCryptoTradeTool,
     RejectCryptoTradeTool,
+    ScreenCryptoCandidatesTool,
+    SetCryptoExitRuleTool,
+    SuggestPortfolioRebalanceTool,
     SuggestPositionSizeTool,
+    _LOSS_STREAK_WARNING_THRESHOLD,
+    _rolling_sma,
     _rsi,
     _sma,
     _volatility_pct,
@@ -251,3 +261,348 @@ def test_suggest_position_size_rejects_out_of_range_risk_pct():
     assert "risk_pct must be between" in SuggestPositionSizeTool().run(
         portfolio_value=1000, entry_price=100, stop_loss_price=90, risk_pct=150
     )
+
+
+# --- screen_crypto_candidates ---
+
+
+def _mock_markets_response(monkeypatch, coins: list[dict]):
+    monkeypatch.setattr(
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse(coins)
+    )
+
+
+def _market_coin(id_, market_cap, volume, change):
+    return {
+        "id": id_,
+        "symbol": id_[:3],
+        "current_price": 1.0,
+        "market_cap": market_cap,
+        "total_volume": volume,
+        "price_change_percentage_24h": change,
+    }
+
+
+def test_screen_crypto_candidates_filters_by_market_cap(monkeypatch):
+    _mock_markets_response(
+        monkeypatch,
+        [_market_coin("big", 1_000_000, 1000, 1.0), _market_coin("small", 100, 1000, 1.0)],
+    )
+    result = ScreenCryptoCandidatesTool().run(min_market_cap=10_000)
+    assert "big" in result
+    assert "small" not in result
+
+
+def test_screen_crypto_candidates_filters_by_change_range(monkeypatch):
+    _mock_markets_response(
+        monkeypatch,
+        [_market_coin("gainer", 1000, 1000, 5.0), _market_coin("loser", 1000, 1000, -5.0)],
+    )
+    result = ScreenCryptoCandidatesTool().run(min_24h_change_pct=0)
+    assert "gainer" in result
+    assert "loser" not in result
+
+
+def test_screen_crypto_candidates_no_matches_message(monkeypatch):
+    _mock_markets_response(monkeypatch, [_market_coin("small", 100, 100, 0.0)])
+    result = ScreenCryptoCandidatesTool().run(min_market_cap=999_999_999)
+    assert "No coins" in result
+
+
+def test_screen_crypto_candidates_caps_top_n_at_250(monkeypatch):
+    captured = {}
+
+    def fake_get(*a, **kw):
+        captured["per_page"] = kw["params"]["per_page"]
+        return _FakeResponse([])
+
+    monkeypatch.setattr("tools.crypto_tools.client.get", fake_get)
+    ScreenCryptoCandidatesTool().run(top_n=10_000)
+    assert captured["per_page"] == 250
+
+
+# --- get_crypto_trend_signal ---
+
+
+def test_rolling_sma_matches_plain_sma_at_the_end():
+    prices = [1.0, 2.0, 3.0, 100.0, 200.0, 300.0]
+    rolling = _rolling_sma(prices, 3)
+    assert rolling[-1] == pytest.approx(200.0)
+    assert rolling[0] is None
+    assert rolling[1] is None
+
+
+def _rising_then_falling_prices(n_rising, n_falling, start=100.0):
+    prices = [start + i for i in range(n_rising)]
+    peak = prices[-1]
+    prices += [peak - i for i in range(1, n_falling + 1)]
+    return prices
+
+
+def test_trend_signal_reports_bullish_for_a_steadily_rising_series(monkeypatch):
+    prices = [[i, 100.0 + i] for i in range(40)]  # steadily rising -> SMA7 > SMA30 near the end
+    monkeypatch.setattr(
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": prices})
+    )
+    result = GetCryptoTrendSignalTool().run(coin="bitcoin", days=40, persistence_days=2)
+    assert "bullish" in result
+    assert "confirmed" in result
+
+
+def test_trend_signal_not_yet_confirmed_when_persistence_too_short(monkeypatch):
+    prices = [[i, 100.0 + i] for i in range(40)]
+    monkeypatch.setattr(
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": prices})
+    )
+    result = GetCryptoTrendSignalTool().run(coin="bitcoin", days=40, persistence_days=1000)
+    assert "not yet confirmed" in result
+
+
+def test_trend_signal_handles_missing_coin(monkeypatch):
+    monkeypatch.setattr(
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": []})
+    )
+    result = GetCryptoTrendSignalTool().run(coin="not-a-coin")
+    assert "No historical data" in result
+
+
+def test_trend_signal_handles_not_enough_history_for_sma30(monkeypatch):
+    prices = [[i, 100.0 + i] for i in range(10)]
+    monkeypatch.setattr(
+        "tools.crypto_tools.client.get", lambda *a, **kw: _FakeResponse({"prices": prices})
+    )
+    result = GetCryptoTrendSignalTool().run(coin="bitcoin", days=10)
+    assert "Not enough history" in result
+
+
+# --- exit rules: set_crypto_exit_rule / check_crypto_exit_conditions ---
+
+
+def _confirmed_holding(tmp_path, price=100.0):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    proposal_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="bitcoin", quantity=1, price_usd=price, reasoning="x"
+    )
+    store.confirm_crypto_trade(proposal_id)
+    return store
+
+
+def test_set_exit_rule_rejects_when_no_holding_exists(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    result = SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", stop_loss_price=90)
+    assert "No holding found" in result
+
+
+def test_set_exit_rule_requires_at_least_one_field(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    result = SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin")
+    assert "Nothing to set" in result
+
+
+def test_set_exit_rule_persists_stop_loss_and_take_profit(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    result = SetCryptoExitRuleTool(store).run(
+        portfolio="stable", coin="bitcoin", stop_loss_price=90, take_profit_price=150
+    )
+    assert "stop-loss 90" in result
+    assert "take-profit 150" in result
+    holding = store.list_crypto_holdings("stable")[0]
+    assert holding.stop_loss_price == 90
+    assert holding.take_profit_price == 150
+
+
+def test_set_exit_rule_time_limit_converts_hours_to_a_future_timestamp(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    before = time.time()
+    SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", time_limit_hours=1)
+    holding = store.list_crypto_holdings("stable")[0]
+    assert holding.exit_time_limit_at > before
+
+
+def test_set_exit_rule_clear_removes_all_rules(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", stop_loss_price=90)
+    result = SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", clear=True)
+    assert "Cleared exit rules" in result
+    holding = store.list_crypto_holdings("stable")[0]
+    assert holding.stop_loss_price is None
+
+
+def test_check_exit_conditions_reports_no_watched_holdings(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    result = CheckCryptoExitConditionsTool(store).run()
+    assert "No holdings have exit rules set" in result
+
+
+def test_check_exit_conditions_flags_stop_loss_hit(monkeypatch, tmp_path):
+    store = _confirmed_holding(tmp_path, price=100.0)
+    SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", stop_loss_price=90)
+    _mock_price_response(
+        monkeypatch, {"bitcoin": {"usd": 80, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = CheckCryptoExitConditionsTool(store).run()
+
+    assert "Triggered" in result
+    assert "STOP-LOSS hit" in result
+
+
+def test_check_exit_conditions_flags_take_profit_hit(monkeypatch, tmp_path):
+    store = _confirmed_holding(tmp_path, price=100.0)
+    SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", take_profit_price=120)
+    _mock_price_response(
+        monkeypatch, {"bitcoin": {"usd": 150, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = CheckCryptoExitConditionsTool(store).run()
+
+    assert "TAKE-PROFIT hit" in result
+
+
+def test_check_exit_conditions_flags_time_limit_expired(monkeypatch, tmp_path):
+    store = _confirmed_holding(tmp_path, price=100.0)
+    store.set_crypto_exit_rule("stable", "bitcoin", exit_time_limit_at=time.time() - 1)
+    _mock_price_response(
+        monkeypatch, {"bitcoin": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = CheckCryptoExitConditionsTool(store).run()
+
+    assert "TIME LIMIT expired" in result
+
+
+def test_check_exit_conditions_reports_not_triggered_when_nothing_crossed(monkeypatch, tmp_path):
+    store = _confirmed_holding(tmp_path, price=100.0)
+    SetCryptoExitRuleTool(store).run(portfolio="stable", coin="bitcoin", stop_loss_price=50)
+    _mock_price_response(
+        monkeypatch, {"bitcoin": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = CheckCryptoExitConditionsTool(store).run()
+
+    assert "Not triggered" in result
+    assert "no condition triggered" in result
+
+
+# --- loss-streak guardrail ---
+
+
+def _confirm_sell(store, portfolio, coin, buy_price, sell_price, quantity=1.0):
+    buy_id = store.propose_crypto_trade(
+        portfolio=portfolio, action="buy", coin=coin, quantity=quantity, price_usd=buy_price, reasoning="x"
+    )
+    store.confirm_crypto_trade(buy_id)
+    sell_id = store.propose_crypto_trade(
+        portfolio=portfolio, action="sell", coin=coin, quantity=quantity, price_usd=sell_price, reasoning="x"
+    )
+    store.confirm_crypto_trade(sell_id)
+
+
+def test_loss_streak_status_reports_zero_with_no_history(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    result = GetCryptoLossStreakStatusTool(store).run(portfolio="stable")
+    assert "no active losing streak" in result
+
+
+def test_loss_streak_status_counts_consecutive_losses(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    _confirm_sell(store, "stable", "bitcoin", buy_price=100, sell_price=90)  # loss
+    _confirm_sell(store, "stable", "bitcoin", buy_price=100, sell_price=80)  # loss
+
+    result = GetCryptoLossStreakStatusTool(store).run(portfolio="stable")
+
+    assert "2 consecutive losing" in result
+
+
+def test_loss_streak_stops_at_first_winning_sell(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    _confirm_sell(store, "stable", "bitcoin", buy_price=100, sell_price=150)  # win
+    _confirm_sell(store, "stable", "bitcoin", buy_price=100, sell_price=80)  # loss
+
+    result = GetCryptoLossStreakStatusTool(store).run(portfolio="stable")
+
+    assert "1 consecutive losing" in result
+
+
+def test_loss_streak_reaches_guardrail_threshold_warning(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    for _ in range(_LOSS_STREAK_WARNING_THRESHOLD):
+        _confirm_sell(store, "stable", "bitcoin", buy_price=100, sell_price=90)
+
+    result = GetCryptoLossStreakStatusTool(store).run(portfolio="stable")
+
+    assert "Guardrail threshold reached" in result
+
+
+def test_propose_trade_appends_guardrail_warning_after_loss_streak(monkeypatch, tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    for _ in range(_LOSS_STREAK_WARNING_THRESHOLD):
+        _confirm_sell(store, "risky", "bitcoin", buy_price=100, sell_price=90)
+    _mock_price_response(
+        monkeypatch, {"ethereum": {"usd": 3000, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = ProposeCryptoTradeTool(store).run(
+        portfolio="risky", action="buy", coin="ethereum", quantity=1, reasoning="x"
+    )
+
+    assert "PENDING" in result
+    assert "Guardrail" in result
+    assert "consecutive losing confirmed sells" in result
+
+
+def test_propose_trade_has_no_guardrail_warning_without_a_loss_streak(monkeypatch, tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    _mock_price_response(
+        monkeypatch, {"bitcoin": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0}}
+    )
+
+    result = ProposeCryptoTradeTool(store).run(
+        portfolio="fresh", action="buy", coin="bitcoin", quantity=1, reasoning="x"
+    )
+
+    assert "Guardrail" not in result
+
+
+# --- suggest_portfolio_rebalance ---
+
+
+def test_rebalance_reports_no_holdings(tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    result = SuggestPortfolioRebalanceTool(store).run(
+        portfolio="stable", target_allocations={"bitcoin": 100}
+    )
+    assert "No holdings recorded" in result
+
+
+def test_rebalance_flags_overweight_and_underweight(monkeypatch, tmp_path):
+    store = Store(db_path=str(tmp_path / "test.db"))
+    btc_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="bitcoin", quantity=8, price_usd=100, reasoning="x"
+    )
+    store.confirm_crypto_trade(btc_id)
+    eth_id = store.propose_crypto_trade(
+        portfolio="stable", action="buy", coin="ethereum", quantity=2, price_usd=100, reasoning="x"
+    )
+    store.confirm_crypto_trade(eth_id)
+    # Current value: 800 bitcoin (80%), 200 ethereum (20%). Target: 50/50.
+    _mock_price_response(
+        monkeypatch,
+        {
+            "bitcoin": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0},
+            "ethereum": {"usd": 100, "usd_24h_change": 0, "usd_market_cap": 0, "usd_24h_vol": 0},
+        },
+    )
+
+    result = SuggestPortfolioRebalanceTool(store).run(
+        portfolio="stable", target_allocations={"bitcoin": 50, "ethereum": 50}
+    )
+
+    assert "bitcoin: 80.0% vs target 50.0% — overweight by 30.0pp" in result
+    assert "ethereum: 20.0% vs target 50.0% — underweight by 30.0pp" in result
+
+
+def test_rebalance_rejects_non_positive_target_sum(tmp_path):
+    store = _confirmed_holding(tmp_path)
+    result = SuggestPortfolioRebalanceTool(store).run(portfolio="stable", target_allocations={"bitcoin": 0})
+    assert "must sum to a positive number" in result

@@ -89,6 +89,11 @@ CREATE TABLE IF NOT EXISTS health_alerts (
 -- through a proposal that the user must confirm (see tools/crypto_tools.py)
 -- — this is a decision-support and paper-tracking layer, not a connection
 -- to a real exchange, so nothing here places a real order on its own.
+-- stop_loss_price/take_profit_price/exit_time_limit_at (all nullable) are
+-- risk-management annotations set via set_crypto_exit_rule, checked by
+-- check_crypto_exit_conditions -- purely informational, like everything
+-- else here: nothing ever auto-sells a holding just because a threshold
+-- was crossed.
 CREATE TABLE IF NOT EXISTS crypto_holdings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     portfolio TEXT NOT NULL,
@@ -96,9 +101,15 @@ CREATE TABLE IF NOT EXISTS crypto_holdings (
     quantity REAL NOT NULL,
     avg_buy_price_usd REAL NOT NULL,
     updated_at REAL NOT NULL,
+    stop_loss_price REAL,
+    take_profit_price REAL,
+    exit_time_limit_at REAL,
     UNIQUE(portfolio, coin)
 );
 
+-- realized_pnl_usd is populated only for confirmed sells (buys have no
+-- realized P&L, they just enter a position) -- see confirm_crypto_trade --
+-- and drives recent_crypto_loss_streak's guardrail check.
 CREATE TABLE IF NOT EXISTS crypto_trade_proposals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     portfolio TEXT NOT NULL,
@@ -110,7 +121,8 @@ CREATE TABLE IF NOT EXISTS crypto_trade_proposals (
     status TEXT NOT NULL DEFAULT 'pending',
     created_at REAL NOT NULL,
     resolved_at REAL,
-    fee_pct REAL NOT NULL DEFAULT 0.0
+    fee_pct REAL NOT NULL DEFAULT 0.0,
+    realized_pnl_usd REAL
 );
 
 -- Quantitative signals Claude has proposed and backtested (see
@@ -183,6 +195,9 @@ class CryptoHolding:
     coin: str
     quantity: float
     avg_buy_price_usd: float
+    stop_loss_price: float | None = None
+    take_profit_price: float | None = None
+    exit_time_limit_at: float | None = None
 
 
 @dataclass
@@ -197,6 +212,7 @@ class CryptoTradeProposal:
     status: str
     created_at: float
     fee_pct: float = 0.0
+    realized_pnl_usd: float | None = None
 
 
 @dataclass
@@ -234,6 +250,10 @@ class Store:
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         _ensure_column(self._conn, "crypto_trade_proposals", "fee_pct", "REAL NOT NULL DEFAULT 0.0")
+        _ensure_column(self._conn, "crypto_trade_proposals", "realized_pnl_usd", "REAL")
+        _ensure_column(self._conn, "crypto_holdings", "stop_loss_price", "REAL")
+        _ensure_column(self._conn, "crypto_holdings", "take_profit_price", "REAL")
+        _ensure_column(self._conn, "crypto_holdings", "exit_time_limit_at", "REAL")
         self._conn.commit()
         # sqlite3's check_same_thread=False only disables Python's own
         # same-thread assertion — it doesn't make one Connection object
@@ -515,8 +535,8 @@ class Store:
 
     def get_crypto_trade_proposal(self, proposal_id: int) -> CryptoTradeProposal | None:
         row = self._conn.execute(
-            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, fee_pct "
-            "FROM crypto_trade_proposals WHERE id = ?",
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, "
+            "fee_pct, realized_pnl_usd FROM crypto_trade_proposals WHERE id = ?",
             (proposal_id,),
         ).fetchone()
         if row is None:
@@ -524,13 +544,13 @@ class Store:
         return CryptoTradeProposal(
             id=row[0], portfolio=row[1], action=row[2], coin=row[3],
             quantity=row[4], price_usd=row[5], reasoning=row[6], status=row[7], created_at=row[8],
-            fee_pct=row[9],
+            fee_pct=row[9], realized_pnl_usd=row[10],
         )
 
     def list_pending_crypto_trades(self, portfolio: str | None = None) -> list[CryptoTradeProposal]:
         query = (
-            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, fee_pct "
-            "FROM crypto_trade_proposals WHERE status = 'pending'"
+            "SELECT id, portfolio, action, coin, quantity, price_usd, reasoning, status, created_at, "
+            "fee_pct, realized_pnl_usd FROM crypto_trade_proposals WHERE status = 'pending'"
         )
         params: tuple = ()
         if portfolio:
@@ -542,10 +562,33 @@ class Store:
             CryptoTradeProposal(
                 id=r[0], portfolio=r[1], action=r[2], coin=r[3],
                 quantity=r[4], price_usd=r[5], reasoning=r[6], status=r[7], created_at=r[8],
-                fee_pct=r[9],
+                fee_pct=r[9], realized_pnl_usd=r[10],
             )
             for r in rows
         ]
+
+    def recent_crypto_loss_streak(self, portfolio: str) -> int:
+        """Counts how many of the most recent confirmed sells in this
+        portfolio, in a row, were losses (realized_pnl_usd < 0) -- stops at
+        the first non-loss. Buys are skipped entirely (a buy has no
+        realized P&L, it just opens/adds to a position); this only looks at
+        sells because that's the only point a paper trade's P&L is actually
+        realized. See tools/crypto_tools.py's ProposeCryptoTradeTool for how
+        this feeds a soft warning, the same "protections" idea freqtrade
+        uses to flag (not block, here) a losing streak."""
+        rows = self._conn.execute(
+            "SELECT realized_pnl_usd FROM crypto_trade_proposals "
+            "WHERE portfolio = ? AND action = 'sell' AND status = 'confirmed' "
+            "AND realized_pnl_usd IS NOT NULL ORDER BY resolved_at DESC",
+            (portfolio,),
+        ).fetchall()
+        streak = 0
+        for (pnl,) in rows:
+            if pnl < 0:
+                streak += 1
+            else:
+                break
+        return streak
 
     def confirm_crypto_trade(self, proposal_id: int) -> dict[str, float]:
         """Applies a pending proposal to holdings. Raises ValueError (with a
@@ -561,7 +604,10 @@ class Store:
         math is fee-independent (quantity out is quantity out regardless of
         what it nets you), so effective_price_usd there is purely
         informational — this project has no cash-balance/proceeds ledger to
-        apply it to."""
+        apply it to. On a sell, the dict also includes "realized_pnl_usd"
+        (effective sell price minus the position's cost basis, times
+        quantity) — persisted onto the proposal row too, since that's what
+        recent_crypto_loss_streak reads to build its guardrail warning."""
         # A raw sqlite3.Connection isn't safe to drive from multiple threads
         # *concurrently* just because check_same_thread=False lets them try
         # — that only disables Python's same-thread assertion, not actual
@@ -638,9 +684,20 @@ class Store:
                         "WHERE portfolio = ? AND coin = ?",
                         (new_quantity, time.time(), proposal.portfolio, proposal.coin),
                     )
+                # Realized only on exit (a buy just opens/adds to a
+                # position, nothing to realize yet) -- feeds
+                # recent_crypto_loss_streak's guardrail check above.
+                realized_pnl_usd = (effective_price - old_avg_price) * proposal.quantity
+                self._conn.execute(
+                    "UPDATE crypto_trade_proposals SET realized_pnl_usd = ? WHERE id = ?",
+                    (realized_pnl_usd, proposal_id),
+                )
 
             self._conn.commit()
-            return {"effective_price_usd": effective_price, "fee_amount_usd": fee_amount_usd}
+            result = {"effective_price_usd": effective_price, "fee_amount_usd": fee_amount_usd}
+            if proposal.action == "sell":
+                result["realized_pnl_usd"] = realized_pnl_usd
+            return result
 
     def reject_crypto_trade(self, proposal_id: int) -> None:
         # Same lock + atomic-claim shape as confirm_crypto_trade above, for
@@ -662,7 +719,10 @@ class Store:
             self._conn.commit()
 
     def list_crypto_holdings(self, portfolio: str | None = None) -> list[CryptoHolding]:
-        query = "SELECT id, portfolio, coin, quantity, avg_buy_price_usd FROM crypto_holdings"
+        query = (
+            "SELECT id, portfolio, coin, quantity, avg_buy_price_usd, stop_loss_price, "
+            "take_profit_price, exit_time_limit_at FROM crypto_holdings"
+        )
         params: tuple = ()
         if portfolio:
             query += " WHERE portfolio = ?"
@@ -670,9 +730,59 @@ class Store:
         query += " ORDER BY portfolio, coin"
         rows = self._conn.execute(query, params).fetchall()
         return [
-            CryptoHolding(id=r[0], portfolio=r[1], coin=r[2], quantity=r[3], avg_buy_price_usd=r[4])
+            CryptoHolding(
+                id=r[0], portfolio=r[1], coin=r[2], quantity=r[3], avg_buy_price_usd=r[4],
+                stop_loss_price=r[5], take_profit_price=r[6], exit_time_limit_at=r[7],
+            )
             for r in rows
         ]
+
+    def set_crypto_exit_rule(
+        self,
+        portfolio: str,
+        coin: str,
+        stop_loss_price: float | None = None,
+        take_profit_price: float | None = None,
+        exit_time_limit_at: float | None = None,
+    ) -> bool:
+        """Updates whichever exit-rule fields are given (None = leave
+        unchanged, not "clear") on an existing holding. Returns False if no
+        holding exists for this portfolio+coin — exit rules annotate a
+        position that already exists, they don't create one. See
+        clear_crypto_exit_rule to remove a rule instead of setting one."""
+        row = self._conn.execute(
+            "SELECT id FROM crypto_holdings WHERE portfolio = ? AND coin = ?", (portfolio, coin.lower())
+        ).fetchone()
+        if row is None:
+            return False
+
+        updates, params = [], []
+        if stop_loss_price is not None:
+            updates.append("stop_loss_price = ?")
+            params.append(stop_loss_price)
+        if take_profit_price is not None:
+            updates.append("take_profit_price = ?")
+            params.append(take_profit_price)
+        if exit_time_limit_at is not None:
+            updates.append("exit_time_limit_at = ?")
+            params.append(exit_time_limit_at)
+        if updates:
+            params.extend([portfolio, coin.lower()])
+            self._conn.execute(
+                f"UPDATE crypto_holdings SET {', '.join(updates)} WHERE portfolio = ? AND coin = ?",
+                params,
+            )
+            self._conn.commit()
+        return True
+
+    def clear_crypto_exit_rule(self, portfolio: str, coin: str) -> bool:
+        cur = self._conn.execute(
+            "UPDATE crypto_holdings SET stop_loss_price = NULL, take_profit_price = NULL, "
+            "exit_time_limit_at = NULL WHERE portfolio = ? AND coin = ?",
+            (portfolio, coin.lower()),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
 
     # --- quant signals ---
 
